@@ -1,0 +1,28 @@
+{
+  "projectName": "sql-quest",
+  "mode": "file-router",
+  "bundler": "vite",
+  "typescript": true,
+  "tailwind": true,
+  "packageManager": "pnpm",
+  "git": false,
+  "install": true,
+  "intent": false,
+  "addOnOptions": {},
+  "projectPreset": "default",
+  "routerOnly": false,
+  "includeExamples": false,
+  "version": 1,
+  "framework": "react",
+  "chosenAddOns": [
+    "shadcn",
+    "tanstack-query",
+    "form",
+    "table",
+    "store",
+    "db",
+    "nitro",
+    "compiler",
+    "biome"
+  ]
+}
