@@ -119,5 +119,6 @@
       "@tanstack/devtools-event-client",
       "@tanstack/match-sorter-utils"
     ]
-  }
+  },
+  "packageManager": "pnpm@10.30.3"
 }
