@@ -6,10 +6,11 @@ import type * as React from "react"
 /**
  * Lantern Atlas buttons (docs/design/design-direction.md §6.2).
  * Game actions are "juicy": Lilita label, ink on candy fill, a solid ledge
- * that sinks on press (filter: drop-shadow, composited). UI actions are flat.
+ * that sinks on press (a crisp box-shadow: WebKit clips drop-shadow filters).
+ * UI actions are flat. Sizes under 44px (sm, icon-sm) get an invisible 44px hit area.
  */
 const buttonVariants = cva(
-  "inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap outline-none select-none transition-[transform,filter,background-color] duration-(--duration-press) ease-out disabled:pointer-events-none [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-5",
+  "inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap outline-none select-none transition-[transform,box-shadow,background-color] duration-(--duration-press) ease-out disabled:pointer-events-none [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-5",
   {
     variants: {
       variant: {
@@ -31,12 +32,12 @@ const buttonVariants = cva(
         link: "font-extrabold text-info-soft-foreground underline-offset-4 hover:underline",
       },
       size: {
-        sm: "h-9 rounded-md px-3.5 text-sm [--j-ledge:var(--ledge-sm)] [&_svg:not([class*='size-'])]:size-4",
+        sm: "tap-target h-9 rounded-md px-3.5 text-sm [--j-ledge:var(--ledge-sm)] [&_svg:not([class*='size-'])]:size-4",
         default: "h-12 px-5 text-[17px]",
         lg: "h-14 px-7 text-xl",
         xl: "h-15 w-full text-[21px]",
         icon: "size-12",
-        "icon-sm": "size-9 [--j-ledge:var(--ledge-sm)]",
+        "icon-sm": "tap-target size-9 [--j-ledge:var(--ledge-sm)]",
         "icon-lg": "size-14",
       },
     },

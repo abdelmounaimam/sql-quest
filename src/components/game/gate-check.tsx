@@ -63,7 +63,7 @@ export function GateCheck({
 	}, [open, delayEnd]);
 
 	return (
-		<div className="mx-auto w-full max-w-xl px-4 pt-8 pb-16">
+		<div className="mx-auto w-full max-w-xl px-4 pt-safe-8 pb-safe-16">
 			<div className="text-center">
 				<div className="kicker text-(--syn-keyword)">Gate check</div>
 				<h1 className="font-display text-title">{chapter.title}</h1>
@@ -181,7 +181,7 @@ export function GateCheck({
 				<button
 					type="button"
 					onClick={onHub}
-					className="text-sm font-semibold text-muted-foreground hover:text-foreground"
+					className="tap-target text-sm font-semibold text-muted-foreground hover:text-foreground"
 				>
 					Back to the level
 				</button>

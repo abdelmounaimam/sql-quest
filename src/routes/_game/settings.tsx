@@ -198,7 +198,7 @@ function Choice<T extends string>({
 				aria-label={label}
 			>
 				{options.map(([v, l]) => (
-					<ToggleGroupItem key={v} value={v}>
+					<ToggleGroupItem key={v} value={v} className="h-11 px-3">
 						{l}
 					</ToggleGroupItem>
 				))}

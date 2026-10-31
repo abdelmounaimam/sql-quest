@@ -82,7 +82,7 @@ export function LessonPlayer({
 	};
 
 	return (
-		<div className="mx-auto flex w-full max-w-3xl flex-1 flex-col px-4 pt-5 pb-28 sm:pb-10">
+		<div className="mx-auto flex w-full max-w-3xl flex-1 flex-col px-4 pt-safe-5 pb-[calc(7rem+var(--safe-bottom)+var(--kb-inset))] roomy:pb-10">
 			<div className="hud-bar mb-4">
 				<Button
 					asChild
@@ -107,7 +107,7 @@ export function LessonPlayer({
 								i <= index || states[i - 1]?.done ? go(i) : undefined
 							}
 							className={cn(
-								"h-3.5 flex-1 rounded-full bg-muted shadow-[inset_0_2px_0_var(--ink-shadow)] transition-[background-color] duration-(--duration-fast)",
+								"tap-target h-3.5 flex-1 rounded-full bg-muted shadow-[inset_0_2px_0_var(--ink-shadow)] transition-[background-color] duration-(--duration-fast)",
 								i < index || (i === index && states[i]?.done)
 									? "gloss bg-success shadow-none"
 									: i === index && "bg-success/55 shadow-none",
@@ -150,19 +150,23 @@ export function LessonPlayer({
 				</AnimatePresence>
 			</div>
 
-			<div className="safe-bottom fixed inset-x-0 bottom-0 z-30 border-t border-border bg-[color-mix(in_oklab,var(--muted)_92%,transparent)] p-3 backdrop-blur sm:static sm:mt-5 sm:border-0 sm:bg-transparent sm:p-0 sm:backdrop-blur-none">
+			{/* Opaque bar, no backdrop-filter: room for the juicy ledge + the home indicator. */}
+			<div
+				data-bottom-bar
+				className="bottom-bar z-30 border-t-2 border-border bg-card px-safe-3 pt-3 pb-safe-3 roomy:static roomy:mt-5 roomy:border-0 roomy:bg-transparent roomy:p-0"
+			>
 				<div className="mx-auto flex max-w-3xl items-center justify-between gap-3">
 					<Button
 						type="button"
 						onClick={() => go(index - 1)}
 						disabled={index === 0}
 						variant="outline"
-						size="lg"
+						size="icon-lg"
 						aria-label="Previous step"
 					>
 						<ChevronLeft className="size-5" />
 					</Button>
-					<div className="hidden text-xs text-muted-foreground sm:block">
+					<div className="hidden text-xs text-muted-foreground roomy:block">
 						Swipe or use the arrows
 					</div>
 					<Button
@@ -170,7 +174,8 @@ export function LessonPlayer({
 						disabled={!canNext}
 						size="lg"
 						variant={last ? "success" : "default"}
-						className="flex-1 sm:flex-none"
+						// min-w-0 + fluid size: "Answer to continue" fits a 375px phone.
+						className="min-w-0 flex-1 px-4 text-[clamp(15px,4.6vw,20px)] roomy:flex-none roomy:px-7 roomy:text-xl"
 					>
 						{last
 							? "Start the missions"
@@ -510,7 +515,7 @@ function TryStep({
 							setHints((h) => h + 1);
 							sfx("hint");
 						}}
-						className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-semibold text-(--syn-keyword) hover:bg-secondary"
+						className="flex min-h-11 items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-semibold text-(--syn-keyword) hover:bg-secondary"
 					>
 						<Lightbulb className="size-4" /> Hint
 					</button>

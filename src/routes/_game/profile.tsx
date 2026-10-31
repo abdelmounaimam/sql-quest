@@ -57,7 +57,8 @@ function ProfilePage() {
 				<div className="grid size-20 place-items-center rounded-3xl bg-reward text-5xl shadow-md">
 					{s.profile?.avatar ?? "🦊"}
 				</div>
-				<div className="min-w-0 flex-1">
+				{/* min-w: the stats wrap below instead of crushing the name column. */}
+				<div className="min-w-48 flex-1">
 					<h1 className="font-display text-3xl text-foreground">
 						{s.profile?.name ?? "Explorer"}
 					</h1>
@@ -71,7 +72,7 @@ function ProfilePage() {
 							: "Not synced yet (offline first)"}
 					</p>
 				</div>
-				<div className="grid grid-cols-3 gap-2 text-center">
+				<div className="grid w-full grid-cols-3 gap-2 text-center sm:w-auto">
 					<Stat label="Solved" value={solved} />
 					<Stat label="3 stars" value={threeStars} />
 					<Stat label="Badges" value={Object.keys(s.achievements).length} />

@@ -77,7 +77,7 @@ export function ProfileFields({
 						<legend className="mb-1.5 text-sm font-semibold text-foreground">
 							Avatar
 						</legend>
-						<div className="grid grid-cols-6 gap-2">
+						<div className="grid grid-cols-6 gap-1.5">
 							{AVATARS.map((a) => (
 								<button
 									key={a}
@@ -117,12 +117,14 @@ export function Onboarding() {
 	});
 
 	return (
-		<div className="fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-[color-mix(in_oklab,var(--background)_70%,transparent)] p-4 backdrop-blur-md">
+		// m-auto on the card (not place-items-center): centered when it fits, scrollable from
+		// the top when it does not (landscape phones), never cut off above the fold.
+		<div className="fixed inset-0 z-50 grid overflow-y-auto overscroll-contain bg-[color-mix(in_oklab,var(--background)_70%,transparent)] px-safe-4 pt-safe-4 pb-safe-4 backdrop-blur-md">
 			<motion.form
 				initial={{ y: 40, opacity: 0, scale: 0.96 }}
 				animate={{ y: 0, opacity: 1, scale: 1 }}
 				transition={{ type: "spring", stiffness: 220, damping: 22 }}
-				className="panel w-full max-w-md space-y-5 p-6"
+				className="panel m-auto w-full max-w-md space-y-5 p-5 sm:p-6"
 				onSubmit={(e) => {
 					e.preventDefault();
 					void form.handleSubmit();

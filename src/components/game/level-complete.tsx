@@ -81,77 +81,85 @@ export function LevelComplete({
 					showCloseButton={false}
 					onInteractOutside={(e) => e.preventDefault()}
 					onPointerDown={() => setSkipped(true)}
-					className="!fixed !top-[56%] max-w-[440px] gap-0 overflow-visible px-6 pt-16 pb-6 text-center"
+					// A full-screen scroller, the card centered in it: on a short screen
+					// (phone in landscape) the card scrolls instead of running off the
+					// bottom with its buttons, and the stars above it are never clipped.
+					className="!inset-0 !top-0 !left-0 !max-h-none !max-w-none !translate-x-0 !translate-y-0 !gap-0 !rounded-none !border-0 !bg-transparent px-safe-4 pt-safe-28 pb-safe-8 !shadow-none"
 					data-world={world}
 				>
-					<div
-						className={cn("big-stars", skipped && "[&_.lit]:![animation:none]")}
-						role="img"
-						aria-label={`${stars} of 3 stars`}
-					>
-						{[0, 1, 2].map((i) => (
-							<StarGlyph
-								key={i}
-								filled={i < stars}
-								className={cn(i === 1 && "s2", i < stars && "lit")}
-							/>
-						))}
-					</div>
-					<div className="lc-ribbon">
-						<span>Chapter cleared</span>
-					</div>
-					<DialogTitle className="mt-2 text-center text-[34px]">
-						{chapter.title}
-					</DialogTitle>
-					<DialogDescription className="mt-1.5 text-center text-[15px]">
-						{chapter.subtitle}
-					</DialogDescription>
-					<div className="lc-stats my-5">
-						<div className="lc-stat xp">
-							<div className="h">Aether</div>
-							<div className="v">
-								<GameIcon name="zap" />
-								<CountUp to={xp} delay={skipped ? 0 : 1.05} />
+					<div className="relative m-auto w-full max-w-[440px] rounded-2xl border-2 bg-card px-6 pt-16 pb-6 text-center shadow-[0_8px_0_var(--ledge),0_30px_60px_-20px_rgb(0_0_0/0.6)]">
+						<div
+							className={cn(
+								"big-stars",
+								skipped && "[&_.lit]:![animation:none]",
+							)}
+							role="img"
+							aria-label={`${stars} of 3 stars`}
+						>
+							{[0, 1, 2].map((i) => (
+								<StarGlyph
+									key={i}
+									filled={i < stars}
+									className={cn(i === 1 && "s2", i < stars && "lit")}
+								/>
+							))}
+						</div>
+						<div className="lc-ribbon">
+							<span>Chapter cleared</span>
+						</div>
+						<DialogTitle className="mt-2 text-center text-[34px]">
+							{chapter.title}
+						</DialogTitle>
+						<DialogDescription className="mt-1.5 text-center text-[15px]">
+							{chapter.subtitle}
+						</DialogDescription>
+						<div className="lc-stats my-5">
+							<div className="lc-stat xp">
+								<div className="h">Aether</div>
+								<div className="v">
+									<GameIcon name="zap" />
+									<CountUp to={xp} delay={skipped ? 0 : 1.05} />
+								</div>
+							</div>
+							<div className="lc-stat acc">
+								<div className="h">Accuracy</div>
+								<div className="v">
+									<GameIcon name="target" />
+									<CountUp to={accuracy} delay={skipped ? 0 : 1.05} />%
+								</div>
+							</div>
+							<div className="lc-stat time">
+								<div className="h">Time</div>
+								<div className="v">
+									<GameIcon name="clock" />
+									{formatTime(time)}
+								</div>
 							</div>
 						</div>
-						<div className="lc-stat acc">
-							<div className="h">Accuracy</div>
-							<div className="v">
-								<GameIcon name="target" />
-								<CountUp to={accuracy} delay={skipped ? 0 : 1.05} />%
-							</div>
+						<div className="mb-4 flex flex-wrap justify-center gap-1.5">
+							{chapter.concepts.map((c) => (
+								<span
+									key={c}
+									className="rounded-sm bg-success-soft px-2 py-0.5 text-xs font-extrabold text-success-soft-foreground"
+								>
+									{conceptName(c)}{" "}
+									{Math.round((progress.mastery[c]?.effective ?? 0) * 100)}%
+								</span>
+							))}
 						</div>
-						<div className="lc-stat time">
-							<div className="h">Time</div>
-							<div className="v">
-								<GameIcon name="clock" />
-								{formatTime(time)}
-							</div>
+						<div className="flex flex-col gap-1.5">
+							<Button size="xl" onClick={onNextLevel ?? onMap} autoFocus>
+								{onNextLevel ? "Next level" : "Continue"}
+							</Button>
+							<Button variant="ghost" onClick={onMap}>
+								<GameIcon name="rewind" data-icon="inline-start" />
+								{stars < 3
+									? "Back to the map, replay for 3 stars"
+									: "Back to the map"}
+							</Button>
 						</div>
+						<Wick mood="cheering" className="wick-cheer" />
 					</div>
-					<div className="mb-4 flex flex-wrap justify-center gap-1.5">
-						{chapter.concepts.map((c) => (
-							<span
-								key={c}
-								className="rounded-sm bg-success-soft px-2 py-0.5 text-xs font-extrabold text-success-soft-foreground"
-							>
-								{conceptName(c)}{" "}
-								{Math.round((progress.mastery[c]?.effective ?? 0) * 100)}%
-							</span>
-						))}
-					</div>
-					<div className="flex flex-col gap-1.5">
-						<Button size="xl" onClick={onNextLevel ?? onMap} autoFocus>
-							{onNextLevel ? "Next level" : "Continue"}
-						</Button>
-						<Button variant="ghost" onClick={onMap}>
-							<GameIcon name="rewind" data-icon="inline-start" />
-							{stars < 3
-								? "Back to the map, replay for 3 stars"
-								: "Back to the map"}
-						</Button>
-					</div>
-					<Wick mood="cheering" className="wick-cheer" />
 				</DialogContent>
 			</Dialog>
 		</div>

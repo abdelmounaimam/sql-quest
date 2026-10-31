@@ -231,7 +231,7 @@ export function VerdictSheet({
 			animate={reduce ? { opacity: 1 } : { y: 0 }}
 			exit={reduce ? { opacity: 0 } : { y: "110%" }}
 			transition={{ duration: 0.24, ease: [0.32, 0.72, 0, 1] }}
-			className="fixed inset-x-0 bottom-0 z-50 px-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] lg:px-6"
+			className="bottom-bar z-50 px-safe-3 pb-safe-3 lg:px-safe-6"
 		>
 			<div
 				className={cn(
@@ -311,7 +311,7 @@ export function VerdictSheet({
 						/>
 						{exercise.explanation ? (
 							<Collapsible defaultOpen={solved?.revealed}>
-								<CollapsibleTrigger className="flex items-center gap-1 text-sm font-extrabold text-success-soft-foreground">
+								<CollapsibleTrigger className="tap-target flex items-center gap-1 text-sm font-extrabold text-success-soft-foreground">
 									<GameIcon name="scroll" className="size-4" /> Why it works
 								</CollapsibleTrigger>
 								<CollapsibleContent className="mt-2 max-h-48 overflow-y-auto rounded-lg bg-card p-3">

@@ -35,7 +35,12 @@ function GameLayout() {
 			s.location.pathname.startsWith("/play/") &&
 			(s.location.search as { phase?: string }).phase !== "hub",
 	});
-	const desktop = useMediaQuery("(min-width: 768px)", true);
+	// Toasts go bottom-right only on real desktops; a phone in landscape (393px
+	// tall) keeps them top-center, clear of the verdict sheet and the Cast bar.
+	const desktop = useMediaQuery(
+		"(min-width: 768px) and (min-height: 600px)",
+		true,
+	);
 	return (
 		<MotionConfig
 			reducedMotion={
@@ -64,7 +69,7 @@ function GameLayout() {
 							className={
 								inLevel
 									? "flex min-h-0 flex-1 flex-col"
-									: "flex min-h-0 min-w-0 flex-1 flex-col pb-[calc(64px+env(safe-area-inset-bottom))] md:pb-0"
+									: "flex min-h-0 min-w-0 flex-1 flex-col pb-[calc(64px+var(--safe-bottom))] md:pb-0"
 							}
 						>
 							<Outlet />
@@ -76,7 +81,17 @@ function GameLayout() {
 				<Toaster
 					position={desktop ? "bottom-right" : "top-center"}
 					duration={3500}
-					offset={{ top: "calc(12px + env(safe-area-inset-top))" }}
+					offset={{
+						top: "calc(12px + var(--safe-top))",
+						right: "calc(24px + var(--safe-right))",
+						bottom: "calc(24px + var(--safe-bottom))",
+						left: "calc(24px + var(--safe-left))",
+					}}
+					mobileOffset={{
+						top: "calc(12px + var(--safe-top))",
+						left: "calc(16px + var(--safe-left))",
+						right: "calc(16px + var(--safe-right))",
+					}}
 				/>
 			</TooltipProvider>
 		</MotionConfig>

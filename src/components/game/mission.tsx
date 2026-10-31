@@ -83,7 +83,7 @@ export function LevelHud({
 	timeLeft?: number;
 }) {
 	return (
-		<div className="safe-top px-3 pt-2 lg:px-4 lg:pt-3">
+		<div className="px-3 pt-safe-2 lg:px-4 lg:pt-safe-3">
 			<div className="hud-bar">
 				<Button
 					asChild
@@ -521,7 +521,7 @@ export function MissionScreen({
 				timeLeft={timerActive ? timeLeft : undefined}
 			/>
 			{isDesktop ? (
-				<div className="h-[calc(100dvh-4.75rem)] p-3 lg:px-4">
+				<div className="h-[calc(100dvh-4.75rem-var(--safe-top))] p-3 lg:px-4">
 					<ResizablePanelGroup orientation="horizontal">
 						<ResizablePanel defaultSize="32%" minSize="22%">
 							<ResizablePanelGroup orientation="vertical">
@@ -568,18 +568,25 @@ export function MissionScreen({
 				</div>
 			) : (
 				<>
-					<div className="flex min-h-0 flex-1 flex-col gap-3 px-3 pt-3 pb-[calc(6.5rem+env(safe-area-inset-bottom))]">
+					<div className="flex min-h-0 flex-1 flex-col gap-3 px-3 pt-3 pb-[calc(6.5rem+var(--safe-bottom)+var(--kb-inset))]">
 						{missionCard}
 						{spellbook}
 					</div>
-					<div className="safe-bottom fixed inset-x-0 bottom-0 z-30 border-t-2 border-border bg-card px-3 pt-2">
+					<div
+						data-bottom-bar
+						className="bottom-bar z-30 border-t-2 border-border bg-card px-safe-3 pt-2 pb-safe"
+					>
 						<div className="flex items-center gap-2 pb-2">
 							{lanternButton}
 							<Button
 								variant="secondary"
 								size="icon"
 								aria-label="Chests (schema)"
-								onClick={() => setDrawer("schema")}
+								onClick={() => {
+									// Full height: the chest list is long and the diagram needs the room.
+									setSnap(0.92);
+									setDrawer("schema");
+								}}
 							>
 								<GameIcon name="chest" />
 							</Button>
@@ -617,7 +624,6 @@ export function MissionScreen({
 										datasetId={chapter.datasetId}
 										activeTables={activeTables}
 										sql={debouncedSql}
-										showTabs={false}
 										setupSql={exercise.setupSql}
 										liveSql={liveRun.sql}
 										liveSeq={liveRun.seq}
@@ -720,7 +726,7 @@ function MissionCard({
 				<CollapsibleTrigger asChild>
 					<button
 						type="button"
-						className="grid size-9 place-items-center rounded-md"
+						className="tap-target grid size-9 place-items-center rounded-md"
 						aria-label={open ? "Collapse mission" : "Expand mission"}
 					>
 						<ChevronDown

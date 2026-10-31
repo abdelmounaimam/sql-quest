@@ -33,10 +33,25 @@
 @import "tw-animate-css";
 
 @custom-variant dark (&:is(.dark *));
+/* Wide AND tall: tablets and desktops, not a phone in landscape (852x393). */
+@custom-variant roomy (@media (min-width: 640px) and (min-height: 600px));
 
 /* ───────────────────────────── Day Atlas (light) ───────────────────────────── */
 :root {
 	color-scheme: light;
+	/*
+	 * Safe areas, defined ONCE. Every component reads these variables, never env()
+	 * directly, so one place controls them (and tests can simulate a notch, since
+	 * env() is 0 in desktop emulation). --kb-inset is the on-screen keyboard height
+	 * that the layout viewport does not already exclude (iOS overlays the keyboard),
+	 * kept up to date by useVisualViewportInsets(); the home indicator hides behind
+	 * an open keyboard, so --safe-bottom drops to 0 while it is up.
+	 */
+	--safe-top: env(safe-area-inset-top, 0px);
+	--safe-right: env(safe-area-inset-right, 0px);
+	--safe-bottom: env(safe-area-inset-bottom, 0px);
+	--safe-left: env(safe-area-inset-left, 0px);
+	--kb-inset: 0px;
 
 	/* Surfaces: parchment and ink */
 	--background: #fbf5e9;
@@ -223,6 +238,9 @@
 
 	/* Paper grain (static, painted once) */
 	--grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .35 0 0 0 0 .25 0 0 0 0 .1 0 0 0 .07 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+:root[data-kb="open"] {
+	--safe-bottom: 0px;
 }
 
 /* ───────────────────────────── Night Atlas (dark, app default) ───────────────────────────── */
@@ -515,9 +533,28 @@
 	body {
 		@apply bg-background text-foreground antialiased;
 		overflow-x: hidden;
+		/* Landscape: keep content clear of the notch / Dynamic Island side. Fixed bars pad themselves. */
+		padding-left: var(--safe-left);
+		padding-right: var(--safe-right);
 		background-image: var(--grain);
 		font-size: 1rem;
 		line-height: 1.55;
+	}
+	/*
+	 * Status-bar scrim: with black-translucent + viewport-fit=cover, scrolled content
+	 * would show through the clock and the Dynamic Island. A fixed strip the height of
+	 * the top inset (0 outside an installed iPhone app) hides it, like a native bar.
+	 * Night ink in BOTH themes: black-translucent always draws a white clock, which
+	 * would vanish on parchment. Above sticky HUDs (z-40) and overlays (z-50), whose content pads itself.
+	 */
+	body::before {
+		content: "";
+		position: fixed;
+		inset: 0 0 auto;
+		height: var(--safe-top);
+		background: #0e1424;
+		z-index: 60;
+		pointer-events: none;
 	}
 	h1,
 	h2,
@@ -571,9 +608,15 @@
 	}
 
 	/*
-	 * JUICY: the pressable "toy" surface. Ledge = crisp drop-shadow (composited filter,
-	 * no box-shadow paint). Press = sink by the ledge height.
-	 * Set --j-fill / --j-edge / --j-ink (and optionally --j-ledge, --j-hover) per variant.
+	 * JUICY: the pressable "toy" surface. Ledge = a crisp, unblurred box-shadow
+	 * (0 var(--j-ledge) 0 edge). Press = sink by the ledge height.
+	 * Why not filter: drop-shadow (the original recipe): WebKit clips filter output
+	 * to the compositing layer of the element (inside backdrop-filter bars, transformed
+	 * or scrolling ancestors), which cut the ledge flat on iPhone. A box-shadow is
+	 * painted with the element, never clipped that way, and with no blur it is cheap;
+	 * the press repaints one button for 100ms, which is fine.
+	 * --j-ring adds an inset outline (paper buttons, quiz states) without losing the ledge.
+	 * Set --j-fill / --j-edge / --j-ink (and optionally --j-ledge, --j-hover, --j-ring) per variant.
 	 */
 	.juicy {
 		--j-fill: var(--primary);
@@ -581,22 +624,23 @@
 		--j-ink: var(--primary-foreground);
 		--j-hover: color-mix(in oklab, var(--j-fill) 86%, white);
 		--j-ledge: var(--ledge-md);
+		--j-ring: 0 0 #0000;
 		position: relative;
 		background-color: var(--j-fill);
 		color: var(--j-ink);
 		border-radius: var(--radius-lg);
-		filter: drop-shadow(0 var(--j-ledge) 0 var(--j-edge));
+		box-shadow: var(--j-ring), 0 var(--j-ledge) 0 var(--j-edge);
 		transform: translateY(0);
 		transition:
 			transform var(--duration-press) var(--ease-out),
-			filter var(--duration-press) var(--ease-out),
+			box-shadow var(--duration-press) var(--ease-out),
 			background-color 150ms ease;
 		margin-bottom: var(--j-ledge);
 	}
 	.juicy:active:not(:disabled, [aria-disabled="true"]),
 	.juicy[data-pressed="true"] {
 		transform: translateY(var(--j-ledge));
-		filter: drop-shadow(0 0 0 var(--j-edge));
+		box-shadow: var(--j-ring), 0 0 0 var(--j-edge);
 	}
 	@media (hover: hover) and (pointer: fine) {
 		.juicy:hover:not(:disabled, [aria-disabled="true"]) {
@@ -628,7 +672,7 @@
 		--j-edge: var(--ledge);
 		--j-ink: var(--foreground);
 		--j-hover: var(--accent);
-		box-shadow: inset 0 0 0 2px var(--border);
+		--j-ring: inset 0 0 0 2px var(--border);
 	}
 	.juicy-world {
 		--j-fill: var(--w);
@@ -752,15 +796,17 @@
 		background-color: var(--w, var(--world-1));
 		background-image: linear-gradient(to bottom, rgb(255 255 255 / 0.3) 0 34%, transparent 34%);
 		color: var(--w-ink, var(--world-1-ink));
-		filter: drop-shadow(0 var(--ledge-lg) 0 var(--w-deep, var(--world-1-deep)));
+		/* Ledge as box-shadow (follows the 50% radius); see .juicy for why not drop-shadow. */
+		--node-ledge: var(--ledge-lg);
+		box-shadow: 0 var(--node-ledge) 0 var(--w-deep, var(--world-1-deep));
 		transition:
 			transform var(--duration-press) var(--ease-out),
-			filter var(--duration-press) var(--ease-out);
-		margin-bottom: var(--ledge-lg);
+			box-shadow var(--duration-press) var(--ease-out);
+		margin-bottom: var(--node-ledge);
 	}
 	.map-node:active:not([data-state="locked"]) {
-		transform: translateY(var(--ledge-lg));
-		filter: drop-shadow(0 0 0 var(--w-deep, var(--world-1-deep)));
+		transform: translateY(var(--node-ledge));
+		box-shadow: 0 0 0 var(--w-deep, var(--world-1-deep));
 	}
 	.map-node[data-state="locked"] {
 		--w: var(--muted);
@@ -776,8 +822,7 @@
 	}
 	.map-node[data-kind="boss"] {
 		--node-size: 6rem;
-		filter: drop-shadow(0 var(--ledge-xl) 0 var(--w-deep, var(--world-1-deep)));
-		margin-bottom: var(--ledge-xl);
+		--node-ledge: var(--ledge-xl);
 	}
 	.map-node[data-kind="side"] {
 		--node-size: 3.5rem;
@@ -954,8 +999,58 @@
 
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { scrollbar-width: none; }
-.safe-bottom { padding-bottom: env(safe-area-inset-bottom, 0px); }
-.safe-top { padding-top: env(safe-area-inset-top, 0px); }
+
+/*
+ * Radix/vaul scroll lock (react-remove-scroll-bar) injects an unlayered
+ * `body[data-scroll-locked] { padding-left: 0; padding-right: 0 }`, which dropped
+ * the landscape side insets whenever a dialog or drawer opened.
+ */
+body[data-scroll-locked] {
+	padding-left: var(--safe-left) !important;
+	padding-right: var(--safe-right) !important;
+}
+
+/*
+ * Safe-area utilities. ADDITIVE: `pb-safe-3` = 0.75rem + the inset, so a bar keeps
+ * its own padding on every device (the old unlayered `.safe-bottom` replaced the
+ * bar's `p-3` bottom padding, leaving no room for a juicy ledge). Bare forms
+ * (`pt-safe`) are the inset alone. `bottom-bar` lifts fixed bottom bars above an
+ * iOS keyboard (--kb-inset); pair it with px-safe-N and pb-safe-N.
+ */
+@utility pt-safe { padding-top: var(--safe-top); }
+@utility pt-safe-* { padding-top: calc(var(--safe-top) + var(--spacing) * --value(number)); }
+@utility pb-safe { padding-bottom: var(--safe-bottom); }
+@utility pb-safe-* { padding-bottom: calc(var(--safe-bottom) + var(--spacing) * --value(number)); }
+@utility px-safe { padding-left: var(--safe-left); padding-right: var(--safe-right); }
+@utility px-safe-* {
+	padding-left: calc(var(--safe-left) + var(--spacing) * --value(number));
+	padding-right: calc(var(--safe-right) + var(--spacing) * --value(number));
+}
+@utility top-safe-* { top: calc(var(--safe-top) + var(--spacing) * --value(number)); }
+@utility bottom-safe-* { bottom: calc(var(--safe-bottom) + var(--kb-inset) + var(--spacing) * --value(number)); }
+@utility right-safe-* { right: calc(var(--safe-right) + var(--spacing) * --value(number)); }
+@utility bottom-bar {
+	position: fixed;
+	left: 0;
+	right: 0;
+	bottom: var(--kb-inset);
+}
+/*
+ * Hit area of at least 44x44 for controls drawn smaller (36px icon buttons, step
+ * pips, switches). Invisible, centered; the visual size does not change.
+ */
+@utility tap-target {
+	position: relative;
+	&::before {
+		content: "";
+		position: absolute;
+		left: 50%;
+		top: 50%;
+		width: max(100%, 44px);
+		height: max(100%, 44px);
+		transform: translate(-50%, -50%);
+	}
+}
 
 /* ───────────────────────────── Prose (mission and lesson cards) ───────────────────────────── */
 .md { line-height: 1.6; }
@@ -969,6 +1064,17 @@
 	background: var(--accent);
 	color: var(--syn-table);
 	border: 1px solid color-mix(in oklab, var(--lantern) 35%, transparent);
+	/* A chip split across lines keeps its padding, border and radius on both
+	   fragments (WebKit otherwise slices the box open at the break). */
+	-webkit-box-decoration-break: clone;
+	box-decoration-break: clone;
+	/* Short chips never split (`FROM planets` stays whole)... */
+	white-space: nowrap;
+}
+/* ...long ones (see Markdown: data-long) wrap anywhere so they never overflow. */
+.md code[data-long] {
+	white-space: normal;
+	overflow-wrap: anywhere;
 }
 .md pre {
 	font-family: var(--font-mono);
@@ -980,7 +1086,7 @@
 	overflow-x: auto;
 	margin: 0.6rem 0;
 }
-.md pre code { background: none; padding: 0; border: 0; color: var(--syn-ident); }
+.md pre code { background: none; padding: 0; border: 0; color: var(--syn-ident); white-space: pre; }
 .md ul { list-style: disc; padding-left: 1.2rem; }
 .md ol { list-style: decimal; padding-left: 1.2rem; }
 .md table { font-size: 0.85rem; border-collapse: collapse; }
@@ -1010,6 +1116,11 @@
 .tok-table { color: var(--syn-table); font-weight: 600; }
 
 /* ───────────────────────────── React Flow (schema explorer) ───────────────────────────── */
+/* Diagram zoom controls: 26px by default, too small for a finger. */
+@media (pointer: coarse) {
+	.react-flow .react-flow__controls-button { width: 44px; height: 44px; }
+	.react-flow .react-flow__controls-button svg { max-width: 18px; max-height: 18px; }
+}
 .react-flow {
 	--xy-background-color: transparent;
 	--xy-edge-stroke: var(--border);
@@ -1088,7 +1199,7 @@
 
 	/* ── World map ── */
 	.map-frame { border-radius: 28px; overflow: hidden; border: 2px solid var(--border); box-shadow: 0 6px 0 var(--ledge); background: var(--card); }
-	.unit-banner { position: sticky; top: 3.5rem; z-index: 5; padding: 16px 18px 18px; display: flex; align-items: center; gap: 14px; border-bottom: 4px solid var(--w-deep); }
+	.unit-banner { position: sticky; top: calc(3.5rem + var(--safe-top)); z-index: 12; /* above the current node (z-10) and its START bubble */ padding: 16px 18px 18px; display: flex; align-items: center; gap: 14px; border-bottom: 4px solid var(--w-deep); }
 	.unit-banner .wn { font-size: 12px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; opacity: .85; }
 	.unit-banner .wt { font-family: var(--font-display); font-size: 26px; line-height: 1.05; }
 	.map-body { position: relative; overflow: hidden; background: var(--w-tint); }
@@ -1125,7 +1236,7 @@
 	.combo-chip.bumped { animation: bump 280ms var(--ease-pop); }
 	.xp-track { position: relative; height: 12px; border-radius: 999px; background: var(--muted); box-shadow: inset 0 2px 0 var(--ink-shadow); overflow: hidden; }
 	.xp-track > i { position: absolute; inset: 0; border-radius: 999px; background-color: var(--xp); background-image: linear-gradient(to bottom, rgb(255 255 255 / .35) 0 34%, transparent 34%); transform-origin: left; transition: transform 600ms var(--ease-out); }
-	.level-pip { display: grid; place-items: center; min-width: 2.25rem; height: 2.25rem; padding: 0 6px; border-radius: 12px; font-family: var(--font-display); font-size: 17px; background: var(--star); color: var(--reward-foreground); filter: drop-shadow(0 3px 0 var(--star-edge)); background-image: linear-gradient(to bottom, rgb(255 255 255 / .3) 0 34%, transparent 34%); margin-bottom: 3px; }
+	.level-pip { display: grid; place-items: center; min-width: 2.25rem; height: 2.25rem; padding: 0 6px; border-radius: 12px; font-family: var(--font-display); font-size: 17px; background: var(--star); color: var(--reward-foreground); box-shadow: 0 3px 0 var(--star-edge); background-image: linear-gradient(to bottom, rgb(255 255 255 / .3) 0 34%, transparent 34%); margin-bottom: 3px; }
 
 	/* ── Mission card ── */
 	.mission-ribbon { padding: 14px 18px; display: flex; align-items: center; gap: 10px; border-radius: 18px 18px 0 0; }
@@ -1142,7 +1253,7 @@
 	.spell-bottom { display: flex; align-items: center; gap: 10px; padding: 10px 12px 6px; border-top: 2px solid var(--border); background: var(--card); }
 	.quickkeys { display: flex; gap: 8px; overflow-x: auto; padding: 10px 12px; background: var(--surface-sunken); border-top: 2px solid var(--border); scrollbar-width: none; overscroll-behavior-x: contain; }
 	.quickkeys::-webkit-scrollbar { display: none; }
-	.quickkeys .keycap { height: 40px; min-width: 44px; font-size: 14px; flex: none; margin-bottom: var(--ledge-sm); }
+	.quickkeys .keycap { height: 44px; min-width: 44px; font-size: 14px; flex: none; margin-bottom: var(--ledge-sm); }
 	.quickkeys .keycap.kw { color: var(--syn-keyword); }
 	.quickkeys .keycap.tbl { color: var(--syn-table); }
 	.qk-label { font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--muted-foreground); padding: 8px 12px 0; background: var(--surface-sunken); }
@@ -1215,8 +1326,10 @@
 	/* ── Level complete ── */
 	.lc-overlay { background: radial-gradient(55% 45% at 50% 22%, color-mix(in oklab, var(--lantern) 40%, transparent), transparent 70%), rgb(10 15 28 / 0.86); }
 	.lc-overlay::before { content: ""; position: absolute; inset: 0; background-image: radial-gradient(circle, rgb(255 255 255 / .55) 0 1px, transparent 1.5px), radial-gradient(circle, rgb(255 210 63 / .6) 0 1.4px, transparent 2px); background-size: 61px 53px, 113px 97px; background-position: 0 0, 30px 20px; opacity: .5; pointer-events: none; }
-	.lc-ribbon { position: absolute; left: 50%; top: -22px; transform: translateX(-50%); width: min(92%, 360px); height: 52px; display: grid; place-items: center; color: var(--w-ink); font-family: var(--font-display); font-size: 23px; letter-spacing: .03em; text-transform: uppercase; filter: drop-shadow(0 4px 0 var(--w-deep)); z-index: 1; }
-	.lc-ribbon::before { content: ""; position: absolute; inset: 0; background: var(--w); clip-path: polygon(0 0, 100% 0, 94% 50%, 100% 100%, 0 100%, 6% 50%); z-index: -1; }
+	.lc-ribbon { position: absolute; left: 50%; top: -22px; transform: translateX(-50%); width: min(92%, 360px); height: 52px; display: grid; place-items: center; color: var(--w-ink); font-family: var(--font-display); font-size: 23px; letter-spacing: .03em; text-transform: uppercase; z-index: 1; }
+	.lc-ribbon::before, .lc-ribbon::after { content: ""; position: absolute; inset: 0; background: var(--w); clip-path: polygon(0 0, 100% 0, 94% 50%, 100% 100%, 0 100%, 6% 50%); z-index: -1; }
+	/* The ribbon's ledge is a second clipped shape 4px lower, not a drop-shadow filter (WebKit clips filters). */
+	.lc-ribbon::after { background: var(--w-deep); transform: translateY(4px); z-index: -2; }
 	.lc-ribbon span { position: relative; }
 	.big-stars { position: absolute; left: 50%; top: -96px; transform: translateX(-50%); display: flex; align-items: flex-end; gap: 4px; pointer-events: none; }
 	.big-stars svg { width: 72px; height: 72px; }
@@ -1234,7 +1347,7 @@
 	.wick-cheer { position: absolute; right: -10px; bottom: 96px; width: 56px; height: 68px; animation: bob 1.2s ease-in-out infinite; pointer-events: none; }
 
 	/* ── World banner card ── */
-	.wb { position: relative; border-radius: 22px; overflow: hidden; filter: drop-shadow(0 6px 0 var(--w-deep)); margin-bottom: 6px; }
+	.wb { position: relative; border-radius: 22px; overflow: hidden; box-shadow: 0 6px 0 var(--w-deep); margin-bottom: 6px; }
 	.wb .art { position: relative; height: 120px; }
 	.wb .art .glyph { position: absolute; right: 16px; bottom: -10px; width: 96px; height: 96px; opacity: .9; color: var(--w-ink); }
 	.wb .art .glyph svg { width: 100%; height: 100%; stroke-width: 1.8; }
@@ -1251,8 +1364,8 @@
 
 	/* Lesson card shell */
 	.lesson-card { touch-action: pan-y; }
-	.quiz-tile[data-state="right"] { --j-fill: var(--success-soft); --j-edge: var(--success-edge); --j-ink: var(--success-soft-foreground); box-shadow: inset 0 0 0 2px var(--success); }
-	.quiz-tile[data-state="wrong"] { --j-fill: var(--destructive-soft); --j-edge: var(--destructive-edge); --j-ink: var(--destructive-soft-foreground); box-shadow: inset 0 0 0 2px var(--destructive); }
+	.quiz-tile[data-state="right"] { --j-fill: var(--success-soft); --j-edge: var(--success-edge); --j-ink: var(--success-soft-foreground); --j-ring: inset 0 0 0 2px var(--success); }
+	.quiz-tile[data-state="wrong"] { --j-fill: var(--destructive-soft); --j-edge: var(--destructive-edge); --j-ink: var(--destructive-soft-foreground); --j-ring: inset 0 0 0 2px var(--destructive); }
 
 	/* Bottom tab bar (mobile) */
 	.tabbar { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; height: 64px; }

@@ -171,6 +171,9 @@ export function SqlEditor({
 			gameTheme,
 			EditorView.lineWrapping,
 			EditorView.contentAttributes.of({ "aria-label": ariaLabel }),
+			// Keep the caret clear of a fixed bottom bar (Cast / Next), which sits on
+			// top of the keyboard on phones.
+			EditorView.scrollMargins.of(() => ({ bottom: bottomBarHeight() })),
 			Prec.highest(
 				keymap.of([
 					{
@@ -287,6 +290,13 @@ const SYMBOL_KEYS = [
 	"NULL",
 	"AS",
 ];
+
+/** Height of the fixed bottom action bar, if one is showing (mobile). */
+function bottomBarHeight(): number {
+	const bar = document.querySelector<HTMLElement>("[data-bottom-bar]");
+	if (!bar || getComputedStyle(bar).position !== "fixed") return 0;
+	return Math.round(bar.getBoundingClientRect().height) + 8;
+}
 
 /**
  * Quick-key bar: keycaps that insert at the cursor (no animation, typing

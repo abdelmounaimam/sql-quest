@@ -235,14 +235,22 @@ Numeric styles: HUD counters use `tabular-nums` (class `tabular`) so values do n
 ```css
 .juicy {
   background-color: var(--j-fill); color: var(--j-ink); border-radius: var(--radius-lg);
-  filter: drop-shadow(0 var(--j-ledge) 0 var(--j-edge));       /* ledge on the compositor */
-  transition: transform 110ms var(--ease-out), filter 110ms var(--ease-out), background-color 150ms ease;
+  box-shadow: var(--j-ring), 0 var(--j-ledge) 0 var(--j-edge);   /* crisp ledge, no blur */
+  transition: transform 110ms var(--ease-out), box-shadow 110ms var(--ease-out), background-color 150ms ease;
   margin-bottom: var(--j-ledge);                                 /* reserve ledge space */
 }
-.juicy:active { transform: translateY(var(--j-ledge)); filter: drop-shadow(0 0 0 var(--j-edge)); }
+.juicy:active { transform: translateY(var(--j-ledge)); box-shadow: var(--j-ring), 0 0 0 var(--j-edge); }
 ```
 
-Why `filter: drop-shadow` and not `box-shadow`: it is composite-tier in current browsers, so the press never repaints; it also follows any shape. Caveat: `clip-path` on the same element clips the filter, so for clipped shapes (boss hexagon, ribbon) put the filter on a wrapper and the clip on a child. Focus uses `outline` (3px `--ring`, 2px offset), which coexists with the filter.
+Why `box-shadow` and not `filter: drop-shadow` (the first recipe): WebKit clips filter output to the element's compositing layer, so inside a `backdrop-filter` bar, a transformed sheet or a scroller the ledge was cut flat on iPhone. An unblurred box-shadow is painted with the element and never clipped that way; the press repaints one button for 110ms, which is cheap. `--j-ring` carries an inset outline (paper buttons, quiz states) alongside the ledge. Map nodes, the level pip and world banners use the same box-shadow ledge. For clipped shapes (the level-complete ribbon) the ledge is a second copy of the shape 4px lower (`::after`), not a filter. Focus uses `outline` (3px `--ring`, 2px offset).
+
+### Mobile platform rules
+
+- Safe areas live in four tokens on `:root` (`--safe-top|right|bottom|left` = `env(safe-area-inset-*)`); components never call `env()` directly. Utilities are additive: `pt-safe-2` = 0.5rem + inset, `pb-safe-3`, `px-safe-3`, `bottom-safe-8`, `right-safe-4`.
+- Fixed bottom bars use `bottom-bar` (fixed, lifted by `--kb-inset` above an iOS keyboard) + `px-safe-N pb-safe-N`, opaque `bg-card`, no `backdrop-filter`.
+- A night-ink strip the height of `--safe-top` sits under the status bar in both themes (the installed app uses `black-translucent`, whose clock is always white).
+- Tap targets are at least 44px; controls drawn smaller (`sm`, `icon-sm` buttons, step pips, switches, tabs) get an invisible hit area with `tap-target`.
+- Inline code chips never split when short (`nowrap`, up to 24 chars); long chips wrap with `box-decoration-break: clone`.
 
 ### Cards
 
@@ -317,7 +325,7 @@ Loading state: `disabled` + `<Spinner data-icon="inline-start" />` + label "Cast
 | **Progress** | XP bar, chapter progress, segmented lesson bar | Track: `--muted` + inset top shadow, 12 to 16px, pill. Indicator: `bg-xp` (XP), `bg-success` (lesson), `bg-(--w)` (world), with `.gloss`. shadcn already animates `translateX`; set `transition: transform 600ms var(--ease-out)`. Lesson progress = row of segments (one Progress per step or a custom flex of 8 pills). |
 | **Dialog** | level complete, achievement detail, settings sub-pages | Content: `rounded-2xl`, 2px border, `0 8px 0 var(--ledge)` ledge + soft drop, padding 24. Overlay: `bg-[#0A0F1C]/75` with a static radial lantern light behind the stars. Enter: tw-animate `zoom-in-95 fade-in` 220ms ease-out (already in shadcn); exit 150ms. Level complete layout in 7.3 and in `preview.html`. Always a DialogTitle. |
 | **AlertDialog** (add) | quit level, reset progress | Same shell as Dialog; actions = `danger` + `secondary`. |
-| **Drawer** (vaul) | mobile schema, mobile results, verdict sheet | Top radius 28, 2px top border, 40×5 handle (`--border`), `snapPoints={[0.45, 0.92]}`, content `overscroll-behavior: contain`, bottom padding `calc(1rem + env(safe-area-inset-bottom))`. Vaul's built-in iOS curve, do not override. |
+| **Drawer** (vaul) | mobile schema, mobile results, verdict sheet | Top radius 28, 2px top border, 40×5 handle (`--border`), `snapPoints={[0.45, 0.92]}`, content `overscroll-behavior: contain`, bottom padding `pb-safe-4` (1rem + `--safe-bottom`). Vaul's built-in iOS curve, do not override. |
 | **Sheet** | tablet schema panel (right), desktop settings | side right, width 380, card bg, 2px left border. Slide 300ms `--ease-drawer`. |
 | **Tabs** | level panels (Spell / Results / Schema on mobile), profile | TabsList = `.inset-well` (sunken pill tray, p-1); active trigger: card bg + 2px border + 3px bottom inset line in `--lantern` (as in preview), font 800. Color change only, 120ms, no sliding indicator (switched often). |
 | **Tooltip** | icon buttons, badges, map nodes (desktop) | bg `--foreground`, text `--background`, radius 10, 13px/700, padding 6×10. 400ms delay first, 0 after (Radix `skipDelayDuration`). Enter 150ms fade + scale 0.97 from trigger (`origin-(--radix-tooltip-content-transform-origin)`). Never the only way to get information on touch. |

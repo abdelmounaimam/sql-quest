@@ -61,7 +61,7 @@ function TabsTrigger({
 		<TabsPrimitive.Trigger
 			data-slot="tabs-trigger"
 			className={cn(
-				"relative inline-flex h-full flex-1 items-center justify-center gap-1.5 rounded-md border-2 border-transparent px-3 py-1 text-[13px] font-extrabold whitespace-nowrap text-muted-foreground transition-[color,background-color,border-color] duration-(--duration-fast) ease-out group-data-[orientation=vertical]/tabs:w-full group-data-[orientation=vertical]/tabs:justify-start hover:text-foreground disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+				"tap-target relative inline-flex h-full flex-1 items-center justify-center gap-1.5 rounded-md border-2 border-transparent px-3 py-1 text-[13px] font-extrabold whitespace-nowrap text-muted-foreground transition-[color,background-color,border-color] duration-(--duration-fast) ease-out group-data-[orientation=vertical]/tabs:w-full group-data-[orientation=vertical]/tabs:justify-start hover:text-foreground disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
 				"data-[state=active]:border-border data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:shadow-[inset_0_-3px_0_var(--lantern)]",
 				"group-data-[variant=line]/tabs-list:data-[state=active]:border-transparent group-data-[variant=line]/tabs-list:data-[state=active]:bg-transparent",
 				className,

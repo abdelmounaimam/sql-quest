@@ -46,7 +46,7 @@ export function BossIntro({
 
 	return (
 		<div
-			className="relative flex min-h-dvh flex-1 items-center justify-center overflow-hidden bg-[#0A0F1C] px-4 py-16"
+			className="relative flex min-h-dvh flex-1 items-center justify-center overflow-hidden bg-[#0A0F1C] px-4 pt-safe-16 pb-safe-16"
 			data-world={world}
 			onPointerDown={(e) => {
 				if ((e.target as HTMLElement).closest("button")) return;
@@ -77,8 +77,7 @@ export function BossIntro({
 					initial={reduce ? { opacity: 0 } : { scale: 1.15, opacity: 0 }}
 					animate={{ scale: 1, opacity: 1 }}
 					transition={{ delay: 0.25, duration: 0.26, ease: [0.23, 1, 0.32, 1] }}
-					className="my-6 grid size-28 place-items-center rounded-full bg-destructive text-destructive-foreground gloss"
-					style={{ filter: "drop-shadow(0 8px 0 var(--destructive-edge))" }}
+					className="my-6 grid size-28 place-items-center rounded-full bg-destructive text-destructive-foreground shadow-[0_8px_0_var(--destructive-edge)] gloss"
 				>
 					<GameIcon name="skull" solid={false} className="size-16" />
 				</motion.div>

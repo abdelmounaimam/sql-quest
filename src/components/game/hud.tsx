@@ -136,7 +136,7 @@ function EngineDot() {
 	const online = useOnline();
 	return (
 		<span
-			className="hidden items-center gap-1.5 text-xs font-bold text-muted-foreground md:flex lg:hidden"
+			className="hidden shrink-0 items-center gap-1.5 text-xs font-bold text-muted-foreground md:flex lg:hidden"
 			title="SQL engine: PGlite (PostgreSQL 18) in a Web Worker"
 		>
 			<span
@@ -148,11 +148,14 @@ function EngineDot() {
 					engine === "restarting" && "animate-pulse bg-destructive",
 				)}
 			/>
-			{engine === "booting"
-				? "Lighting the lantern"
-				: engine === "restarting"
-					? "Relighting"
-					: "Postgres 18 · TZ GMT"}
+			{/* Status lives in the dot (and title); the label is too wide for this bar. */}
+			<span className="sr-only">
+				{engine === "booting"
+					? "Lighting the lantern"
+					: engine === "restarting"
+						? "Relighting"
+						: "Postgres 18 · TZ GMT"}
+			</span>
 			{online ? null : (
 				<span className="rounded-sm bg-muted px-1.5 py-0.5 text-[10px] uppercase">
 					offline
@@ -168,7 +171,7 @@ function SoundToggle() {
 		<button
 			type="button"
 			onClick={() => gameActions.updateSettings({ sound: !sound })}
-			className="grid size-10 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+			className="grid size-11 shrink-0 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
 			aria-label={sound ? "Mute sounds" : "Unmute sounds"}
 			aria-pressed={!sound}
 		>
@@ -190,17 +193,19 @@ const NAV = [
 /** Global top bar (map, profile, settings). The level screen has its own HUD. */
 export function Hud() {
 	return (
-		<header className="safe-top sticky top-0 z-40 border-b-2 border-border bg-[color-mix(in_oklab,var(--background)_88%,transparent)] backdrop-blur-[10px]">
+		<header className="sticky top-0 z-40 pt-safe border-b-2 border-border bg-[color-mix(in_oklab,var(--background)_88%,transparent)] backdrop-blur-[10px]">
 			<div className="mx-auto flex h-14 max-w-[1240px] items-center gap-3 px-4 md:px-8">
-				<Link to="/" aria-label="World map" className="shrink-0">
-					<span className="hidden sm:block">
+				<Link to="/" aria-label="World map" className="tap-target shrink-0">
+					{/* Full wordmark only where the bar has room (tablet landscape and phones
+					    in landscape get the compact flame, like portrait phones). */}
+					<span className="hidden lg:block">
 						<Brand />
 					</span>
-					<span className="sm:hidden">
+					<span className="lg:hidden">
 						<Brand compact />
 					</span>
 				</Link>
-				<XpBar className="w-32 sm:w-44" />
+				<XpBar className="w-32 shrink-0 sm:w-44 md:w-36 xl:w-44" />
 				<StreakStat />
 				<ComboChip />
 				<AetherStat className="hidden sm:inline-flex" />
@@ -215,10 +220,11 @@ export function Hud() {
 							key={to}
 							to={to}
 							activeOptions={{ exact: to === "/" }}
-							className="flex h-10 items-center gap-1.5 rounded-md px-3 text-sm font-extrabold text-muted-foreground hover:bg-accent hover:text-foreground data-[status=active]:bg-accent data-[status=active]:text-foreground"
+							aria-label={label}
+							className="flex size-11 items-center justify-center rounded-md text-sm font-extrabold text-muted-foreground hover:bg-accent hover:text-foreground data-[status=active]:bg-accent data-[status=active]:text-foreground"
 						>
-							<Icon className="size-4" />
-							{label}
+							{/* md..lg only: icons, so the bar fits a phone in landscape. */}
+							<Icon className="size-5" />
 						</Link>
 					))}
 				</nav>
@@ -232,7 +238,7 @@ export function Hud() {
 export function TabBar() {
 	return (
 		<nav
-			className="safe-bottom fixed inset-x-0 bottom-0 z-40 border-t-2 border-border bg-card md:hidden"
+			className="bottom-bar z-40 border-t-2 border-border bg-card px-safe pb-safe md:hidden"
 			aria-label="Main"
 		>
 			<div className="tabbar">
@@ -254,7 +260,7 @@ export function TabBar() {
 export function LeftRail({ practice }: { practice?: React.ReactNode }) {
 	return (
 		<aside
-			className="sticky top-14 hidden h-[calc(100dvh-3.5rem)] flex-col gap-2 border-r-2 border-border px-4 py-6 lg:flex"
+			className="sticky top-[calc(3.5rem+var(--safe-top))] hidden h-[calc(100dvh-3.5rem-var(--safe-top))] flex-col gap-2 border-r-2 border-border px-4 py-6 lg:flex"
 			aria-label="Main"
 		>
 			{NAV.slice(0, 1).map(({ to, label, icon: Icon }) => (

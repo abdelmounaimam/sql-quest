@@ -267,7 +267,7 @@ export function WorldMap({ progress }: { progress: Progress }) {
 				<Button
 					variant="secondary"
 					size="icon"
-					className="fixed right-4 bottom-[calc(80px+env(safe-area-inset-bottom))] z-30 rounded-full md:bottom-8"
+					className="fixed right-safe-4 bottom-[calc(80px+var(--safe-bottom))] z-30 rounded-full md:bottom-safe-8"
 					aria-label="Back to my level"
 					onClick={() =>
 						currentRef.current?.scrollIntoView({
@@ -774,9 +774,10 @@ function LevelNode({
 					search={{ phase: "mission", ex: reviews[0].exerciseId, review: true }}
 					className="absolute top-1/2 flex -translate-y-1/2 flex-col items-center gap-1 no-underline"
 					style={
+						// side > 0 = right of the node (opposite the label, like Wick).
 						side > 0
-							? { right: "calc(100% + 22px)" }
-							: { left: "calc(100% + 22px)" }
+							? { left: "calc(100% + 22px)" }
+							: { right: "calc(100% + 22px)" }
 					}
 					onClick={() => sfx("tap")}
 				>

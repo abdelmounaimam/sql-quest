@@ -87,7 +87,7 @@ export function LevelHub({
 		<div className="mx-auto w-full max-w-4xl px-4 pt-5 pb-16 sm:px-6">
 			<Link
 				to="/"
-				className="mb-4 inline-flex items-center gap-1 text-sm font-semibold text-muted-foreground no-underline hover:text-foreground"
+				className="tap-target mb-4 inline-flex items-center gap-1 text-sm font-semibold text-muted-foreground no-underline hover:text-foreground"
 			>
 				<ChevronLeft className="size-4" /> World map
 			</Link>
