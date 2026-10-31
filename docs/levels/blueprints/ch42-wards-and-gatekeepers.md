@@ -1,0 +1,32 @@
+### ch42-wards-and-gatekeepers · Wards and Gatekeepers 🛡️
+- **File** `src/content/chapters/ch42-wards-and-gatekeepers.ts` · **World** The Astral Spire · **Tier** master · **Track** advanced · **Dataset** `library`
+- **Subtitle** Triggers, audit trails, notifications, privileges, row-level security and safe imports
+- **Concepts** `triggers`, `audit-history`, `listen-notify`, `roles-privileges`, `row-level-security`, `upsert-patterns`, `stored-logic-guidelines`
+- **Prerequisites** `ch41-spellcrafting`, `ch22-merge-and-upsert`, `ch31-scrolls-of-json`
+- **Lesson** (10 steps)
+  1. explain · Triggers: a function `RETURNS trigger`, BEFORE / AFTER, FOR EACH ROW / STATEMENT, `NEW`, `OLD`, `TG_OP`; a BEFORE row trigger that returns NULL silently skips the row.
+  2. example · Surprise: a BEFORE INSERT trigger fills `loan_period` when it is NULL, so an INSERT with NULL into a NOT NULL column succeeds.
+  3. explain · Audit trail: an AFTER trigger writes `TG_OP`, `to_jsonb(OLD)`, `to_jsonb(NEW)`, `current_user`, `now()` into a history table.
+  4. explain · LISTEN / NOTIFY: `pg_notify(channel, payload)` reaches listeners at COMMIT (never before, never on ROLLBACK); write an outbox row next to it so nothing is lost when nobody listens.
+  5. example · Roles and privileges: `has_table_privilege` for `apprentice_reader` and `archivist` on scrolls, loans and readers (GRANT / REVOKE, least privilege). `SET ROLE` is disabled in the app, so checks use catalog functions.
+  6. quiz · You enable RLS, write a policy and still see every row: why? (you are the superuser `postgres`, which bypasses RLS)
+  7. explain · RLS: `ENABLE ROW LEVEL SECURITY`, `CREATE POLICY ... FOR SELECT TO role USING (...)`, `WITH CHECK (...)` for writes; enabled with no policy means deny all for non-owners.
+  8. explain · Idempotent imports: staging table + `INSERT ... ON CONFLICT (key) DO UPDATE` or MERGE, so a second run (or a rerun after a crash) changes nothing; atomic counters with `DO UPDATE SET n = t.n + 1`.
+  9. explain · Where logic lives: constraints first (declarative, always on), then functions (explicit calls), triggers last (invisible side effects); never hide business rules in triggers when a CHECK can say it.
+  10. try · Grant SELECT on `loans` to `apprentice_reader` (starter grants scrolls, already granted).
+- **Exercises**
+
+| id | mission | diff | kind | check | concepts | style |
+|---|---|---|---|---|---|---|
+| ch42-ex01 | BEFORE INSERT OR UPDATE row trigger on `readers` storing `lower(email)`; verify updates reader 5 and inserts a hidden reader | 2 | ddl | state | triggers | write |
+| ch42-ex02 | setupSql's clearance trigger on `loans` ends with `RETURN NULL`, so every loan vanishes: fix it; verify a valid insert (22 loans) and a forbidden one (P0001) | 3 | ddl | state | triggers | fix |
+| ch42-ex03 | AFTER INSERT OR UPDATE OR DELETE trigger on `loans` filling `loan_audit` (op, loan_id, old_row, new_row); then return loan 9; verify adds a delete and an insert | 4 | ddl | state | audit-history, triggers | write |
+| ch42-ex04 | AFTER UPDATE trigger: when `returned_at` goes from NULL to a value, `pg_notify('returns', id)` and an `outbox` row; return loans 13 and 16; verify adds non-qualifying updates | 3 | ddl | state | listen-notify | write |
+| ch42-ex05 | GRANT DELETE on loans to `archivist`, REVOKE SELECT on citations from `apprentice_reader`; verify `has_table_privilege` (TRUNCATE stays false) and a read as apprentice (42501) | 2 | ddl | state | roles-privileges | write |
+| ch42-ex06 | RLS on scrolls: `apprentice_reader` sees clearance 1 only (20), `archivist` sees all (30); verify through a helper that `SET ROLE`s | 4 | ddl | state | row-level-security | write |
+| ch42-ex07 | idempotent reader import from `reader_import` (a previous run crashed after inserting Rowan): update name and clearance by case-insensitive email, insert the rest with password `changeme`; verify passwords untouched for existing readers | 4 | mutation | state | upsert-patterns | write |
+| ch42-ex08 | **Boss · The Astral Wards** (World 11 boss): unique titles, AFTER UPDATE trigger logging only changed keys into `scroll_audit`, RLS (apprentice clearance 1, archivist all), upsert of `scroll_import` on title run twice; verify audit rows (incl. a hidden update), counts per role, scrolls state, duplicate title 23505 | 5 | ddl | state | triggers, audit-history, row-level-security, upsert-patterns | design |
+
+- **Practice**: `ch42-pr01` triggers: statement-level AFTER DELETE counter (a 3-row delete and a 0-row delete count 2); `ch42-pr02` triggers: `WHEN (OLD.clearance IS DISTINCT FROM NEW.clearance)` logging only real changes; `ch42-pr03` audit-history: changed keys of two audit rows with `jsonb_each_text` (result); `ch42-pr04` listen-notify: `announce(ch, msg)` function calling `pg_notify` and writing the outbox; `ch42-pr05` roles-privileges: predict two `has_table_privilege` booleans; `ch42-pr06` row-level-security: archivist sees readers with clearance up to 2 (11); `ch42-pr07` row-level-security: `WITH CHECK` stops the archivist from raising a scroll to clearance 3; `ch42-pr08` upsert-patterns: atomic visit counter run 4 times; `ch42-pr09` stored-logic-guidelines: replace a validation trigger by a CHECK constraint (trigger gone, 23514 on bad page_count).
+- **Negative cases to add**: ex01 BEFORE INSERT only, AFTER trigger (NEW changes ignored); ex02 dropping the trigger (forbidden loan accepted); ex03 no old_row, AFTER UPDATE only; ex04 notify on every update; ex05 GRANT ALL (TRUNCATE true), forgetting REVOKE; ex06 policy without ENABLE (30), only the apprentice policy (archivist 0); ex07 plain INSERT (23505), DO NOTHING (no updates), overwriting password_hash; boss logging empty diffs on the second run, no RLS, non-idempotent INSERT. Accept: MERGE for ex07, a WHEN clause instead of IF in triggers, `FOR ALL` vs `FOR SELECT` policies.
+- **Notes**: `SET ROLE` is forbidden in learner SQL (and in solutions); verifySql calls setupSql helpers `seen_as(role, table)` (count of visible rows or SQLSTATE) and `try_as(role, statement)` (`ok:<rows>` or SQLSTATE) which switch role inside a function. The superuser `postgres` bypasses RLS. NOTIFY payloads are invisible to the checker, hence the outbox. Scroll clearances: 20 at level 1, 6 at 2, 4 at 3. Dataset grants: apprentice_reader SELECT on sections, scrolls, citations; archivist SELECT, INSERT, UPDATE on sections, scrolls, citations, loans, readers and SELECT on staff, access_log.
