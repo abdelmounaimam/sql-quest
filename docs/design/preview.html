@@ -1,0 +1,2145 @@
+<!doctype html>
+<html lang="en" class="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Lantern Atlas · SQL Quest style tile</title>
+<meta name="description" content="Living moodboard and style tile for SQL Quest: palette, type, juicy buttons, map nodes, schema chests, feedback and world banners." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible+Mono:wght@400..700&family=Atkinson+Hyperlegible+Next:ital,wght@0,400..800;1,400..800&family=Lilita+One&display=swap" rel="stylesheet" />
+<script>
+	(function () {
+		try {
+			var q = new URLSearchParams(location.search).get("theme");
+			var t = q || localStorage.getItem("lantern-theme");
+			if (t === "light") document.documentElement.classList.remove("dark");
+		} catch (e) {}
+	})();
+</script>
+<style>
+/* ═══════════ Injected verbatim from docs/design/theme.css (Tailwind-only syntax stripped) ═══════════ */
+/*
+ * SQL Quest · "Lantern Atlas" theme
+ * Drop-in replacement for src/styles.css (Tailwind v4 + shadcn/ui, CSS variables).
+ * Source of truth: docs/design/design-direction.md. Visual reference: docs/design/preview.html.
+ *
+ * Fonts (self-hosted for offline PWA). In src/routes/__root.tsx (or main entry) import:
+ *   import "@fontsource/lilita-one/400.css";
+ *   import "@fontsource-variable/atkinson-hyperlegible-next";
+ *   import "@fontsource-variable/atkinson-hyperlegible-mono";
+ * and drop the fonts.googleapis.com preconnects. Workbox precaches the woff2 files.
+ *
+ * Every text pair below is WCAG AA (4.5:1) in its own mode; ratios are listed in
+ * design-direction.md §3. Rule of the system: candy fills carry INK lettering
+ * (dark text of the same hue), never white, except the two world banners noted.
+ *
+ * Compatibility: keeps every token and class the app already uses (--reward,
+ * --info, --special, --success, --*-glow, --editor, --type-number…, --world-N,
+ * .panel, .font-display, .md, .cm-editor, .react-flow, .path-march, .pulse-ring,
+ * .glow-live, .shake, .no-scrollbar, .safe-bottom, .reduce-motion).
+ * World tokens are now 1-based (--world-1 … --world-11 = world number). In
+ * src/lib/content.ts replace `var(--world-${index % WORLD_TOKENS})` with
+ * `var(--world-${index + 1})` (or set data-world={index + 1} and use var(--w)).
+ */
+
+
+
+
+/* ───────────────────────────── Day Atlas (light) ───────────────────────────── */
+:root {
+	color-scheme: light;
+
+	/* Surfaces: parchment and ink */
+	--background: #fbf5e9;
+	--foreground: #1d2436;
+	--card: #fffdf8;
+	--card-foreground: #1d2436;
+	--popover: #fffdf8;
+	--popover-foreground: #1d2436;
+	--muted: #f3ebda;
+	--muted-foreground: #5f6577;
+	--accent: #fff0cc; /* menu/list hover = soft lantern light */
+	--accent-foreground: #1d2436;
+	--border: #e2d6bd;
+	--input: #a08e6e; /* 3.1:1 on card, a real boundary for fields */
+	--ring: #3aa8ff;
+	--ledge: #d6c7a8; /* bottom ledge of neutral cards and buttons */
+	--surface-raised: #fffdf8;
+	--surface-sunken: #f3ebda;
+	--ink-shadow: rgb(61 44 12 / 0.12);
+
+	/* Brand: the lantern */
+	--primary: #ffb020;
+	--primary-foreground: #3b2600;
+	--primary-edge: #cc8000;
+	--primary-hover: #ffc24d;
+	--secondary: #f3ebda;
+	--secondary-foreground: #1d2436;
+	--secondary-edge: #d6c7a8;
+
+	/* Semantic (fill / ink on fill / ledge / soft tint / ink on tint) */
+	--success: #4cc764;
+	--success-foreground: #08331a;
+	--success-edge: #2e9a46;
+	--success-soft: #ddf6e2;
+	--success-soft-foreground: #145c2c;
+	--destructive: #ff5a6a;
+	--destructive-foreground: #3f0711;
+	--destructive-edge: #d2334a;
+	--destructive-soft: #ffe1e4;
+	--destructive-soft-foreground: #9a1b2e;
+	--warning: #ff8a2b;
+	--warning-foreground: #3a1600;
+	--warning-edge: #d0631a;
+	--warning-soft: #ffe8d4;
+	--warning-soft-foreground: #8a3b00;
+	--info: #3aa8ff;
+	--info-foreground: #04243f;
+	--info-edge: #1f7fd0;
+	--info-soft: #dcefff;
+	--info-soft-foreground: #0b5594;
+	--special: #a77bff;
+	--special-foreground: #1f0b4a;
+	--special-edge: #7c52d6;
+	--special-soft: #eee6ff;
+	--special-soft-foreground: #5b2db8;
+
+	/* Game economy */
+	--reward: #ffd23f; /* stars, level, rewards (legacy name kept) */
+	--reward-foreground: #3b2a00;
+	--reward-edge: #e8a200;
+	--star: #ffd23f;
+	--star-edge: #e8a200;
+	--star-empty: #e2d6bd;
+	--xp: #3aa8ff; /* Aether */
+	--xp-edge: #1f7fd0;
+	--xp-text: #0b5594;
+	--streak: #ff8a2b; /* Hearth flame */
+	--streak-edge: #d0631a;
+	--streak-text: #8a3b00;
+	--gem: #ff5fb0; /* Shards */
+	--gem-edge: #cf3a86;
+	--gem-text: #9c1c5e;
+	--gem-foreground: #3f0525;
+	--heart: #ff5a6a;
+	--lantern: #ffb020;
+
+	/* Glows (pre-mixed, used by pseudo-elements whose opacity animates) */
+	--reward-glow: color-mix(in oklab, var(--lantern) 45%, transparent);
+	--lantern-glow: color-mix(in oklab, var(--lantern) 45%, transparent);
+	--success-glow: color-mix(in oklab, var(--success) 40%, transparent);
+	--info-glow: color-mix(in oklab, var(--info) 40%, transparent);
+	--destructive-glow: color-mix(in oklab, var(--destructive) 40%, transparent);
+
+	/* Spellbook (editor) and syntax runes */
+	--editor: #fffcf3;
+	--editor-gutter: #f3ebda;
+	--editor-line: #fff4d6;
+	--editor-selection: #ffe2a3;
+	--syn-keyword: #b54708;
+	--syn-function: #1d5fc0;
+	--syn-string: #1f7a3a;
+	--syn-number: #b0256f;
+	--syn-type: #0e7480;
+	--syn-operator: #b42318;
+	--syn-comment: #6b7081;
+	--syn-param: #6d3bd8;
+	--syn-punct: #5f6577;
+	--syn-ident: #1d2436;
+	--syn-table: #7a4800;
+	--null-fg: #6b7081;
+	--null-bg: #f3ebda;
+
+	/* Column type badges: fg on bg, 5.6 to 6.6:1 */
+	--type-int: #00569f;
+	--type-int-bg: #cff1ff;
+	--type-numeric: #006585;
+	--type-numeric-bg: #c0f8ff;
+	--type-text-fg: #036819;
+	--type-text-bg: #d5f8d5;
+	--type-bool-fg: #932a33;
+	--type-bool-bg: #ffdedc;
+	--type-datetime: #784b00;
+	--type-datetime-bg: #ffebc0;
+	--type-uuid: #485572;
+	--type-uuid-bg: #e5edfe;
+	--type-jsonb: #882d67;
+	--type-jsonb-bg: #ffddf6;
+	--type-array: #545c00;
+	--type-array-bg: #ebf2c5;
+	--type-enum: #6d398e;
+	--type-enum-bg: #f9e2ff;
+	--type-range: #8d3800;
+	--type-range-bg: #ffe3c7;
+	--type-vector-fg: #4947a0;
+	--type-vector-bg: #e4e9ff;
+	--type-tsvector: #006c58;
+	--type-tsvector-bg: #c2fbee;
+	--type-geometric: #6a4f39;
+	--type-geometric-bg: #fae9dd;
+	/* legacy aliases used by schema-explorer.tsx */
+	--type-number: var(--type-int);
+	--type-text: var(--type-text-fg);
+	--type-time: var(--type-datetime);
+	--type-json: var(--type-jsonb);
+	--type-vector: var(--type-vector-fg);
+	--type-bool: var(--type-bool-fg);
+	--type-other: var(--type-uuid);
+
+	/* Worlds: accent / deep (ledge) / ink-on-accent / tint / ink-on-tint */
+	--world-1: #f2893b; --world-1-deep: #ae632a; --world-1-ink: #301b0c; --world-1-tint: #fdede2; --world-1-tint-fg: #6d3e1b;
+	--world-2: #e8b526; --world-2-deep: #a7821b; --world-2-ink: #2e2408; --world-2-tint: #fcf4de; --world-2-tint-fg: #685111;
+	--world-3: #17a9c6; --world-3-deep: #117a8f; --world-3-ink: #052228; --world-3-tint: #dcf2f6; --world-3-tint-fg: #0a4c59;
+	--world-4: #7ea33c; --world-4-deep: #5b752b; --world-4-ink: #19210c; --world-4-tint: #ecf1e2; --world-4-tint-fg: #39491b;
+	--world-5: #5d63f0; --world-5-deep: #4347ad; --world-5-ink: #ffffff; --world-5-tint: #e7e8fd; --world-5-tint-fg: #2a2d6c;
+	--world-6: #ee5636; --world-6-deep: #ab3e27; --world-6-ink: #30110b; --world-6-tint: #fce6e1; --world-6-tint-fg: #6b2718;
+	--world-7: #2e86ea; --world-7-deep: #2160a8; --world-7-ink: #091b2f; --world-7-tint: #e0edfc; --world-7-tint-fg: #153c69;
+	--world-8: #dd4f9c; --world-8-deep: #9f3970; --world-8-ink: #2c101f; --world-8-tint: #fae5f0; --world-8-tint-fg: #632446;
+	--world-9: #c9405a; --world-9-deep: #912e41; --world-9-ink: #ffffff; --world-9-tint: #f7e2e6; --world-9-tint-fg: #5a1d28;
+	--world-10: #6e83a3; --world-10-deep: #4f5e75; --world-10-ink: #161a21; --world-10-tint: #e9ecf1; --world-10-tint-fg: #313b49;
+	--world-11: #b05cf0; --world-11-deep: #7f42ad; --world-11-ink: #231230; --world-11-tint: #f3e7fd; --world-11-tint-fg: #4f296c;
+	/* World tokens are 1-based (world number). lib/content.ts must use
+	   var(--world-${worldNumber}) (index + 1), no modulo. */
+
+	/* Charts */
+	--chart-1: #ffb020;
+	--chart-2: #3aa8ff;
+	--chart-3: #4cc764;
+	--chart-4: #ff5fb0;
+	--chart-5: #a77bff;
+
+	/* Sidebar (desktop rail) */
+	--sidebar: #fffdf8;
+	--sidebar-foreground: #1d2436;
+	--sidebar-primary: #ffb020;
+	--sidebar-primary-foreground: #3b2600;
+	--sidebar-accent: #fff0cc;
+	--sidebar-accent-foreground: #1d2436;
+	--sidebar-border: #e2d6bd;
+	--sidebar-ring: #3aa8ff;
+
+	/* Durations (use as duration-(--duration-press) in Tailwind) */
+	--duration-press: 110ms;
+	--duration-fast: 160ms;
+	--duration-base: 220ms;
+	--duration-slow: 320ms;
+	--duration-celebrate: 520ms;
+
+	/* Shape and depth */
+	--radius: 1rem;
+	--ledge-sm: 3px;
+	--ledge-md: 4px;
+	--ledge-lg: 6px;
+	--ledge-xl: 8px;
+
+	/* Paper grain (static, painted once) */
+	--grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .35 0 0 0 0 .25 0 0 0 0 .1 0 0 0 .07 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* ───────────────────────────── Night Atlas (dark, app default) ───────────────────────────── */
+.dark {
+	color-scheme: dark;
+
+	--background: #0e1424;
+	--foreground: #f4ecdc;
+	--card: #172036;
+	--card-foreground: #f4ecdc;
+	--popover: #1f2a45;
+	--popover-foreground: #f4ecdc;
+	--muted: #1a2440;
+	--muted-foreground: #a6aec4;
+	--accent: #3a2a0a;
+	--accent-foreground: #f4ecdc;
+	--border: #2c3a5e;
+	--input: #5e6f99;
+	--ring: #3aa8ff;
+	--ledge: #070b16;
+	--surface-raised: #1f2a45;
+	--surface-sunken: #111a2e;
+	--ink-shadow: rgb(0 0 0 / 0.45);
+
+	--primary: #ffb524;
+	--primary-foreground: #2a1a00;
+	--primary-edge: #c47f00;
+	--primary-hover: #ffc54f;
+	--secondary: #1f2a45;
+	--secondary-foreground: #f4ecdc;
+	--secondary-edge: #070b16;
+
+	--success: #4cc764;
+	--success-foreground: #08331a;
+	--success-edge: #2a8a40;
+	--success-soft: #12321f;
+	--success-soft-foreground: #8be6a0;
+	--destructive: #ff5a6a;
+	--destructive-foreground: #3f0711;
+	--destructive-edge: #b8283e;
+	--destructive-soft: #3a1620;
+	--destructive-soft-foreground: #ff9aa5;
+	--warning: #ff8a2b;
+	--warning-foreground: #3a1600;
+	--warning-edge: #b85514;
+	--warning-soft: #3a2010;
+	--warning-soft-foreground: #ffb27a;
+	--info: #3aa8ff;
+	--info-foreground: #04243f;
+	--info-edge: #1a6db3;
+	--info-soft: #10294a;
+	--info-soft-foreground: #8fcbff;
+	--special: #a77bff;
+	--special-foreground: #1f0b4a;
+	--special-edge: #6a43c2;
+	--special-soft: #261a47;
+	--special-soft-foreground: #cdb6ff;
+
+	--reward: #ffd23f;
+	--reward-foreground: #3b2a00;
+	--reward-edge: #c98c00;
+	--star: #ffd23f;
+	--star-edge: #c98c00;
+	--star-empty: #2c3a5e;
+	--xp: #3aa8ff;
+	--xp-edge: #1a6db3;
+	--xp-text: #8fcbff;
+	--streak: #ff8a2b;
+	--streak-edge: #b85514;
+	--streak-text: #ffb27a;
+	--gem: #ff5fb0;
+	--gem-edge: #b8327a;
+	--gem-text: #ff9ccd;
+	--heart: #ff5a6a;
+	--lantern: #ffb524;
+
+	--editor: #0a1020;
+	--editor-gutter: #0e1628;
+	--editor-line: #131d34;
+	--editor-selection: #3a2a0a;
+	--syn-keyword: #ffb547;
+	--syn-function: #74b9ff;
+	--syn-string: #86e39a;
+	--syn-number: #ff8ec8;
+	--syn-type: #5fd8d2;
+	--syn-operator: #ff8a80;
+	--syn-comment: #8b94ae;
+	--syn-param: #c7a6ff;
+	--syn-punct: #a6aec4;
+	--syn-ident: #f4ecdc;
+	--syn-table: #ffd27a;
+	--null-fg: #8b94ae;
+	--null-bg: #1a2440;
+
+	--type-int: #9cdaff;
+	--type-int-bg: #092f52;
+	--type-numeric: #74e7ff;
+	--type-numeric-bg: #003645;
+	--type-text-fg: #a6e8a7;
+	--type-text-bg: #103714;
+	--type-bool-fg: #ffb7b6;
+	--type-bool-bg: #4d1b1e;
+	--type-datetime: #f5cf7d;
+	--type-datetime-bg: #3f2a00;
+	--type-uuid: #c9d4ec;
+	--type-uuid-bg: #262e3d;
+	--type-jsonb: #ffb7e5;
+	--type-jsonb-bg: #471c36;
+	--type-array: #d2dd87;
+	--type-array-bg: #2d3200;
+	--type-enum: #eac0ff;
+	--type-enum-bg: #39214a;
+	--type-range: #ffc18d;
+	--type-range-bg: #492100;
+	--type-vector-fg: #c6cdff;
+	--type-vector-bg: #272852;
+	--type-tsvector: #79ecd7;
+	--type-tsvector-bg: #00392f;
+	--type-geometric: #e6cfbe;
+	--type-geometric-bg: #392a1e;
+
+	/* World accents stay the same; tints flip to night */
+	--world-1-tint: #402e29; --world-1-tint-fg: #f8be93;
+	--world-2-tint: #3e3724; --world-2-tint-fg: #f2d688;
+	--world-3-tint: #103548; --world-3-tint-fg: #7fd0e0;
+	--world-4-tint: #273329; --world-4-tint-fg: #b8cc94;
+	--world-5-tint: #1f2551; --world-5-tint-fg: #a6a9f7;
+	--world-6-tint: #3f2328; --world-6-tint-fg: #f6a290;
+	--world-7-tint: #152d50; --world-7-tint-fg: #8cbcf3;
+	--world-8-tint: #3c213e; --world-8-tint-fg: #ec9ec9;
+	--world-9-tint: #371e30; --world-9-tint-fg: #e196a4;
+	--world-10-tint: #232c40; --world-10-tint-fg: #afbbcc;
+	--world-11-tint: #322451; --world-11-tint-fg: #d4a5f7;
+
+	--chart-1: #ffb524;
+	--chart-2: #3aa8ff;
+	--chart-3: #4cc764;
+	--chart-4: #ff5fb0;
+	--chart-5: #a77bff;
+
+	--sidebar: #111a2e;
+	--sidebar-foreground: #f4ecdc;
+	--sidebar-primary: #ffb524;
+	--sidebar-primary-foreground: #2a1a00;
+	--sidebar-accent: #3a2a0a;
+	--sidebar-accent-foreground: #f4ecdc;
+	--sidebar-border: #2c3a5e;
+	--sidebar-ring: #3aa8ff;
+
+	--grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .8 0 0 0 0 .85 0 0 0 0 1 0 0 0 .05 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* ───────────────────────────── Tailwind mappings ───────────────────────────── */
+:root {
+	--font-sans: "Atkinson Hyperlegible Next Variable", "Atkinson Hyperlegible Next", ui-sans-serif, system-ui, sans-serif;
+	--font-display: "Lilita One", "Atkinson Hyperlegible Next Variable", ui-rounded, system-ui, sans-serif;
+	--font-mono: "Atkinson Hyperlegible Mono Variable", "Atkinson Hyperlegible Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+
+	--color-background: var(--background);
+	--color-foreground: var(--foreground);
+	--color-card: var(--card);
+	--color-card-foreground: var(--card-foreground);
+	--color-popover: var(--popover);
+	--color-popover-foreground: var(--popover-foreground);
+	--color-primary: var(--primary);
+	--color-primary-foreground: var(--primary-foreground);
+	--color-primary-edge: var(--primary-edge);
+	--color-secondary: var(--secondary);
+	--color-secondary-foreground: var(--secondary-foreground);
+	--color-muted: var(--muted);
+	--color-muted-foreground: var(--muted-foreground);
+	--color-accent: var(--accent);
+	--color-accent-foreground: var(--accent-foreground);
+	--color-destructive: var(--destructive);
+	--color-destructive-foreground: var(--destructive-foreground);
+	--color-destructive-edge: var(--destructive-edge);
+	--color-destructive-soft: var(--destructive-soft);
+	--color-destructive-soft-foreground: var(--destructive-soft-foreground);
+	--color-border: var(--border);
+	--color-input: var(--input);
+	--color-ring: var(--ring);
+	--color-ledge: var(--ledge);
+
+	--color-success: var(--success);
+	--color-success-foreground: var(--success-foreground);
+	--color-success-edge: var(--success-edge);
+	--color-success-soft: var(--success-soft);
+	--color-success-soft-foreground: var(--success-soft-foreground);
+	--color-warning: var(--warning);
+	--color-warning-foreground: var(--warning-foreground);
+	--color-warning-soft: var(--warning-soft);
+	--color-warning-soft-foreground: var(--warning-soft-foreground);
+	--color-info: var(--info);
+	--color-info-foreground: var(--info-foreground);
+	--color-info-edge: var(--info-edge);
+	--color-info-soft: var(--info-soft);
+	--color-info-soft-foreground: var(--info-soft-foreground);
+	--color-special: var(--special);
+	--color-special-foreground: var(--special-foreground);
+	--color-special-soft: var(--special-soft);
+	--color-special-soft-foreground: var(--special-soft-foreground);
+	--color-reward: var(--reward);
+	--color-reward-foreground: var(--reward-foreground);
+
+	--color-star: var(--star);
+	--color-star-empty: var(--star-empty);
+	--color-xp: var(--xp);
+	--color-xp-text: var(--xp-text);
+	--color-streak: var(--streak);
+	--color-streak-text: var(--streak-text);
+	--color-gem: var(--gem);
+	--color-gem-text: var(--gem-text);
+	--color-heart: var(--heart);
+	--color-lantern: var(--lantern);
+	--color-editor: var(--editor);
+
+	--color-chart-1: var(--chart-1);
+	--color-chart-2: var(--chart-2);
+	--color-chart-3: var(--chart-3);
+	--color-chart-4: var(--chart-4);
+	--color-chart-5: var(--chart-5);
+
+	--color-sidebar: var(--sidebar);
+	--color-sidebar-foreground: var(--sidebar-foreground);
+	--color-sidebar-primary: var(--sidebar-primary);
+	--color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+	--color-sidebar-accent: var(--sidebar-accent);
+	--color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+	--color-sidebar-border: var(--sidebar-border);
+	--color-sidebar-ring: var(--sidebar-ring);
+
+	/* Per-world utilities: bg-world-3, text-world-3-tint-fg, … */
+	--color-world-1: var(--world-1); --color-world-1-ink: var(--world-1-ink); --color-world-1-tint: var(--world-1-tint); --color-world-1-tint-fg: var(--world-1-tint-fg);
+	--color-world-2: var(--world-2); --color-world-2-ink: var(--world-2-ink); --color-world-2-tint: var(--world-2-tint); --color-world-2-tint-fg: var(--world-2-tint-fg);
+	--color-world-3: var(--world-3); --color-world-3-ink: var(--world-3-ink); --color-world-3-tint: var(--world-3-tint); --color-world-3-tint-fg: var(--world-3-tint-fg);
+	--color-world-4: var(--world-4); --color-world-4-ink: var(--world-4-ink); --color-world-4-tint: var(--world-4-tint); --color-world-4-tint-fg: var(--world-4-tint-fg);
+	--color-world-5: var(--world-5); --color-world-5-ink: var(--world-5-ink); --color-world-5-tint: var(--world-5-tint); --color-world-5-tint-fg: var(--world-5-tint-fg);
+	--color-world-6: var(--world-6); --color-world-6-ink: var(--world-6-ink); --color-world-6-tint: var(--world-6-tint); --color-world-6-tint-fg: var(--world-6-tint-fg);
+	--color-world-7: var(--world-7); --color-world-7-ink: var(--world-7-ink); --color-world-7-tint: var(--world-7-tint); --color-world-7-tint-fg: var(--world-7-tint-fg);
+	--color-world-8: var(--world-8); --color-world-8-ink: var(--world-8-ink); --color-world-8-tint: var(--world-8-tint); --color-world-8-tint-fg: var(--world-8-tint-fg);
+	--color-world-9: var(--world-9); --color-world-9-ink: var(--world-9-ink); --color-world-9-tint: var(--world-9-tint); --color-world-9-tint-fg: var(--world-9-tint-fg);
+	--color-world-10: var(--world-10); --color-world-10-ink: var(--world-10-ink); --color-world-10-tint: var(--world-10-tint); --color-world-10-tint-fg: var(--world-10-tint-fg);
+	--color-world-11: var(--world-11); --color-world-11-ink: var(--world-11-ink); --color-world-11-tint: var(--world-11-tint); --color-world-11-tint-fg: var(--world-11-tint-fg);
+
+	--radius-sm: calc(var(--radius) - 6px); /* 10px: chips, badges, menu items */
+	--radius-md: calc(var(--radius) - 4px); /* 12px: inputs, small buttons */
+	--radius-lg: var(--radius); /* 16px: buttons, cards */
+	--radius-xl: calc(var(--radius) + 4px); /* 20px: panels, popovers */
+	--radius-2xl: calc(var(--radius) + 12px); /* 28px: dialogs, sheets */
+}
+
+:root {
+	/* Motion tokens (values from the animate skill; --ease-pop only for rare celebrations) */
+	--ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+	--ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+	--ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+	--ease-pop: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+	/* Type scale */
+	--text-hero: 3.5rem;
+	--text-hero--line-height: 1;
+	--text-title: 2.25rem;
+	--text-title--line-height: 1.05;
+	--text-overline: 0.75rem;
+	--text-overline--line-height: 1.2;
+	--text-overline--letter-spacing: 0.08em;
+
+	--animate-shake: shake 420ms cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+	--animate-pop-in: pop-in 260ms var(--ease-out) both;
+	--animate-star-land: star-land 520ms var(--ease-pop) both;
+	--animate-rise: rise 260ms var(--ease-out) both;
+	--animate-bob: bob 1.6s ease-in-out infinite;
+	--animate-flicker: flicker 2.4s ease-in-out infinite;
+	--animate-pulse-ring: pulse-ring 1.8s var(--ease-out) infinite;
+	--animate-shine: shine 900ms var(--ease-in-out) both;
+	--animate-bump: bump 280ms var(--ease-pop);
+}
+
+/* ───────────────────────────── Base ───────────────────────────── */
+
+
+/* ───────────────────────────── Components ───────────────────────────── */
+
+	.font-display {
+		font-family: var(--font-display);
+		font-weight: 400;
+		letter-spacing: 0.01em;
+	}
+	.tabular {
+		font-variant-numeric: tabular-nums;
+	}
+	.overline {
+		font-size: var(--text-overline);
+		font-weight: 800;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+	}
+
+	/*
+	 * JUICY: the pressable "toy" surface. Ledge = crisp drop-shadow (composited filter,
+	 * no box-shadow paint). Press = sink by the ledge height.
+	 * Set --j-fill / --j-edge / --j-ink (and optionally --j-ledge, --j-hover) per variant.
+	 */
+	.juicy {
+		--j-fill: var(--primary);
+		--j-edge: var(--primary-edge);
+		--j-ink: var(--primary-foreground);
+		--j-hover: color-mix(in oklab, var(--j-fill) 86%, white);
+		--j-ledge: var(--ledge-md);
+		position: relative;
+		background-color: var(--j-fill);
+		color: var(--j-ink);
+		border-radius: var(--radius-lg);
+		filter: drop-shadow(0 var(--j-ledge) 0 var(--j-edge));
+		transform: translateY(0);
+		transition:
+			transform var(--duration-press) var(--ease-out),
+			filter var(--duration-press) var(--ease-out),
+			background-color 150ms ease;
+		margin-bottom: var(--j-ledge);
+	}
+	.juicy:active:not(:disabled, [aria-disabled="true"]),
+	.juicy[data-pressed="true"] {
+		transform: translateY(var(--j-ledge));
+		filter: drop-shadow(0 0 0 var(--j-edge));
+	}
+	@media (hover: hover) and (pointer: fine) {
+		.juicy:hover:not(:disabled, [aria-disabled="true"]) {
+			background-color: var(--j-hover);
+		}
+	}
+	.juicy:disabled,
+	.juicy[aria-disabled="true"] {
+		--j-fill: var(--muted);
+		--j-edge: var(--ledge);
+		--j-ink: var(--muted-foreground);
+		cursor: not-allowed;
+		opacity: 1;
+	}
+	.juicy-label {
+		font-family: var(--font-display);
+		font-weight: 400;
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
+	}
+	.juicy-primary { --j-fill: var(--primary); --j-edge: var(--primary-edge); --j-ink: var(--primary-foreground); --j-hover: var(--primary-hover); }
+	.juicy-success { --j-fill: var(--success); --j-edge: var(--success-edge); --j-ink: var(--success-foreground); }
+	.juicy-danger { --j-fill: var(--destructive); --j-edge: var(--destructive-edge); --j-ink: var(--destructive-foreground); }
+	.juicy-info { --j-fill: var(--info); --j-edge: var(--info-edge); --j-ink: var(--info-foreground); }
+	.juicy-special { --j-fill: var(--special); --j-edge: var(--special-edge); --j-ink: var(--special-foreground); }
+	.juicy-gem { --j-fill: var(--gem); --j-edge: var(--gem-edge); --j-ink: var(--gem-foreground); }
+	.juicy-paper {
+		--j-fill: var(--surface-raised);
+		--j-edge: var(--ledge);
+		--j-ink: var(--foreground);
+		--j-hover: var(--accent);
+		box-shadow: inset 0 0 0 2px var(--border);
+	}
+	.juicy-world {
+		--j-fill: var(--w);
+		--j-edge: var(--w-deep);
+		--j-ink: var(--w-ink);
+	}
+
+	/* Card with a ledge (paper slip). Used by .panel, Card, mission, chest. */
+	.panel,
+	.ledge-card {
+		border-radius: calc(var(--radius) + 4px); background: var(--card); color: var(--card-foreground);
+		border: 2px solid var(--border);
+		box-shadow: 0 var(--ledge-md) 0 var(--ledge);
+	}
+	.inset-well {
+		background: var(--surface-sunken);
+		border-radius: var(--radius-lg);
+		box-shadow: inset 0 2px 0 var(--ink-shadow);
+	}
+
+	/* Lantern glow: a pre-painted glow whose OPACITY animates (no box-shadow animation). */
+	.glow-lantern {
+		position: relative;
+		isolation: isolate;
+	}
+	.glow-lantern::after {
+		content: "";
+		position: absolute;
+		inset: -2px;
+		border-radius: inherit;
+		box-shadow:
+			0 0 0 2px var(--lantern),
+			0 0 18px 4px var(--lantern-glow);
+		opacity: 0;
+		transition: opacity var(--duration-base) var(--ease-out);
+		pointer-events: none;
+		z-index: -1;
+	}
+	.glow-lantern[data-lit="true"]::after {
+		opacity: 1;
+	}
+
+	/* Gloss band: a hard-edged highlight, the "candy" read on nodes, bars, stars. */
+	.gloss {
+		background-image: linear-gradient(to bottom, rgb(255 255 255 / 0.3) 0 34%, transparent 34%);
+	}
+
+	/* Column type badge: <Badge data-type="jsonb" className="type-badge"> */
+	.type-badge {
+		--tb-fg: var(--type-uuid);
+		--tb-bg: var(--type-uuid-bg);
+		display: inline-flex;
+		align-items: center;
+		gap: 0.3em;
+		height: 1.375rem;
+		padding: 0 0.5rem;
+		border-radius: var(--radius-sm);
+		background: var(--tb-bg);
+		color: var(--tb-fg);
+		font-family: var(--font-mono);
+		font-size: 0.75rem;
+		font-weight: 700;
+		line-height: 1;
+		box-shadow: inset 0 -2px 0 color-mix(in oklab, var(--tb-fg) 18%, transparent);
+	}
+	.type-badge[data-type="int"] { --tb-fg: var(--type-int); --tb-bg: var(--type-int-bg); }
+	.type-badge[data-type="numeric"] { --tb-fg: var(--type-numeric); --tb-bg: var(--type-numeric-bg); }
+	.type-badge[data-type="text"] { --tb-fg: var(--type-text-fg); --tb-bg: var(--type-text-bg); }
+	.type-badge[data-type="bool"] { --tb-fg: var(--type-bool-fg); --tb-bg: var(--type-bool-bg); }
+	.type-badge[data-type="datetime"] { --tb-fg: var(--type-datetime); --tb-bg: var(--type-datetime-bg); }
+	.type-badge[data-type="uuid"] { --tb-fg: var(--type-uuid); --tb-bg: var(--type-uuid-bg); }
+	.type-badge[data-type="jsonb"] { --tb-fg: var(--type-jsonb); --tb-bg: var(--type-jsonb-bg); }
+	.type-badge[data-type="array"] { --tb-fg: var(--type-array); --tb-bg: var(--type-array-bg); }
+	.type-badge[data-type="enum"] { --tb-fg: var(--type-enum); --tb-bg: var(--type-enum-bg); }
+	.type-badge[data-type="range"] { --tb-fg: var(--type-range); --tb-bg: var(--type-range-bg); }
+	.type-badge[data-type="vector"] { --tb-fg: var(--type-vector-fg); --tb-bg: var(--type-vector-bg); }
+	.type-badge[data-type="tsvector"] { --tb-fg: var(--type-tsvector); --tb-bg: var(--type-tsvector-bg); }
+	.type-badge[data-type="geometric"] { --tb-fg: var(--type-geometric); --tb-bg: var(--type-geometric-bg); }
+
+	/* NULL in result grids: never an empty cell. */
+	.null-pill {
+		display: inline-block;
+		padding: 0 0.4em;
+		border-radius: 0.35rem;
+		border: 1.5px dashed color-mix(in oklab, var(--null-fg) 60%, transparent);
+		color: var(--null-fg);
+		background: var(--null-bg);
+		font-family: var(--font-mono);
+		font-style: italic;
+		font-size: 0.8em;
+	}
+
+	/* Keycap (Kbd + mobile quick-key bar) */
+	.keycap {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		min-width: 1.75rem;
+		height: 1.75rem;
+		padding: 0 0.45rem;
+		border-radius: 0.5rem;
+		background: var(--surface-raised);
+		border: 1.5px solid var(--border);
+		box-shadow: 0 var(--ledge-sm) 0 var(--ledge);
+		font-family: var(--font-mono);
+		font-size: 0.8rem;
+		font-weight: 700;
+		color: var(--foreground);
+	}
+
+	/* ── World map node ── wrapper carries the ledge (so shapes can clip) */
+	.map-node {
+		/* inherits --w / --w-deep / --w-ink from the closest [data-world] ancestor */
+		--node-size: 4.5rem;
+		position: relative;
+		display: grid;
+		place-items: center;
+		width: calc(var(--node-size) * 1.06);
+		height: var(--node-size);
+		border-radius: 50%;
+		background-color: var(--w, var(--world-1));
+		background-image: linear-gradient(to bottom, rgb(255 255 255 / 0.3) 0 34%, transparent 34%);
+		color: var(--w-ink, var(--world-1-ink));
+		filter: drop-shadow(0 var(--ledge-lg) 0 var(--w-deep, var(--world-1-deep)));
+		transition:
+			transform var(--duration-press) var(--ease-out),
+			filter var(--duration-press) var(--ease-out);
+		margin-bottom: var(--ledge-lg);
+	}
+	.map-node:active:not([data-state="locked"]) {
+		transform: translateY(var(--ledge-lg));
+		filter: drop-shadow(0 0 0 var(--w-deep, var(--world-1-deep)));
+	}
+	.map-node[data-state="locked"] {
+		--w: var(--muted);
+		--w-deep: var(--ledge);
+		--w-ink: var(--muted-foreground);
+		background-image: none;
+		cursor: not-allowed;
+	}
+	.map-node[data-state="perfect"] {
+		--w: var(--star);
+		--w-deep: var(--star-edge);
+		--w-ink: var(--reward-foreground);
+	}
+	.map-node[data-kind="boss"] {
+		--node-size: 6rem;
+		filter: drop-shadow(0 var(--ledge-xl) 0 var(--w-deep, var(--world-1-deep)));
+		margin-bottom: var(--ledge-xl);
+	}
+	.map-node[data-kind="side"] {
+		--node-size: 3.5rem;
+	}
+	.map-node[data-state="current"]::before {
+		content: "";
+		position: absolute;
+		inset: -8px;
+		border-radius: 50%;
+		border: 3px solid var(--w);
+		animation: pulse-ring 1.8s var(--ease-out) infinite;
+		pointer-events: none;
+	}
+
+	/* World theming hook: <section data-world="3" class="world-scope"> sets --w vars. */
+	[data-world="1"] { --w: var(--world-1); --w-deep: var(--world-1-deep); --w-ink: var(--world-1-ink); --w-tint: var(--world-1-tint); --w-tint-fg: var(--world-1-tint-fg); }
+	[data-world="2"] { --w: var(--world-2); --w-deep: var(--world-2-deep); --w-ink: var(--world-2-ink); --w-tint: var(--world-2-tint); --w-tint-fg: var(--world-2-tint-fg); }
+	[data-world="3"] { --w: var(--world-3); --w-deep: var(--world-3-deep); --w-ink: var(--world-3-ink); --w-tint: var(--world-3-tint); --w-tint-fg: var(--world-3-tint-fg); }
+	[data-world="4"] { --w: var(--world-4); --w-deep: var(--world-4-deep); --w-ink: var(--world-4-ink); --w-tint: var(--world-4-tint); --w-tint-fg: var(--world-4-tint-fg); }
+	[data-world="5"] { --w: var(--world-5); --w-deep: var(--world-5-deep); --w-ink: var(--world-5-ink); --w-tint: var(--world-5-tint); --w-tint-fg: var(--world-5-tint-fg); }
+	[data-world="6"] { --w: var(--world-6); --w-deep: var(--world-6-deep); --w-ink: var(--world-6-ink); --w-tint: var(--world-6-tint); --w-tint-fg: var(--world-6-tint-fg); }
+	[data-world="7"] { --w: var(--world-7); --w-deep: var(--world-7-deep); --w-ink: var(--world-7-ink); --w-tint: var(--world-7-tint); --w-tint-fg: var(--world-7-tint-fg); }
+	[data-world="8"] { --w: var(--world-8); --w-deep: var(--world-8-deep); --w-ink: var(--world-8-ink); --w-tint: var(--world-8-tint); --w-tint-fg: var(--world-8-tint-fg); }
+	[data-world="9"] { --w: var(--world-9); --w-deep: var(--world-9-deep); --w-ink: var(--world-9-ink); --w-tint: var(--world-9-tint); --w-tint-fg: var(--world-9-tint-fg); }
+	[data-world="10"] { --w: var(--world-10); --w-deep: var(--world-10-deep); --w-ink: var(--world-10-ink); --w-tint: var(--world-10-tint); --w-tint-fg: var(--world-10-tint-fg); }
+	[data-world="11"] { --w: var(--world-11); --w-deep: var(--world-11-deep); --w-ink: var(--world-11-ink); --w-tint: var(--world-11-tint); --w-tint-fg: var(--world-11-tint-fg); }
+
+	/* World motif backgrounds (CSS only). Apply .world-motif + data-world on a banner or map section. */
+	.world-motif {
+		background-color: var(--w);
+		color: var(--w-ink);
+	}
+	.world-motif[data-world="1"] { /* Tavern: planks + candle knots */
+		background-image:
+			radial-gradient(ellipse 6px 3px at 30% 40%, rgb(0 0 0 / 0.14) 98%, transparent),
+			repeating-linear-gradient(0deg, transparent 0 26px, rgb(0 0 0 / 0.12) 26px 28px),
+			repeating-linear-gradient(90deg, transparent 0 140px, rgb(0 0 0 / 0.1) 140px 142px);
+		background-size: 90px 56px, auto, auto;
+	}
+	.world-motif[data-world="2"] { /* Counting House: coin dots */
+		background-image: radial-gradient(circle, rgb(255 255 255 / 0.28) 0 5px, rgb(0 0 0 / 0.12) 5px 7px, transparent 7.5px);
+		background-size: 30px 30px;
+	}
+	.world-motif[data-world="3"] { /* Bridges: wave scallops */
+		background-image:
+			radial-gradient(circle at 50% 100%, transparent 0 9px, rgb(255 255 255 / 0.22) 9px 11px, transparent 11.5px),
+			radial-gradient(circle at 50% 100%, transparent 0 9px, rgb(0 0 0 / 0.1) 9px 11px, transparent 11.5px);
+		background-size: 28px 14px, 28px 14px;
+		background-position: 0 0, 14px 7px;
+	}
+	.world-motif[data-world="4"] { /* Catacombs: nested arches */
+		background-image: repeating-radial-gradient(circle at 50% 120%, transparent 0 10px, rgb(0 0 0 / 0.13) 10px 12px);
+		background-size: 72px 60px;
+	}
+	.world-motif[data-world="5"] { /* Observatory: star field */
+		background-image:
+			radial-gradient(circle, #fff 0 1.2px, transparent 1.6px),
+			radial-gradient(circle, rgb(255 255 255 / 0.7) 0 0.8px, transparent 1.2px),
+			radial-gradient(circle, rgb(255 210 63 / 0.9) 0 1.6px, transparent 2px);
+		background-size: 53px 47px, 31px 29px, 97px 89px;
+		background-position: 0 0, 13px 17px, 41px 7px;
+	}
+	.world-motif[data-world="6"] { /* Forge: diagonal heat + sparks */
+		background-image:
+			radial-gradient(circle, rgb(255 230 120 / 0.8) 0 1.5px, transparent 2px),
+			repeating-linear-gradient(135deg, transparent 0 14px, rgb(0 0 0 / 0.1) 14px 16px);
+		background-size: 37px 41px, auto;
+	}
+	.world-motif[data-world="7"] { /* Tower: blueprint grid */
+		background-image:
+			linear-gradient(rgb(255 255 255 / 0.22) 1.5px, transparent 1.5px),
+			linear-gradient(90deg, rgb(255 255 255 / 0.22) 1.5px, transparent 1.5px),
+			linear-gradient(rgb(255 255 255 / 0.1) 1px, transparent 1px),
+			linear-gradient(90deg, rgb(255 255 255 / 0.1) 1px, transparent 1px);
+		background-size: 48px 48px, 48px 48px, 12px 12px, 12px 12px;
+	}
+	.world-motif[data-world="8"] { /* Alchemist: bubbles */
+		background-image:
+			radial-gradient(circle, transparent 0 7px, rgb(255 255 255 / 0.3) 7px 8.5px, transparent 9px),
+			radial-gradient(circle, transparent 0 3px, rgb(255 255 255 / 0.25) 3px 4px, transparent 4.5px);
+		background-size: 46px 52px, 23px 27px;
+		background-position: 0 0, 11px 19px;
+	}
+	.world-motif[data-world="9"] { /* Library: book spines */
+		background-image: repeating-linear-gradient(90deg,
+			rgb(0 0 0 / 0.14) 0 2px, transparent 2px 16px,
+			rgb(255 255 255 / 0.12) 16px 26px, transparent 26px 34px,
+			rgb(0 0 0 / 0.1) 34px 36px, transparent 36px 52px);
+	}
+	.world-motif[data-world="10"] { /* Clockwork: gear teeth */
+		background-image:
+			radial-gradient(circle, var(--w) 0 9px, transparent 9.5px),
+			repeating-conic-gradient(rgb(0 0 0 / 0.16) 0 15deg, transparent 15deg 30deg);
+		background-size: 44px 44px, 44px 44px;
+	}
+	.world-motif[data-world="11"] { /* Astral Spire: aurora ribbons + stars */
+		background-image:
+			radial-gradient(circle, #fff 0 1px, transparent 1.5px),
+			radial-gradient(120% 60% at 20% 110%, rgb(120 255 200 / 0.35), transparent 60%),
+			radial-gradient(90% 50% at 90% -10%, rgb(255 140 220 / 0.35), transparent 60%);
+		background-size: 41px 37px, auto, auto;
+	}
+
+
+/* ───────────────────────────── Keyframes ───────────────────────────── */
+@keyframes shake {
+	10%, 90% { transform: translateX(-1px); }
+	20%, 80% { transform: translateX(3px); }
+	30%, 50%, 70% { transform: translateX(-6px); }
+	40%, 60% { transform: translateX(6px); }
+}
+@keyframes pop-in {
+	from { opacity: 0; transform: scale(0.92); }
+	to { opacity: 1; transform: scale(1); }
+}
+@keyframes star-land {
+	0% { opacity: 0; transform: scale(1.7) rotate(-28deg); }
+	60% { opacity: 1; }
+	100% { opacity: 1; transform: scale(1) rotate(0deg); }
+}
+@keyframes rise {
+	from { opacity: 0; transform: translateY(8px); }
+	to { opacity: 1; transform: translateY(0); }
+}
+@keyframes bob {
+	0%, 100% { transform: translateY(0); }
+	50% { transform: translateY(-5px); }
+}
+@keyframes flicker {
+	0%, 100% { transform: scale(1, 1); }
+	30% { transform: scale(0.97, 1.04); }
+	60% { transform: scale(1.02, 0.98); }
+}
+@keyframes pulse-ring {
+	0% { transform: scale(0.9); opacity: 0.9; }
+	100% { transform: scale(1.45); opacity: 0; }
+}
+@keyframes shine {
+	from { transform: translateX(-130%) skewX(-20deg); }
+	to { transform: translateX(330%) skewX(-20deg); }
+}
+@keyframes bump {
+	0% { transform: scale(1); }
+	40% { transform: scale(1.18); }
+	100% { transform: scale(1); }
+}
+@keyframes march {
+	to { stroke-dashoffset: -40; }
+}
+@keyframes glow-pulse {
+	0%, 100% { opacity: 0.45; }
+	50% { opacity: 1; }
+}
+@keyframes float-up {
+	0% { opacity: 0; transform: translateY(6px) scale(0.9); }
+	20% { opacity: 1; transform: translateY(0) scale(1); }
+	100% { opacity: 0; transform: translateY(-36px) scale(1); }
+}
+
+/* Legacy app classes, restyled */
+.path-march { animation: march 1.6s linear infinite; }
+.pulse-ring { animation: pulse-ring 1.8s var(--ease-out) infinite; }
+.glow-live { position: relative; }
+.glow-live::after {
+	content: "";
+	position: absolute;
+	inset: -2px;
+	border-radius: inherit;
+	box-shadow: 0 0 0 2px var(--lantern), 0 0 16px 3px var(--lantern-glow);
+	animation: glow-pulse 1.4s ease-in-out infinite;
+	pointer-events: none;
+}
+.shake { animation: shake 420ms cubic-bezier(0.36, 0.07, 0.19, 0.97) both; }
+
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { scrollbar-width: none; }
+.safe-bottom { padding-bottom: env(safe-area-inset-bottom, 0px); }
+.safe-top { padding-top: env(safe-area-inset-top, 0px); }
+
+/* ───────────────────────────── Prose (mission and lesson cards) ───────────────────────────── */
+.md { line-height: 1.6; }
+.md p { margin: 0.45rem 0; }
+.md strong { color: var(--foreground); font-weight: 800; }
+.md code {
+	font-family: var(--font-mono);
+	font-size: 0.875em;
+	padding: 0.08rem 0.38rem;
+	border-radius: 0.4rem;
+	background: var(--accent);
+	color: var(--syn-table);
+	border: 1px solid color-mix(in oklab, var(--lantern) 35%, transparent);
+}
+.md pre {
+	font-family: var(--font-mono);
+	font-size: 0.85rem;
+	padding: 0.8rem 0.95rem;
+	border-radius: var(--radius-lg);
+	background: var(--editor);
+	border: 2px solid var(--border);
+	overflow-x: auto;
+	margin: 0.6rem 0;
+}
+.md pre code { background: none; padding: 0; border: 0; color: var(--syn-ident); }
+.md ul { list-style: disc; padding-left: 1.2rem; }
+.md ol { list-style: decimal; padding-left: 1.2rem; }
+.md table { font-size: 0.85rem; border-collapse: collapse; }
+.md th, .md td { border: 1px solid var(--border); padding: 0.2rem 0.5rem; }
+
+/* ───────────────────────────── CodeMirror: the spellbook ───────────────────────────── */
+.cm-editor { height: 100%; font-size: 15px; background: var(--editor); color: var(--syn-ident); }
+@media (pointer: coarse) { .cm-editor { font-size: 16px; } }
+.cm-editor .cm-scroller { font-family: var(--font-mono); line-height: 1.7; }
+.cm-editor.cm-focused { outline: none; }
+.cm-editor .cm-gutters { background: var(--editor-gutter); color: var(--syn-comment); border-right: 2px solid var(--border); }
+.cm-editor .cm-activeLine { background: var(--editor-line); }
+.cm-editor .cm-activeLineGutter { background: var(--editor-line); color: var(--syn-keyword); }
+.cm-editor .cm-cursor { border-left: 2.5px solid var(--lantern); }
+.cm-editor .cm-selectionBackground, .cm-editor.cm-focused .cm-selectionBackground { background: var(--editor-selection) !important; }
+.cm-editor .cm-matchingBracket { background: color-mix(in oklab, var(--lantern) 30%, transparent); outline: 1px solid var(--lantern); }
+/* Map @lezer/highlight tags to these classes via HighlightStyle.define([...{ tag, class }]) */
+.tok-keyword { color: var(--syn-keyword); font-weight: 700; }
+.tok-function { color: var(--syn-function); }
+.tok-string { color: var(--syn-string); }
+.tok-number, .tok-bool, .tok-null { color: var(--syn-number); }
+.tok-type { color: var(--syn-type); }
+.tok-operator { color: var(--syn-operator); }
+.tok-comment { color: var(--syn-comment); font-style: italic; }
+.tok-param { color: var(--syn-param); }
+.tok-punct { color: var(--syn-punct); }
+.tok-table { color: var(--syn-table); font-weight: 600; }
+
+/* ───────────────────────────── React Flow (schema explorer) ───────────────────────────── */
+.react-flow {
+	--xy-background-color: transparent;
+	--xy-edge-stroke: var(--border);
+	--xy-edge-stroke-width: 2;
+	--xy-edge-stroke-selected: var(--lantern);
+	--xy-controls-button-background-color: var(--card);
+	--xy-controls-button-color: var(--foreground);
+	--xy-controls-button-border-color: var(--border);
+	--xy-controls-button-background-color-hover: var(--accent);
+}
+.react-flow__edge.is-referenced .react-flow__edge-path {
+	stroke: var(--lantern);
+	stroke-width: 2.5;
+	stroke-dasharray: 8 6;
+	animation: march 1.6s linear infinite;
+}
+
+/* ───────────────────────────── Reduced motion ───────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+	.path-march, .pulse-ring, .glow-live::after, .shake,
+	.map-node[data-state="current"]::before,
+	.react-flow__edge.is-referenced .react-flow__edge-path {
+		animation: none !important;
+	}
+	.juicy, .map-node { transition-duration: 0ms; }
+	/* tw-animate-css (Dialog, Sheet, Popover…): keep the fade, drop scale/slide/rotate/blur */
+	* {
+		--tw-enter-scale: 1 !important;
+		--tw-exit-scale: 1 !important;
+		--tw-enter-translate-x: 0 !important;
+		--tw-enter-translate-y: 0 !important;
+		--tw-exit-translate-x: 0 !important;
+		--tw-exit-translate-y: 0 !important;
+		--tw-enter-rotate: 0 !important;
+		--tw-exit-rotate: 0 !important;
+		--tw-enter-blur: 0 !important;
+		--tw-exit-blur: 0 !important;
+	}
+	.animate-shake, .animate-bob, .animate-flicker, .animate-pulse-ring, .animate-shine, .animate-bump { animation: none !important; }
+	.animate-pop-in, .animate-star-land, .animate-rise { animation: fade-only 180ms ease-out both !important; }
+}
+@keyframes fade-only { from { opacity: 0; } to { opacity: 1; } }
+.reduce-motion .path-march,
+.reduce-motion .pulse-ring,
+.reduce-motion .glow-live::after,
+.reduce-motion .shake,
+.reduce-motion .map-node[data-state="current"]::before,
+.reduce-motion .react-flow__edge.is-referenced .react-flow__edge-path {
+	animation: none !important;
+}
+
+
+/* ═══════════ Preview page chrome ═══════════ */
+*, *::before, *::after { box-sizing: border-box; }
+html {
+	-webkit-tap-highlight-color: transparent;
+	-webkit-text-size-adjust: 100%;
+	font-family: "Atkinson Hyperlegible Next", ui-sans-serif, system-ui, sans-serif;
+	scroll-behavior: smooth;
+}
+body {
+	margin: 0;
+	background-color: var(--background);
+	background-image: var(--grain);
+	color: var(--foreground);
+	font-size: 16px;
+	line-height: 1.55;
+	-webkit-font-smoothing: antialiased;
+	overflow-x: hidden;
+}
+h1, h2, h3, h4, p { margin: 0; }
+button { font: inherit; border: 0; cursor: pointer; touch-action: manipulation; -webkit-user-select: none; user-select: none; }
+svg.i { width: 1.25em; height: 1.25em; flex: none; }
+.icon { fill: none; stroke: currentColor; stroke-width: 2.25; stroke-linecap: round; stroke-linejoin: round; }
+.solid { fill: currentColor; stroke: none; }
+.mono { font-family: "Atkinson Hyperlegible Mono", ui-monospace, monospace; }
+.display { font-family: "Lilita One", system-ui, sans-serif; font-weight: 400; letter-spacing: 0.01em; }
+.muted { color: var(--muted-foreground); }
+.wrap { width: 100%; max-width: 1240px; margin: 0 auto; padding: 0 16px; }
+@media (min-width: 768px) { .wrap { padding: 0 32px; } }
+
+/* Top bar */
+.topbar {
+	position: sticky; top: 0; z-index: 20;
+	background: color-mix(in oklab, var(--background) 88%, transparent);
+	backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+	border-bottom: 2px solid var(--border);
+	padding-top: env(safe-area-inset-top, 0px);
+}
+.topbar .wrap { display: flex; align-items: center; gap: 12px; height: 60px; }
+.brand { display: flex; align-items: center; gap: 10px; font-family: "Lilita One"; font-size: 22px; letter-spacing: .02em; }
+.brand small { font-family: "Atkinson Hyperlegible Next"; font-weight: 700; font-size: 12px; color: var(--muted-foreground); letter-spacing: .08em; text-transform: uppercase; }
+.brand small { display: none; }
+@media (min-width: 640px) { .brand small { display: inline; } }
+.topnav { display: none; gap: 4px; margin-left: auto; }
+.topnav a { color: var(--muted-foreground); text-decoration: none; font-weight: 700; font-size: 14px; padding: 6px 10px; border-radius: 10px; }
+@media (hover: hover) and (pointer: fine) { .topnav a:hover { background: var(--accent); color: var(--foreground); } }
+@media (min-width: 1100px) { .topnav { display: flex; } }
+.theme-toggle { margin-left: auto; }
+@media (min-width: 1100px) { .theme-toggle { margin-left: 8px; } }
+
+/* Section scaffolding */
+section.s { padding: 56px 0 8px; }
+.s-head { display: flex; flex-direction: column; gap: 6px; margin-bottom: 24px; }
+.s-head .overline { color: var(--primary); }
+.dark .s-head .overline { color: var(--syn-keyword); }
+:root:not(.dark) .s-head .overline { color: var(--syn-keyword); }
+.s-head h2 { font-family: "Lilita One"; font-weight: 400; font-size: clamp(28px, 4.2vw, 40px); line-height: 1.05; letter-spacing: .01em; }
+.s-head p { color: var(--muted-foreground); max-width: 62ch; }
+.grid { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr); }
+.grid > *, .level-layout > *, .map-layout > *, .type-spec > *, .fb-grid > *, .mode-pair > *, .schema-stage > *, .worlds > *, .hero-card > * { min-width: 0; }
+@media (min-width: 768px) { .g2 { grid-template-columns: 1fr 1fr; } .g3 { grid-template-columns: repeat(2, 1fr); } }
+@media (min-width: 1100px) { .g3 { grid-template-columns: repeat(3, 1fr); } }
+.card { padding: 20px; }
+.card h3 { font-size: 18px; font-weight: 800; margin-bottom: 4px; }
+.card .sub { font-size: 14px; color: var(--muted-foreground); margin-bottom: 16px; }
+
+/* ── Hero ── */
+.hero { position: relative; padding: 40px 0 8px; }
+.hero-card {
+	position: relative; overflow: hidden;
+	border-radius: 28px; border: 2px solid var(--border);
+	box-shadow: 0 6px 0 var(--ledge);
+	background:
+		radial-gradient(60% 80% at 85% 30%, color-mix(in oklab, var(--lantern) 28%, transparent), transparent 70%),
+		var(--card);
+	padding: 28px 20px 28px;
+	display: grid; gap: 24px;
+}
+@media (min-width: 900px) { .hero-card { grid-template-columns: 1.25fr .75fr; padding: 48px; align-items: center; } }
+.hero-card::before {
+	content: ""; position: absolute; inset: 0; pointer-events: none; opacity: .5;
+	background-image: radial-gradient(circle, color-mix(in oklab, var(--foreground) 22%, transparent) 0 1px, transparent 1.5px);
+	background-size: 22px 22px;
+	-webkit-mask-image: linear-gradient(100deg, transparent 30%, #000 85%); mask-image: linear-gradient(100deg, transparent 30%, #000 85%);
+}
+.hero h1 { font-family: "Lilita One"; font-weight: 400; font-size: clamp(40px, 8.5vw, 76px); line-height: .95; letter-spacing: .01em; }
+.hero h1 .glow { color: var(--syn-keyword); text-shadow: 0 0 28px var(--lantern-glow); }
+.dark .hero h1 .glow { color: var(--lantern); }
+.hero .lede { font-size: clamp(16px, 2vw, 19px); max-width: 52ch; color: var(--muted-foreground); margin-top: 14px; }
+.hero .lede b { color: var(--foreground); }
+.hero-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 22px; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
+.chip { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px; border-radius: 999px; background: var(--muted); font-size: 13px; font-weight: 700; color: var(--muted-foreground); }
+.chip b { color: var(--foreground); }
+.hero-art { position: relative; display: grid; place-items: center; min-height: 240px; }
+.hero-art .halo { position: absolute; width: 240px; height: 240px; border-radius: 50%; background: radial-gradient(circle, var(--lantern-glow), transparent 65%); }
+.hero-art .wick { width: 150px; height: 180px; position: relative; }
+.hero-art .bubble { position: absolute; top: 6px; right: 6%; }
+@media (min-width: 900px) { .hero-art .bubble { right: 2%; top: 10px; } }
+
+/* Wick mascot */
+.wick-svg { overflow: visible; }
+.wick-svg .flame { transform-origin: 50% 92%; animation: flicker 2.4s ease-in-out infinite; }
+.wick-svg .eyes { transform-origin: 50% 60%; animation: blink 5s infinite; }
+@keyframes blink { 0%, 46%, 50%, 100% { transform: scaleY(1); } 48% { transform: scaleY(.1); } }
+
+/* Speech bubble (also the map's START bubble) */
+.bubble {
+	display: inline-flex; align-items: center; gap: 6px;
+	padding: 8px 14px; border-radius: 14px;
+	background: var(--card); color: var(--foreground);
+	border: 2px solid var(--border); box-shadow: 0 3px 0 var(--ledge);
+	font-weight: 800; font-size: 14px; white-space: nowrap;
+	animation: bob 1.6s ease-in-out infinite;
+}
+.bubble::after {
+	content: ""; position: absolute; left: 50%; bottom: -9px; width: 14px; height: 14px; margin-left: -7px;
+	background: inherit; border-right: 2px solid var(--border); border-bottom: 2px solid var(--border);
+	transform: rotate(45deg); border-bottom-right-radius: 3px;
+}
+.bubble { position: relative; }
+
+/* ── Buttons ── */
+.btn {
+	display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+	height: 48px; padding: 0 22px; font-size: 17px;
+}
+.btn.sm { height: 38px; padding: 0 14px; font-size: 14px; border-radius: 12px; --j-ledge: var(--ledge-sm); }
+.btn.lgd { height: 56px; padding: 0 28px; font-size: 20px; }
+.btn.xl { height: 60px; width: 100%; font-size: 21px; }
+.btn.icon { width: 48px; padding: 0; }
+.btn.sm.icon { width: 38px; }
+.btn.talk { font-family: "Atkinson Hyperlegible Next"; font-weight: 800; text-transform: none; letter-spacing: 0; font-size: 15px; }
+.btn-ghost {
+	display: inline-flex; align-items: center; gap: 8px; height: 44px; padding: 0 14px; border-radius: 12px;
+	background: transparent; color: var(--foreground); font-weight: 800; font-size: 15px;
+	transition: background-color 150ms ease, transform 110ms var(--ease-out);
+}
+.btn-ghost:active { transform: scale(.97); }
+@media (hover: hover) and (pointer: fine) { .btn-ghost:hover { background: var(--accent); } }
+.btn-ghost.glow { color: var(--syn-keyword); }
+.btn-ghost.glow .i { filter: drop-shadow(0 0 6px var(--lantern-glow)); }
+.btn-outline {
+	display: inline-flex; align-items: center; gap: 8px; height: 44px; padding: 0 16px; border-radius: 14px;
+	background: transparent; color: var(--foreground); font-weight: 800; font-size: 15px;
+	border: 2px solid var(--border);
+	transition: background-color 150ms ease, transform 110ms var(--ease-out);
+}
+.btn-outline:active { transform: scale(.97); }
+.btn-link { background: none; color: var(--info-soft-foreground); font-weight: 800; text-decoration: underline; text-underline-offset: 4px; padding: 0; }
+.btn-row { display: flex; flex-wrap: wrap; gap: 14px 12px; align-items: flex-start; }
+.btn-spec { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.btn-spec .cap { font-size: 12px; color: var(--muted-foreground); font-weight: 700; }
+.recipe { margin-top: 16px; padding: 14px 16px; border-radius: 14px; background: var(--editor); border: 2px solid var(--border); font-size: 13px; line-height: 1.6; overflow-x: auto; }
+.recipe .k { color: var(--syn-keyword); font-weight: 700; } .recipe .v { color: var(--syn-number); } .recipe .c { color: var(--syn-comment); font-style: italic; } .recipe .p { color: var(--syn-function); }
+.press-demo .juicy { animation: demo-press 2.6s var(--ease-out) infinite; }
+@keyframes demo-press {
+	0%, 70%, 100% { transform: translateY(0); filter: drop-shadow(0 var(--j-ledge) 0 var(--j-edge)); }
+	76%, 84% { transform: translateY(var(--j-ledge)); filter: drop-shadow(0 0 0 var(--j-edge)); }
+}
+
+/* ── Palette ── */
+.swatches { display: grid; gap: 10px; grid-template-columns: repeat(2, 1fr); }
+@media (min-width: 640px) { .swatches { grid-template-columns: repeat(3, 1fr); } }
+@media (min-width: 1100px) { .swatches.wide { grid-template-columns: repeat(4, 1fr); } }
+.sw { border-radius: 16px; overflow: hidden; border: 2px solid var(--border); background: var(--card); box-shadow: 0 4px 0 var(--ledge); }
+.sw .chipc { height: 74px; display: flex; align-items: flex-end; justify-content: space-between; padding: 8px 10px; font-weight: 800; font-size: 14px; position: relative; }
+.sw .chipc .edge { position: absolute; left: 0; right: 0; bottom: 0; height: 6px; }
+.sw .meta { padding: 8px 10px 10px; font-size: 12px; line-height: 1.45; }
+.sw .meta b { font-size: 13px; display: block; }
+.sw .meta code { font-family: "Atkinson Hyperlegible Mono"; font-size: 11.5px; color: var(--muted-foreground); }
+.ratio { display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 7px; border-radius: 6px; font-size: 11px; font-weight: 800; font-family: "Atkinson Hyperlegible Mono"; background: rgb(255 255 255 / .82); color: #1d2436; }
+.ratio.fail { background: #ffe1e4; color: #9a1b2e; }
+.mode-pair { display: grid; gap: 16px; }
+@media (min-width: 900px) { .mode-pair { grid-template-columns: 1fr 1fr; } }
+.mode-panel { border-radius: 20px; padding: 16px; border: 2px solid; }
+.mode-panel h4 { font-size: 13px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; margin-bottom: 12px; }
+.surf-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.surf { border-radius: 12px; padding: 10px; min-height: 76px; font-size: 12px; font-weight: 700; display: flex; flex-direction: column; justify-content: space-between; gap: 6px; border: 2px solid rgb(127 127 127 / .2); }
+.surf code { font-family: "Atkinson Hyperlegible Mono"; font-size: 11px; opacity: .85; }
+.text-pairs { margin-top: 12px; display: grid; gap: 6px; }
+.tp { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 10px; border-radius: 10px; font-size: 13px; font-weight: 700; }
+.econ { display: grid; gap: 10px; grid-template-columns: repeat(2, 1fr); }
+@media (min-width: 640px) { .econ { grid-template-columns: repeat(5, 1fr); } }
+.econ .e { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 16px 8px 12px; border-radius: 16px; background: var(--card); border: 2px solid var(--border); box-shadow: 0 4px 0 var(--ledge); text-align: center; }
+.econ .e svg { width: 40px; height: 40px; }
+.econ .e b { font-size: 14px; }
+.econ .e code { font-family: "Atkinson Hyperlegible Mono"; font-size: 11px; color: var(--muted-foreground); }
+
+/* ── Type specimen ── */
+.type-spec { display: grid; gap: 16px; }
+@media (min-width: 1000px) { .type-spec { grid-template-columns: 1.2fr .8fr; } }
+.spec-face { padding: 22px; }
+.spec-face .name { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: 12px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--muted-foreground); margin-bottom: 10px; }
+.spec-big { font-family: "Lilita One"; font-size: clamp(44px, 7vw, 72px); line-height: .95; }
+.spec-ui { font-size: clamp(24px, 3.2vw, 32px); font-weight: 800; line-height: 1.1; }
+.spec-mono { font-family: "Atkinson Hyperlegible Mono"; font-size: clamp(18px, 2.4vw, 24px); }
+.glyphs { margin-top: 8px; font-size: 15px; color: var(--muted-foreground); word-break: break-word; }
+.scale { display: grid; gap: 10px; }
+.scale .row { display: grid; grid-template-columns: 74px 1fr; align-items: baseline; gap: 10px; border-bottom: 2px dashed var(--border); padding-bottom: 10px; }
+.scale .row:last-child { border-bottom: 0; }
+.scale .tag { font-family: "Atkinson Hyperlegible Mono"; font-size: 11px; color: var(--muted-foreground); }
+.counters { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 14px; }
+.counter { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 12px 6px; border-radius: 14px; background: var(--muted); }
+.counter .n { font-family: "Lilita One"; font-size: 30px; line-height: 1; font-variant-numeric: tabular-nums; }
+.counter .l { font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--muted-foreground); }
+
+/* ── Map ── */
+.map-layout { display: grid; gap: 24px; }
+@media (min-width: 1000px) { .map-layout { grid-template-columns: 420px 1fr; align-items: start; } }
+.map-frame { border-radius: 28px; overflow: hidden; border: 2px solid var(--border); box-shadow: 0 6px 0 var(--ledge); background: var(--card); }
+.unit-banner { position: relative; padding: 16px 18px 18px; display: flex; align-items: center; gap: 14px; border-bottom: 4px solid var(--w-deep); }
+.unit-banner .wn { font-size: 12px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; opacity: .85; }
+.unit-banner .wt { font-family: "Lilita One"; font-size: 24px; line-height: 1.05; }
+.unit-banner .guide { margin-left: auto; }
+.map-body { position: relative; height: 820px; overflow: hidden; background: var(--w-tint); }
+.map-body::before { content: ""; position: absolute; inset: 0; opacity: .5; background-image: repeating-linear-gradient(0deg, transparent 0 34px, color-mix(in oklab, var(--w) 14%, transparent) 34px 36px); }
+.map-body .layer-far { position: absolute; inset: 0; opacity: .55; }
+.map-canvas { position: absolute; left: 50%; top: 0; width: 320px; height: 820px; margin-left: -160px; }
+.map-canvas svg.trail { position: absolute; inset: 0; width: 320px; height: 820px; overflow: visible; }
+.mn { position: absolute; transform: translate(-50%, -50%); display: flex; flex-direction: column; align-items: center; }
+.mn .map-node svg { width: 34px; height: 34px; }
+.mn .map-node[data-kind="boss"] svg { width: 46px; height: 46px; }
+.mn .map-node[data-kind="side"] svg { width: 24px; height: 24px; }
+.mn .stars3 { position: absolute; bottom: -14px; display: flex; gap: 1px; }
+.mn .stars3 svg { width: 20px; height: 20px; }
+.mn .stars3 svg:nth-child(2) { transform: translateY(5px); }
+.mn .label { position: absolute; top: calc(100% + 14px); font-size: 12px; font-weight: 800; white-space: nowrap; color: var(--w-tint-fg); }
+.mn .boss-tag { position: absolute; top: -12px; padding: 2px 8px; border-radius: 8px; background: var(--destructive); color: var(--destructive-foreground); font-size: 11px; font-weight: 800; letter-spacing: .08em; z-index: 2; box-shadow: 0 2px 0 var(--destructive-edge); }
+.mn .lockbadge { position: absolute; right: -4px; bottom: 2px; width: 26px; height: 26px; border-radius: 50%; background: var(--card); color: var(--muted-foreground); display: grid; place-items: center; border: 2px solid var(--border); }
+.mn .lockbadge svg { width: 14px; height: 14px; }
+.mn.current .bubble { position: absolute; bottom: calc(100% + 18px); color: var(--w-tint-fg); }
+.mn.current .bubble .display { font-size: 15px; letter-spacing: .06em; color: var(--syn-keyword); }
+.wick-walker { position: absolute; width: 48px; height: 58px; transform: translate(-50%, -60%); }
+.legend { display: grid; gap: 12px; grid-template-columns: repeat(2, 1fr); }
+@media (min-width: 640px) { .legend { grid-template-columns: repeat(4, 1fr); } }
+@media (min-width: 1000px) { .legend { grid-template-columns: repeat(4, 1fr); } }
+.lgd { display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; padding: 18px 8px 14px; border-radius: 18px; background: var(--card); border: 2px solid var(--border); box-shadow: 0 4px 0 var(--ledge); }
+.lgd .demo { position: relative; height: 104px; display: grid; place-items: center; }
+.lgd .demo .map-node svg { width: 30px; height: 30px; }
+.lgd .demo .map-node[data-kind="boss"] svg { width: 40px; height: 40px; }
+.lgd .demo .map-node[data-kind="side"] svg { width: 22px; height: 22px; }
+.lg b { font-size: 14px; }
+.lg span { font-size: 12px; color: var(--muted-foreground); line-height: 1.35; }
+.lgd .stars3 { position: absolute; bottom: 6px; display: flex; gap: 1px; } .lgd .stars3 svg { width: 18px; height: 18px; } .lgd .stars3 svg:nth-child(2) { transform: translateY(4px); }
+.map-notes { margin-top: 16px; padding: 18px; }
+.map-notes ul { margin: 0; padding-left: 18px; display: grid; gap: 6px; font-size: 14px; }
+
+/* ── Level HUD / mission ── */
+.level-layout { display: grid; gap: 16px; }
+@media (min-width: 1000px) { .level-layout { grid-template-columns: 360px 1fr; } }
+.hud { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 18px; background: var(--card); border: 2px solid var(--border); box-shadow: 0 4px 0 var(--ledge); }
+@media (min-width: 1000px) { .hud { grid-column: 1 / -1; } }
+.seg { flex: 1; display: flex; gap: 4px; min-width: 0; }
+.seg i { flex: 1; height: 14px; border-radius: 999px; background: var(--muted); box-shadow: inset 0 2px 0 var(--ink-shadow); }
+.seg i.on { background-color: var(--success); background-image: linear-gradient(to bottom, rgb(255 255 255 / .35) 0 34%, transparent 34%); box-shadow: none; }
+.seg i.now { background-color: var(--success); opacity: .55; }
+.stat { display: inline-flex; align-items: center; gap: 4px; font-weight: 800; font-size: 15px; font-variant-numeric: tabular-nums; }
+.stat svg { width: 22px; height: 22px; }
+.stat.streak { color: var(--streak-text); } .stat.gem { color: var(--gem-text); } .stat.xp { color: var(--xp-text); }
+.hide-sm { display: none; } @media (min-width: 640px) { .hide-sm { display: inline-flex; } }
+.combo { display: inline-flex; align-items: center; gap: 4px; height: 30px; padding: 0 10px; border-radius: 999px; background: var(--warning-soft); color: var(--warning-soft-foreground); font-weight: 800; font-size: 13px; animation: bump 280ms var(--ease-pop); }
+.mission { overflow: hidden; }
+.mission .ribbon { padding: 14px 18px; display: flex; align-items: center; gap: 10px; }
+.mission .ribbon .t { font-family: "Lilita One"; font-size: 20px; line-height: 1.1; }
+.mission .ribbon .k { font-size: 11px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; opacity: .8; }
+.mission .body { padding: 16px 18px 18px; }
+.mission .body p + p { margin-top: 8px; }
+.goal { margin-top: 14px; padding: 12px 14px; border-radius: 14px; background: var(--accent); display: flex; gap: 10px; align-items: flex-start; font-size: 14px; }
+.goal svg { color: var(--syn-keyword); margin-top: 2px; }
+.spell { display: flex; flex-direction: column; overflow: hidden; }
+.spell-top { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 2px solid var(--border); background: var(--card); }
+.spell-top .tab { font-weight: 800; font-size: 13px; padding: 6px 12px; border-radius: 10px; color: var(--muted-foreground); }
+.spell-top .tab.on { background: var(--muted); color: var(--foreground); box-shadow: inset 0 -3px 0 var(--lantern); }
+.code { background: var(--editor); font-family: "Atkinson Hyperlegible Mono", monospace; font-size: 15px; line-height: 1.75; padding: 12px 0; overflow-x: auto; }
+.code .ln { display: grid; grid-template-columns: 40px 1fr; }
+.code .ln.active { background: var(--editor-line); }
+.code .ln .g { text-align: right; padding-right: 12px; color: var(--syn-comment); user-select: none; }
+.code .ln.active .g { color: var(--syn-keyword); }
+.code .cursor { display: inline-block; width: 2.5px; height: 1.2em; background: var(--lantern); vertical-align: text-bottom; animation: caret 1.1s steps(1) infinite; }
+@keyframes caret { 50% { opacity: 0; } }
+.tok-ident { color: var(--syn-ident); }
+.spell-bottom { display: flex; align-items: center; gap: 10px; padding: 12px; border-top: 2px solid var(--border); background: var(--card); flex-wrap: wrap; }
+.spell-bottom .grow { flex: 1; }
+.spell-bottom { flex-wrap: nowrap; }
+@media (max-width: 639px) { .spell-bottom .grow { display: none; } .spell-bottom .cast { flex: 1; min-width: 0 !important; } .spell-bottom .lantern-txt { display: none; } }
+.quickkeys { display: flex; gap: 8px; overflow-x: auto; padding: 10px 12px; background: var(--surface-sunken); border-top: 2px solid var(--border); scrollbar-width: none; }
+.quickkeys::-webkit-scrollbar { display: none; }
+.quickkeys .keycap { height: 40px; min-width: 44px; font-size: 14px; flex: none; }
+.quickkeys .keycap.kw { color: var(--syn-keyword); }
+.qk-label { font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--muted-foreground); padding: 8px 12px 0; background: var(--surface-sunken); }
+
+/* ── Schema chests ── */
+.schema-stage { position: relative; display: grid; gap: 18px; }
+@media (min-width: 900px) { .schema-stage { grid-template-columns: repeat(3, 1fr); align-items: start; } }
+.chest { overflow: visible; }
+.chest .lid {
+	position: relative; display: flex; align-items: center; gap: 10px; padding: 12px 14px;
+	background: var(--w-tint); color: var(--w-tint-fg);
+	border-bottom: 2px solid color-mix(in oklab, var(--w) 45%, transparent);
+	border-radius: 18px 18px 0 0;
+}
+.chest .lid .ico { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; background: var(--w); color: var(--w-ink); box-shadow: 0 3px 0 var(--w-deep); }
+.chest .lid .ico svg { width: 20px; height: 20px; }
+.chest .lid .nm { font-family: "Atkinson Hyperlegible Mono"; font-weight: 700; font-size: 16px; }
+.chest .lid .rows { margin-left: auto; font-size: 12px; font-weight: 800; opacity: .85; }
+.chest .lid::before, .chest .lid::after { content: ""; position: absolute; bottom: -5px; width: 8px; height: 8px; border-radius: 50%; background: var(--w); box-shadow: 0 0 0 2px var(--card); }
+.chest .lid::before { left: 14px; } .chest .lid::after { right: 14px; }
+.cols { list-style: none; margin: 0; padding: 6px 0 8px; }
+.cols li { display: flex; align-items: center; gap: 8px; padding: 6px 14px; font-family: "Atkinson Hyperlegible Mono"; font-size: 14px; }
+.cols li .cn { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cols li .kk { width: 18px; height: 18px; display: grid; place-items: center; flex: none; }
+.cols li .kk svg { width: 16px; height: 16px; }
+.cols li .kk.pk { color: var(--reward-edge); } .dark .cols li .kk.pk { color: var(--star); }
+.cols li .kk.fk { color: var(--info-soft-foreground); }
+.cols li .q { color: var(--muted-foreground); font-size: 12px; }
+.cols li.hot { background: color-mix(in oklab, var(--lantern) 16%, transparent); box-shadow: inset 3px 0 0 var(--lantern); }
+.chest.glow-lantern[data-lit="true"] { border-color: var(--lantern); }
+.lit-tag { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; padding: 2px 8px; border-radius: 999px; background: var(--lantern); color: var(--primary-foreground); }
+.edge-svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; display: none; overflow: visible; }
+@media (min-width: 900px) { .edge-svg { display: block; } }
+.preview-pop { margin: 4px 14px 12px; padding: 10px 12px; border-radius: 12px; background: var(--editor); border: 2px solid var(--border); font-family: "Atkinson Hyperlegible Mono"; font-size: 12.5px; line-height: 1.6; }
+.vbars { display: flex; align-items: flex-end; gap: 2px; height: 34px; margin: 4px 14px 12px; padding: 6px 8px; border-radius: 10px; background: var(--type-vector-bg); }
+.vbars i { flex: 1; background: var(--type-vector-fg); border-radius: 2px 2px 0 0; min-height: 2px; }
+.lexemes { display: flex; flex-wrap: wrap; gap: 4px; margin: 0 14px 12px; }
+.lexemes span { font-family: "Atkinson Hyperlegible Mono"; font-size: 11.5px; padding: 1px 6px; border-radius: 6px; background: var(--type-tsvector-bg); color: var(--type-tsvector); }
+.badge-wall { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
+.type-badge .gl { opacity: .85; }
+
+/* Result grid (loot ledger) */
+.ledger { margin-top: 18px; overflow: hidden; }
+.ledger-head { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 2px solid var(--border); flex-wrap: wrap; }
+.ledger-head .t { font-weight: 800; }
+.ledger-scroll { overflow-x: auto; }
+table.loot { width: 100%; border-collapse: collapse; font-family: "Atkinson Hyperlegible Mono"; font-size: 14px; min-width: 520px; }
+table.loot th { text-align: left; font-family: "Atkinson Hyperlegible Next"; font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--muted-foreground); background: var(--muted); padding: 8px 14px; }
+table.loot td { white-space: nowrap; padding: 8px 14px; border-top: 1.5px solid var(--border); }
+table.loot td.num { text-align: right; font-variant-numeric: tabular-nums; }
+table.loot tbody tr { animation: rise 260ms var(--ease-out) both; }
+table.loot tbody tr:nth-child(2) { animation-delay: 40ms; } table.loot tbody tr:nth-child(3) { animation-delay: 80ms; } table.loot tbody tr:nth-child(4) { animation-delay: 120ms; } table.loot tbody tr:nth-child(5) { animation-delay: 160ms; }
+table.loot tr.diff-miss td { background: var(--destructive-soft); color: var(--destructive-soft-foreground); }
+table.loot tr.diff-ok td:first-child { box-shadow: inset 3px 0 0 var(--success); }
+
+/* ── Feedback ── */
+.fb-grid { display: grid; gap: 16px; }
+@media (min-width: 900px) { .fb-grid { grid-template-columns: 1fr 1fr; } }
+.sheet { border-radius: 24px 24px 18px 18px; padding: 18px; display: flex; flex-direction: column; gap: 14px; border: 2px solid transparent; }
+.sheet.ok { background: var(--success-soft); color: var(--success-soft-foreground); border-color: color-mix(in oklab, var(--success) 40%, transparent); }
+.sheet.bad { background: var(--destructive-soft); color: var(--destructive-soft-foreground); border-color: color-mix(in oklab, var(--destructive) 40%, transparent); }
+.sheet .top { display: flex; gap: 12px; align-items: center; }
+.medal { width: 52px; height: 52px; border-radius: 50%; display: grid; place-items: center; flex: none; }
+.medal svg { width: 28px; height: 28px; }
+.sheet.ok .medal { background: var(--success); color: var(--success-foreground); box-shadow: 0 4px 0 var(--success-edge); animation: pop-in 260ms var(--ease-pop) both; }
+.sheet.bad .medal { background: var(--destructive); color: var(--destructive-foreground); box-shadow: 0 4px 0 var(--destructive-edge); }
+.sheet .ttl { font-family: "Lilita One"; font-size: 26px; line-height: 1; }
+.sheet .msg { font-size: 14px; font-weight: 700; margin-top: 4px; }
+.rune { display: inline-flex; align-items: center; gap: 4px; font-family: "Atkinson Hyperlegible Mono"; font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 8px; background: color-mix(in oklab, currentColor 12%, transparent); }
+.sheet .acts { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.sheet .acts .juicy { flex: 1; min-width: 160px; }
+.spark { position: absolute; width: 8px; height: 8px; border-radius: 2px; }
+.toasts { display: grid; gap: 12px; }
+.toast {
+	display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 18px;
+	background: var(--popover); color: var(--popover-foreground);
+	border: 2px solid var(--border); box-shadow: 0 4px 0 var(--ledge), 0 12px 24px -12px var(--ink-shadow);
+	position: relative; overflow: hidden;
+	animation: rise 320ms var(--ease-out) both;
+}
+.toast:nth-child(2) { animation-delay: 60ms; } .toast:nth-child(3) { animation-delay: 120ms; } .toast:nth-child(4) { animation-delay: 180ms; }
+.toast .tm { width: 42px; height: 42px; border-radius: 14px; display: grid; place-items: center; flex: none; }
+.toast .tm svg { width: 22px; height: 22px; }
+.toast b { display: block; font-size: 15px; }
+.toast span { font-size: 13px; color: var(--muted-foreground); }
+.toast .x { margin-left: auto; color: var(--muted-foreground); }
+.toast.achv .tm { background: var(--star); color: var(--reward-foreground); box-shadow: 0 3px 0 var(--star-edge); animation: flip-in 520ms var(--ease-out) both; }
+.toast.achv::after { content: ""; position: absolute; top: 0; bottom: 0; width: 40%; background: linear-gradient(90deg, transparent, rgb(255 255 255 / .22), transparent); animation: shine 1.4s var(--ease-in-out) 400ms both; }
+@keyframes flip-in { from { transform: perspective(300px) rotateY(90deg); opacity: 0; } to { transform: perspective(300px) rotateY(0); opacity: 1; } }
+.toast.streak .tm { background: var(--warning-soft); color: var(--streak); }
+.toast.hint .tm { background: var(--info-soft); color: var(--info-soft-foreground); }
+.toast.err .tm { background: var(--destructive-soft); color: var(--destructive-soft-foreground); }
+.floater { display: inline-flex; align-items: center; gap: 4px; font-weight: 800; color: var(--xp-text); animation: float-up 1.6s var(--ease-out) infinite; }
+
+/* ── Level complete ── */
+.stage {
+	position: relative; border-radius: 28px; overflow: hidden; padding: 132px 16px 40px;
+	background: radial-gradient(55% 45% at 50% 22%, color-mix(in oklab, var(--lantern) 40%, transparent), transparent 70%), #0a0f1c;
+	border: 2px solid var(--border);
+	display: grid; place-items: center;
+}
+.stage::before { content: ""; position: absolute; inset: 0; background-image: radial-gradient(circle, rgb(255 255 255 / .55) 0 1px, transparent 1.5px), radial-gradient(circle, rgb(255 210 63 / .6) 0 1.4px, transparent 2px); background-size: 61px 53px, 113px 97px; background-position: 0 0, 30px 20px; opacity: .6; }
+.lc {
+	position: relative; width: 100%; max-width: 440px; border-radius: 28px;
+	background: var(--card); color: var(--card-foreground); border: 2px solid var(--border);
+	box-shadow: 0 8px 0 var(--ledge), 0 30px 60px -20px rgb(0 0 0 / .6);
+	padding: 64px 22px 22px; text-align: center;
+	animation: pop-in 260ms var(--ease-out) both;
+}
+.lc .ribbon {
+	position: absolute; left: 50%; top: -22px; transform: translateX(-50%);
+	width: min(92%, 360px); height: 52px; display: grid; place-items: center;
+	color: var(--w-ink); font-family: "Lilita One"; font-size: 24px; letter-spacing: .03em; text-transform: uppercase;
+	filter: drop-shadow(0 4px 0 var(--w-deep));
+}
+.lc .ribbon::before { content: ""; position: absolute; inset: 0; background: var(--w); clip-path: polygon(0 0, 100% 0, 94% 50%, 100% 100%, 0 100%, 6% 50%); z-index: -1; }
+.lc .ribbon span { position: relative; }
+.big-stars { position: absolute; left: 50%; top: -96px; transform: translateX(-50%); display: flex; align-items: flex-end; gap: 4px; }
+.big-stars svg { width: 72px; height: 72px; }
+.big-stars .s2 { width: 92px; height: 92px; margin-bottom: 18px; }
+.big-stars .lit { animation: star-land 520ms var(--ease-pop) both; }
+.big-stars .lit:nth-child(1) { animation-delay: 300ms; } .big-stars .lit:nth-child(2) { animation-delay: 520ms; } .big-stars .lit:nth-child(3) { animation-delay: 740ms; }
+.lc h3 { font-family: "Lilita One"; font-size: 34px; line-height: 1; font-weight: 400; margin-top: 8px; }
+.lc .sub { color: var(--muted-foreground); font-size: 15px; margin-top: 6px; }
+.lc-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 20px 0; }
+.lc-stat { border-radius: 16px; border: 2px solid; padding: 0 0 8px; overflow: hidden; }
+.lc-stat .h { font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; padding: 4px 0; }
+.lc-stat .v { display: flex; align-items: center; justify-content: center; gap: 4px; font-family: "Lilita One"; font-size: 24px; padding-top: 6px; font-variant-numeric: tabular-nums; }
+.lc-stat .v svg { width: 20px; height: 20px; }
+.lc-stat.xp { border-color: var(--xp); } .lc-stat.xp .h { background: var(--xp); color: var(--info-foreground); } .lc-stat.xp .v { color: var(--xp-text); }
+.lc-stat.acc { border-color: var(--success); } .lc-stat.acc .h { background: var(--success); color: var(--success-foreground); } .lc-stat.acc .v { color: var(--success-soft-foreground); }
+.lc-stat.time { border-color: var(--warning); } .lc-stat.time .h { background: var(--warning); color: var(--warning-foreground); } .lc-stat.time .v { color: var(--streak-text); }
+.lc .acts { display: flex; flex-direction: column; gap: 6px; }
+.lc .wick-cheer { position: absolute; right: -6px; bottom: 90px; width: 56px; height: 68px; animation: bob 1.2s ease-in-out infinite; }
+@media (max-width: 420px) { .lc .wick-cheer { display: none; } }
+
+/* ── World banners ── */
+.worlds { display: grid; gap: 16px; }
+@media (min-width: 700px) { .worlds { grid-template-columns: repeat(2, 1fr); } }
+@media (min-width: 1100px) { .worlds { grid-template-columns: repeat(3, 1fr); } }
+.wb { position: relative; border-radius: 22px; overflow: hidden; filter: drop-shadow(0 6px 0 var(--w-deep)); margin-bottom: 6px; }
+.wb .art { position: relative; height: 120px; }
+.wb .art .glyph { position: absolute; right: 16px; bottom: -10px; width: 96px; height: 96px; opacity: .9; color: var(--w-ink); }
+.wb .art .glyph svg { width: 100%; height: 100%; stroke-width: 1.8; }
+.wb .art .num { position: absolute; left: 16px; top: 14px; display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 10px; border-radius: 999px; background: color-mix(in oklab, var(--w-ink) 16%, transparent); font-size: 12px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
+.wb .art h3 { position: absolute; left: 16px; bottom: 14px; right: 110px; font-family: "Lilita One"; font-weight: 400; font-size: 26px; line-height: 1; }
+.wb .info { background: var(--card); padding: 12px 16px 14px; display: flex; flex-direction: column; gap: 8px; }
+.wb .info p { font-size: 13px; color: var(--muted-foreground); }
+.wb .info .row { display: flex; align-items: center; gap: 8px; }
+.wb .bar { flex: 1; height: 12px; border-radius: 999px; background: var(--muted); overflow: hidden; }
+.wb .bar i { display: block; height: 100%; border-radius: 999px; background-color: var(--w); background-image: linear-gradient(to bottom, rgb(255 255 255 / .3) 0 34%, transparent 34%); transform-origin: left; }
+.wb .info .k { font-size: 12px; font-weight: 800; color: var(--w-tint-fg); font-variant-numeric: tabular-nums; }
+.wb .ds { display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; font-weight: 800; padding: 2px 8px; border-radius: 8px; background: var(--w-tint); color: var(--w-tint-fg); align-self: flex-start; }
+
+/* ── Syntax palette strip ── */
+.syn-grid { display: grid; gap: 8px; grid-template-columns: repeat(2, 1fr); }
+@media (min-width: 700px) { .syn-grid { grid-template-columns: repeat(4, 1fr); } }
+.syn { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 12px; background: var(--editor); border: 2px solid var(--border); font-family: "Atkinson Hyperlegible Mono"; font-size: 13px; }
+.syn i { width: 12px; height: 12px; border-radius: 4px; flex: none; }
+
+footer.end { padding: 56px 0 calc(40px + env(safe-area-inset-bottom, 0px)); color: var(--muted-foreground); font-size: 13px; text-align: center; }
+
+@media (prefers-reduced-motion: reduce) {
+	.bubble, .wick-svg .flame, .wick-svg .eyes, .press-demo .juicy, .lc .wick-cheer, .floater, .code .cursor { animation: none !important; }
+	.big-stars .lit { animation: fade-only 200ms ease-out both !important; }
+	.big-stars .lit:nth-child(2) { animation-delay: 100ms !important; } .big-stars .lit:nth-child(3) { animation-delay: 200ms !important; }
+	.lc, .toast, table.loot tbody tr, .sheet.ok .medal, .combo { animation: fade-only 180ms ease-out both !important; }
+	.toast.achv::after { display: none; }
+	html { scroll-behavior: auto; }
+}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+	<defs>
+		<symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2.5"/><path d="M8 11V7.5a4 4 0 0 1 8 0V11"/></symbol>
+		<symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></symbol>
+		<symbol id="i-x" viewBox="0 0 24 24"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></symbol>
+		<symbol id="i-star" viewBox="0 0 24 24"><path d="M12 2.6l2.9 5.9 6.5.9-4.7 4.6 1.1 6.5L12 17.4l-5.8 3.1 1.1-6.5L2.6 9.4l6.5-.9z"/></symbol>
+		<symbol id="i-crown" viewBox="0 0 24 24"><path d="M3 8l4.5 4L12 5l4.5 7L21 8l-2 11H5z"/></symbol>
+		<symbol id="i-skull" viewBox="0 0 24 24"><path d="M12 3a8 8 0 0 0-8 8c0 2.9 1.4 4.6 3 5.6V20a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1v-3.4c1.6-1 3-2.7 3-5.6a8 8 0 0 0-8-8z"/><circle cx="9" cy="11.5" r="1.6"/><circle cx="15" cy="11.5" r="1.6"/><path d="M10.5 21v-2.5M13.5 21v-2.5"/></symbol>
+		<symbol id="i-play" viewBox="0 0 24 24"><path d="M8 5.5v13a1 1 0 0 0 1.5.9l10-6.5a1 1 0 0 0 0-1.7l-10-6.5A1 1 0 0 0 8 5.5z"/></symbol>
+		<symbol id="i-zap" viewBox="0 0 24 24"><path d="M13.5 2L4 13.5h7l-1 8.5L20 10h-7z"/></symbol>
+		<symbol id="i-flame" viewBox="0 0 24 24"><path d="M12 2c.8 3.2 5.5 5.6 5.5 11a5.5 5.5 0 0 1-11 0c0-2.4 1.1-4.2 2.4-5.3-.1 2.2.9 3.5 2.3 3.6C11 8 10 5.6 12 2z"/></symbol>
+		<symbol id="i-gem" viewBox="0 0 24 24"><path d="M6.5 3h11l4 6-9.5 12L2.5 9z"/></symbol>
+		<symbol id="i-gem-lines" viewBox="0 0 24 24"><path d="M2.5 9h19M12 21L8.5 9l2-6M12 21l3.5-12-2-6"/></symbol>
+		<symbol id="i-heart" viewBox="0 0 24 24"><path d="M12 20.5s-8.5-5-8.5-11A4.8 4.8 0 0 1 12 6.6a4.8 4.8 0 0 1 8.5 2.9c0 6-8.5 11-8.5 11z"/></symbol>
+		<symbol id="i-key" viewBox="0 0 24 24"><circle cx="8" cy="15" r="4.5"/><path d="M11.2 11.8L20 3M16.5 6.5l3 3M14 9l2.5 2.5"/></symbol>
+		<symbol id="i-link" viewBox="0 0 24 24"><path d="M10 14a4.5 4.5 0 0 0 6.4 0l3-3a4.5 4.5 0 0 0-6.4-6.4l-1 1M14 10a4.5 4.5 0 0 0-6.4 0l-3 3a4.5 4.5 0 0 0 6.4 6.4l1-1"/></symbol>
+		<symbol id="i-bulb" viewBox="0 0 24 24"><path d="M9 18h6M10 21.5h4M12 2.5a6.5 6.5 0 0 0-4 11.6c.7.6 1 1.3 1 2.4h6c0-1.1.3-1.8 1-2.4a6.5 6.5 0 0 0-4-11.6z"/></symbol>
+		<symbol id="i-chest" viewBox="0 0 24 24"><path d="M3 10a5 5 0 0 1 5-5h8a5 5 0 0 1 5 5v9a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 19z"/><path d="M3 12h18"/><rect x="10" y="10" width="4" height="5" rx="1.2"/></symbol>
+		<symbol id="i-wand" viewBox="0 0 24 24"><path d="M4 20l10-10M15 3v2.5M15 12.5V15M8.5 8.5h2.5M19 8.5h2.5M18.2 5.3l1.6-1.6M18.2 11.7l1.6 1.6M11.8 5.3l-1.6-1.6"/></symbol>
+		<symbol id="i-table" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M3 10h18M9.5 10v10"/></symbol>
+		<symbol id="i-scroll" viewBox="0 0 24 24"><path d="M8 21h10a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v12"/><path d="M5 17a2 2 0 1 0 0 4h3v-4zM9 8h7M9 12h7"/></symbol>
+		<symbol id="i-dumbbell" viewBox="0 0 24 24"><path d="M6.5 6v12M17.5 6v12M3.5 9v6M20.5 9v6M6.5 12h11"/></symbol>
+		<symbol id="i-moon" viewBox="0 0 24 24"><path d="M20.5 13.5A8.5 8.5 0 1 1 10.5 3.5a6.5 6.5 0 0 0 10 10z"/></symbol>
+		<symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4.5"/><path d="M12 2v2M12 20v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M2 12h2M20 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4"/></symbol>
+		<symbol id="i-rewind" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></symbol>
+		<symbol id="i-sparkle" viewBox="0 0 24 24"><path d="M12 2.5l2 6.5 6.5 2-6.5 2-2 6.5-2-6.5-6.5-2 6.5-2z"/></symbol>
+		<symbol id="i-trophy" viewBox="0 0 24 24"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M7 6H4.5a2.5 2.5 0 0 0 2.5 4M17 6h2.5A2.5 2.5 0 0 1 17 10"/></symbol>
+		<symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+		<symbol id="i-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.5"/></symbol>
+		<!-- world glyphs -->
+		<symbol id="w-mug" viewBox="0 0 24 24"><path d="M5 9h10v9a3 3 0 0 1-3 3H8a3 3 0 0 1-3-3z"/><path d="M15 11h2a3 3 0 0 1 0 6h-2M7.5 5c0 1 1 1.3 1 2.5M11 3.5c0 1 1 1.3 1 2.5"/></symbol>
+		<symbol id="w-coin" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7v10M14.5 9.5h-3.5a1.75 1.75 0 0 0 0 3.5h2a1.75 1.75 0 0 1 0 3.5H9.5"/></symbol>
+		<symbol id="w-bridge" viewBox="0 0 24 24"><path d="M1.5 9h21M3 9v3M21 9v3M4 21v-4a8 6.5 0 0 1 16 0v4M8 9v3.6M12 9v2.4M16 9v3.6M2 21h20"/></symbol>
+		<symbol id="w-arch" viewBox="0 0 24 24"><path d="M4 21V11a8 8 0 0 1 16 0v10"/><path d="M8 21v-9a4 4 0 0 1 8 0v9M2.5 21h19"/></symbol>
+		<symbol id="w-scope" viewBox="0 0 24 24"><path d="M3.5 14.5l12-6 2 4-12 6zM17.5 6.5l2-1 2 4-2 1M10 16l-3 5.5M11.5 15.5l3 5.5"/></symbol>
+		<symbol id="w-anvil" viewBox="0 0 24 24"><path d="M3 7h13a5 5 0 0 1-5 5H10v3h3l2 5H5l2-5h2v-3C5.5 12 3 10 3 7zM16 7h5"/></symbol>
+		<symbol id="w-tower" viewBox="0 0 24 24"><path d="M7 21V9h10v12M5.5 9h13M7 9V4.5h2v2h2v-2h2v2h2v-2h2V9M10 21v-4a2 2 0 0 1 4 0v4M4 21h16"/></symbol>
+		<symbol id="w-flask" viewBox="0 0 24 24"><path d="M9 3h6M10 3v6L4.6 18.5A1.7 1.7 0 0 0 6 21h12a1.7 1.7 0 0 0 1.4-2.5L14 9V3M7 15h10"/></symbol>
+		<symbol id="w-book" viewBox="0 0 24 24"><path d="M12 6.5C10 4.8 7 4.5 3 5v14c4-.5 7-.2 9 1.5 2-1.7 5-2 9-1.5V5c-4-.5-7-.2-9 1.5zM12 6.5v14"/></symbol>
+		<symbol id="w-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="7" stroke-dasharray="3.1 2.4" stroke-width="4"/><circle cx="12" cy="12" r="3"/></symbol>
+		<symbol id="w-spire" viewBox="0 0 24 24"><path d="M12 2l3 7.5V21H9V9.5zM9 14h6M5 21h14M19 4l.7 1.6 1.6.7-1.6.7L19 8.6l-.7-1.6-1.6-.7 1.6-.7z"/></symbol>
+	</defs>
+</svg>
+
+<!-- Wick (mascot) as a reusable symbol -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+	<defs>
+		<symbol id="wick" viewBox="0 0 100 120">
+			<ellipse cx="50" cy="114" rx="24" ry="5" fill="rgb(0 0 0 / .18)"/>
+			<g class="flame">
+				<path d="M50 6 C60 26 84 42 84 72 A34 34 0 0 1 16 72 C16 52 30 44 36 30 C40 40 44 42 47 42 C44 30 44 18 50 6 Z" fill="#FFB020" stroke="#CC8000" stroke-width="3" stroke-linejoin="round"/>
+				<path d="M50 40 C56 52 70 60 70 78 A20 20 0 0 1 30 78 C30 64 42 56 50 40 Z" fill="#FFD23F"/>
+				<path d="M38 60 C36 66 36 70 37 74" stroke="#FFF3C4" stroke-width="4" stroke-linecap="round" fill="none"/>
+				<g class="eyes"><ellipse cx="41" cy="78" rx="4.6" ry="6.2" fill="#3B2600"/><ellipse cx="59" cy="78" rx="4.6" ry="6.2" fill="#3B2600"/><circle cx="42.6" cy="75.6" r="1.7" fill="#fff"/><circle cx="60.6" cy="75.6" r="1.7" fill="#fff"/></g>
+				<ellipse cx="33" cy="87" rx="5" ry="3" fill="#FF7A59" opacity=".55"/><ellipse cx="67" cy="87" rx="5" ry="3" fill="#FF7A59" opacity=".55"/>
+				<path d="M45 89 Q50 94 55 89" stroke="#3B2600" stroke-width="3" stroke-linecap="round" fill="none"/>
+			</g>
+		</symbol>
+	</defs>
+</svg>
+
+<header class="topbar">
+	<div class="wrap">
+		<div class="brand">
+			<svg class="wick-svg" width="30" height="36" viewBox="0 0 100 120"><use href="#wick"/></svg>
+			<div>SQL Quest <small>Lantern Atlas · style tile</small></div>
+		</div>
+		<nav class="topnav" aria-label="Sections">
+			<a href="#palette">Palette</a><a href="#type">Type</a><a href="#buttons">Buttons</a><a href="#map">Map</a><a href="#level">Level</a><a href="#schema">Schema</a><a href="#feedback">Feedback</a><a href="#complete">Complete</a><a href="#worlds">Worlds</a>
+		</nav>
+		<button class="btn sm icon juicy juicy-paper theme-toggle" id="themeBtn" aria-label="Toggle light and dark">
+			<svg class="i icon dark-only"><use href="#i-sun"/></svg>
+		</button>
+	</div>
+</header>
+
+<main>
+<!-- ═════════ HERO ═════════ -->
+<section class="hero">
+	<div class="wrap">
+		<div class="hero-card">
+			<div style="position:relative">
+				<div class="overline" style="color:var(--syn-keyword)">Art direction</div>
+				<h1 style="margin-top:8px">Light the map,<br/>one <span class="glow">query</span> at a time.</h1>
+				<p class="lede"><b>Lantern Atlas</b>: a hand-inked adventure atlas where every query is a spell cast by lantern light. Candy-bright pieces with ink lettering, chunky toy ledges that sink when pressed, and a warm amber glow that marks whatever your SQL touches. Parchment by day, a deep ink-blue night by default.</p>
+				<div class="hero-actions">
+					<button class="btn lg juicy juicy-primary juicy-label"><svg class="i solid"><use href="#i-wand"/></svg>Cast query</button>
+					<button class="btn lg juicy juicy-paper juicy-label">Open the map</button>
+				</div>
+				<div class="chips">
+					<span class="chip"><svg class="i solid" style="color:var(--streak)"><use href="#i-flame"/></svg><b>12</b> day hearth</span>
+					<span class="chip"><svg class="i solid" style="color:var(--xp)"><use href="#i-zap"/></svg><b>1,240</b> aether</span>
+					<span class="chip"><svg class="i solid" style="color:var(--gem)"><use href="#i-gem"/></svg><b>86</b> shards</span>
+				</div>
+			</div>
+			<div class="hero-art">
+				<div class="halo"></div>
+				<svg class="wick wick-svg" viewBox="0 0 100 120" role="img" aria-label="Wick, the lantern flame mascot"><use href="#wick"/></svg>
+				<div class="bubble">SELECT * FROM adventure;</div>
+			</div>
+		</div>
+	</div>
+</section>
+
+<!-- ═════════ PALETTE ═════════ -->
+<section class="s" id="palette">
+	<div class="wrap">
+		<div class="s-head">
+			<div class="overline">01 · Color</div>
+			<h2>Candy fills, ink lettering</h2>
+			<p>Every bright fill carries dark text of its own hue, never white, so the juicy look stays AA. Ratios below are computed live (WCAG 2.x).</p>
+		</div>
+		<div class="swatches wide" id="juicySwatches"></div>
+
+		<div class="mode-pair" style="margin-top:20px">
+			<div class="mode-panel" style="background:#FBF5E9;color:#1D2436;border-color:#E2D6BD">
+				<h4>Day Atlas · light surfaces</h4>
+				<div class="surf-row">
+					<div class="surf" style="background:#FBF5E9">background<code>#FBF5E9</code></div>
+					<div class="surf" style="background:#FFFDF8">card<code>#FFFDF8</code></div>
+					<div class="surf" style="background:#F3EBDA">muted<code>#F3EBDA</code></div>
+				</div>
+				<div class="text-pairs" data-pairs='[["#1D2436","#FBF5E9","foreground / background"],["#5F6577","#FBF5E9","muted-fg / background"],["#5F6577","#F3EBDA","muted-fg / muted"],["#A08E6E","#FFFDF8","input border / card (3:1 UI)"]]'></div>
+			</div>
+			<div class="mode-panel" style="background:#0E1424;color:#F4ECDC;border-color:#2C3A5E">
+				<h4>Night Atlas · dark surfaces (default)</h4>
+				<div class="surf-row">
+					<div class="surf" style="background:#0E1424">background<code>#0E1424</code></div>
+					<div class="surf" style="background:#172036">card<code>#172036</code></div>
+					<div class="surf" style="background:#1F2A45">raised<code>#1F2A45</code></div>
+				</div>
+				<div class="text-pairs" data-pairs='[["#F4ECDC","#0E1424","foreground / background"],["#A6AEC4","#0E1424","muted-fg / background"],["#A6AEC4","#172036","muted-fg / card"],["#5E6F99","#172036","input border / card (3:1 UI)"]]'></div>
+			</div>
+		</div>
+
+		<h3 style="font-weight:800;font-size:18px;margin:28px 0 12px">Game economy</h3>
+		<div class="econ">
+			<div class="e"><svg viewBox="0 0 24 24"><use href="#i-star" style="fill:var(--star);stroke:var(--star-edge);stroke-width:1.6;stroke-linejoin:round"/></svg><b>Star</b><code>#FFD23F / #E8A200</code></div>
+			<div class="e"><svg viewBox="0 0 24 24"><use href="#i-zap" style="fill:var(--xp);stroke:var(--xp-edge);stroke-width:1.6;stroke-linejoin:round"/></svg><b>Aether (XP)</b><code>#3AA8FF / #1F7FD0</code></div>
+			<div class="e"><svg viewBox="0 0 24 24"><use href="#i-flame" style="fill:var(--streak);stroke:var(--streak-edge);stroke-width:1.6;stroke-linejoin:round"/></svg><b>Hearth (streak)</b><code>#FF8A2B / #D0631A</code></div>
+			<div class="e"><svg viewBox="0 0 24 24"><use href="#i-gem" style="fill:var(--gem);stroke:var(--gem-edge);stroke-width:1.6;stroke-linejoin:round"/><use href="#i-gem-lines" style="fill:none;stroke:rgb(255 255 255 / .6);stroke-width:1.2"/></svg><b>Shards (gems)</b><code>#FF5FB0 / #CF3A86</code></div>
+			<div class="e"><svg viewBox="0 0 24 24"><use href="#i-heart" style="fill:var(--heart);stroke:var(--destructive-edge);stroke-width:1.6;stroke-linejoin:round"/></svg><b>Heart (boss only)</b><code>#FF5A6A / #D2334A</code></div>
+		</div>
+
+		<h3 style="font-weight:800;font-size:18px;margin:28px 0 12px">Spell runes (syntax) · on the spellbook</h3>
+		<div class="syn-grid" id="synGrid"></div>
+	</div>
+</section>
+
+<!-- ═════════ TYPE ═════════ -->
+<section class="s" id="type">
+	<div class="wrap">
+		<div class="s-head">
+			<div class="overline">02 · Typography</div>
+			<h2>Game moments shout, UI talks</h2>
+			<p>Lilita One for titles, juicy button labels and big numbers. Atkinson Hyperlegible Next for every word you read. Atkinson Hyperlegible Mono for SQL, built to tell 0/O, 1/l/I and quotes apart.</p>
+		</div>
+		<div class="type-spec">
+			<div class="grid">
+				<div class="panel spec-face">
+					<div class="name"><span>Display · Lilita One 400</span><span>game moments</span></div>
+					<div class="spec-big">Level Complete!</div>
+					<div class="display" style="font-size:28px;margin-top:6px;color:var(--world-3-tint-fg)">The Bridges</div>
+					<div class="glyphs display" style="font-size:20px">ABCDEFGHIJKLM 0123456789 ★ +15 XP</div>
+				</div>
+				<div class="panel spec-face">
+					<div class="name"><span>UI · Atkinson Hyperlegible Next 400 to 800</span><span>everything else</span></div>
+					<div class="spec-ui">Find every pilot without a faction.</div>
+					<p class="muted" style="margin-top:8px">NULL is not a value, it is the absence of one. That is why <b style="color:var(--foreground)">= NULL</b> never matches and <b style="color:var(--foreground)">IS NULL</b> does.</p>
+				</div>
+				<div class="panel spec-face">
+					<div class="name"><span>Code · Atkinson Hyperlegible Mono 400 to 700</span><span>spellbook</span></div>
+					<div class="spec-mono"><span class="tok-keyword">WHERE</span> <span class="tok-ident">callsign</span> <span class="tok-operator">=</span> <span class="tok-string">'O1l'</span></div>
+					<div class="glyphs mono">0O 1lI| '' "" `` {} [] () ;: -> ::jsonb</div>
+				</div>
+			</div>
+			<div class="panel spec-face">
+				<div class="name"><span>Scale</span><span>rem · px</span></div>
+				<div class="scale">
+					<div class="row"><span class="tag">hero 56</span><span class="display" style="font-size:44px;line-height:1">Boss!</span></div>
+					<div class="row"><span class="tag">title 36</span><span class="display" style="font-size:32px;line-height:1">World 3</span></div>
+					<div class="row"><span class="tag">h2 22/800</span><span style="font-size:22px;font-weight:800">Chapter title</span></div>
+					<div class="row"><span class="tag">h3 18/800</span><span style="font-size:18px;font-weight:800">Card title</span></div>
+					<div class="row"><span class="tag">body 16</span><span>Mission text and hints.</span></div>
+					<div class="row"><span class="tag">small 14</span><span style="font-size:14px" class="muted">Helper copy, table cells.</span></div>
+					<div class="row"><span class="tag">overline 12</span><span class="overline">Chapter 9 · 3 of 8</span></div>
+					<div class="row"><span class="tag">mono 15</span><span class="mono" style="font-size:15px">SELECT 1;</span></div>
+				</div>
+				<div class="counters">
+					<div class="counter"><span class="n" style="color:var(--xp-text)">1,240</span><span class="l">aether</span></div>
+					<div class="counter"><span class="n" style="color:var(--streak-text)">12</span><span class="l">hearth</span></div>
+					<div class="counter"><span class="n" style="color:var(--gem-text)">86</span><span class="l">shards</span></div>
+				</div>
+			</div>
+		</div>
+	</div>
+</section>
+
+<!-- ═════════ BUTTONS ═════════ -->
+<section class="s" id="buttons">
+	<div class="wrap">
+		<div class="s-head">
+			<div class="overline">03 · Shape and depth</div>
+			<h2>Juicy buttons sink when pressed</h2>
+			<p>A crisp 4px ledge in the darker edge color, drawn with <code class="mono">filter: drop-shadow</code> so it stays on the compositor. Press translates the face down by the ledge. Try them.</p>
+		</div>
+		<div class="grid g2">
+			<div class="panel card">
+				<h3>Game actions</h3>
+				<p class="sub">Lilita One, uppercase, ink on candy.</p>
+				<div class="btn-row">
+					<div class="btn-spec"><button class="btn juicy juicy-primary juicy-label"><svg class="i solid"><use href="#i-wand"/></svg>Cast</button><span class="cap">primary · amber</span></div>
+					<div class="btn-spec"><button class="btn juicy juicy-success juicy-label">Continue</button><span class="cap">success</span></div>
+					<div class="btn-spec"><button class="btn juicy juicy-danger juicy-label">Retry</button><span class="cap">danger</span></div>
+					<div class="btn-spec"><button class="btn juicy juicy-info juicy-label"><svg class="i icon"><use href="#i-bulb"/></svg>Hint</button><span class="cap">info</span></div>
+					<div class="btn-spec"><button class="btn juicy juicy-gem juicy-label"><svg class="i solid"><use href="#i-gem"/></svg>50</button><span class="cap">gem (shop)</span></div>
+					<div class="btn-spec"><button class="btn juicy juicy-special juicy-label">Quiz</button><span class="cap">special</span></div>
+					<div class="btn-spec"><button class="btn juicy juicy-paper juicy-label">Skip</button><span class="cap">paper</span></div>
+					<div class="btn-spec"><button class="btn juicy juicy-primary juicy-label" disabled>Locked</button><span class="cap">disabled</span></div>
+				</div>
+				<div class="btn-row press-demo" style="margin-top:18px">
+					<div class="btn-spec"><button class="btn juicy juicy-success juicy-label">Auto press</button><span class="cap">press loop, 110ms ease-out</span></div>
+					<div class="btn-spec"><button class="btn icon juicy juicy-paper" aria-label="Rewind"><svg class="i icon"><use href="#i-rewind"/></svg></button><span class="cap">icon</span></div>
+				</div>
+			</div>
+			<div class="panel card">
+				<h3>UI actions</h3>
+				<p class="sub">Atkinson 800, sentence case, flatter.</p>
+				<div class="btn-row">
+					<div class="btn-spec"><button class="btn sm juicy juicy-paper talk">Small paper</button><span class="cap">sm · 3px ledge</span></div>
+					<div class="btn-spec"><button class="btn-outline">Outline</button><span class="cap">outline</span></div>
+					<div class="btn-spec"><button class="btn-ghost">Ghost</button><span class="cap">ghost</span></div>
+					<div class="btn-spec"><button class="btn-ghost glow"><svg class="i icon"><use href="#i-bulb"/></svg>Lantern</button><span class="cap">ghost-glow</span></div>
+					<div class="btn-spec"><button class="btn-link">Read the lore</button><span class="cap">link</span></div>
+				</div>
+				<div style="margin-top:18px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+					<span class="keycap">Ctrl</span><span class="keycap">Enter</span><span class="muted" style="font-size:14px">Kbd as keycaps (TypingClub nod)</span>
+				</div>
+				<pre class="recipe mono"><span class="c">/* the whole trick */</span>
+<span class="p">.juicy</span> { <span class="k">filter</span>: drop-shadow(0 <span class="v">4px</span> 0 var(--j-edge));
+  <span class="k">transition</span>: transform <span class="v">110ms</span> var(--ease-out), filter <span class="v">110ms</span> var(--ease-out); }
+<span class="p">.juicy:active</span> { <span class="k">transform</span>: translateY(<span class="v">4px</span>);
+  <span class="k">filter</span>: drop-shadow(0 <span class="v">0</span> 0 var(--j-edge)); }</pre>
+			</div>
+		</div>
+	</div>
+</section>
+
+<!-- ═════════ MAP ═════════ -->
+<section class="s" id="map">
+	<div class="wrap">
+		<div class="s-head">
+			<div class="overline">04 · World map</div>
+			<h2>A winding road of pebble nodes</h2>
+			<p>Traveled road is solid world color with its own ledge; the road ahead is a dotted trail. Wick walks to the current node. Bosses guard the end of each world, side quests branch off with a dashed path.</p>
+		</div>
+		<div class="map-layout">
+			<div class="map-frame" data-world="3">
+				<div class="unit-banner world-motif" data-world="3">
+					<div>
+						<div class="wn">World 3 · Chapter 9</div>
+						<div class="wt">Two Tables Meet</div>
+					</div>
+					<button class="btn sm icon juicy guide" style="--j-fill:color-mix(in oklab,var(--w-ink) 14%,var(--w));--j-edge:var(--w-deep);--j-ink:var(--w-ink)" aria-label="Chapter guide"><svg class="i icon"><use href="#i-scroll"/></svg></button>
+				</div>
+				<div class="map-body">
+					<svg class="layer-far" viewBox="0 0 420 820" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+						<g fill="none" stroke="var(--w)" stroke-opacity=".28" stroke-width="3" stroke-linecap="round">
+							<path d="M-10 160 q30 -14 60 0 t60 0 t60 0"/><path d="M300 330 q30 -14 60 0 t60 0"/><path d="M-20 620 q30 -14 60 0 t60 0 t60 0"/><path d="M290 760 q30 -14 60 0 t60 0"/>
+						</g>
+						<g fill="var(--w)" fill-opacity=".22"><path d="M330 520 a40 40 0 0 1 80 0 v60 h-80z"/><path d="M10 420 a30 30 0 0 1 60 0 v50 h-60z"/></g>
+					</svg>
+					<div class="map-canvas">
+						<svg class="trail" viewBox="0 0 320 820" aria-hidden="true">
+							<!-- road ahead: dotted -->
+							<path d="M140 392 C140 446 92 446 92 500 C92 553 130 553 130 606 C130 663 196 663 196 720" fill="none" stroke="color-mix(in oklab, var(--w) 45%, transparent)" stroke-width="9" stroke-linecap="round" stroke-dasharray="0 18"/>
+							<!-- side quest branch -->
+							<path d="M236 282 C180 270 110 250 66 214" fill="none" stroke="var(--w)" stroke-opacity=".7" stroke-width="4" stroke-dasharray="8 8" stroke-linecap="round"/>
+							<!-- traveled road: ledge then face -->
+							<path d="M160 70 C160 123 222 123 222 176 C222 229 236 229 236 282 C236 337 140 337 140 392" fill="none" stroke="var(--w-deep)" stroke-width="14" stroke-linecap="round" transform="translate(0 4)"/>
+							<path d="M160 70 C160 123 222 123 222 176 C222 229 236 229 236 282 C236 337 140 337 140 392" fill="none" stroke="var(--w)" stroke-width="14" stroke-linecap="round"/>
+						</svg>
+						<!-- nodes -->
+						<div class="mn" style="left:160px;top:70px">
+							<div class="map-node" data-state="completed"><svg class="icon"><use href="#i-check"/></svg></div>
+							<div class="stars3"><svg viewBox="0 0 24 24"><use href="#i-star" fill="var(--star)" stroke="var(--star-edge)" stroke-width="1.6"/></svg><svg viewBox="0 0 24 24"><use href="#i-star" fill="var(--star)" stroke="var(--star-edge)" stroke-width="1.6"/></svg><svg viewBox="0 0 24 24"><use href="#i-star" fill="var(--star-empty)" stroke="var(--border)" stroke-width="1.6"/></svg></div>
+						</div>
+						<div class="mn" style="left:222px;top:176px">
+							<div class="map-node" data-state="perfect"><svg class="solid"><use href="#i-crown"/></svg></div>
+							<div class="stars3"><svg viewBox="0 0 24 24"><use href="#i-star" fill="var(--star)" stroke="var(--star-edge)" stroke-width="1.6"/></svg><svg viewBox="0 0 24 24"><use href="#i-star" fill="var(--star)" stroke="var(--star-edge)" stroke-width="1.6"/></svg><svg viewBox="0 0 24 24"><use href="#i-star" fill="var(--star)" stroke="var(--star-edge)" stroke-width="1.6"/></svg></div>
+						</div>
+						<div class="mn" style="left:236px;top:282px">
+							<div class="map-node" data-state="completed"><svg class="icon"><use href="#i-check"/></svg></div>
+							<div class="stars3"><svg viewBox="0 0 24 24"><use href="#i-star" fill="var(--star)" stroke="var(--star-edge)" stroke-width="1.6"/></svg><svg viewBox="0 0 24 24"><use href="#i-star" fill="var(--star-empty)" stroke="var(--border)" stroke-width="1.6"/></svg><svg viewBox="0 0 24 24"><use href="#i-star" fill="var(--star-empty)" stroke="var(--border)" stroke-width="1.6"/></svg></div>
+						</div>
+						<div class="mn" style="left:66px;top:214px">
+							<div class="map-node" data-kind="side" data-state="available" style="--w:var(--special);--w-deep:var(--special-edge);--w-ink:var(--special-foreground)"><svg class="solid"><use href="#i-sparkle"/></svg></div>
+							<span class="label">Side quest</span>
+						</div>
+						<div class="mn current" style="left:140px;top:392px">
+							<div class="bubble"><span class="display">START</span></div>
+							<div class="map-node" data-state="current"><svg class="solid"><use href="#i-play"/></svg></div>
+						</div>
+						<svg class="wick-walker wick-svg" style="left:214px;top:402px" viewBox="0 0 100 120" aria-hidden="true"><use href="#wick"/></svg>
+						<div class="mn" style="left:92px;top:500px">
+							<div class="map-node" data-state="locked"><svg class="icon"><use href="#i-table"/></svg></div>
+							<span class="lockbadge" style="right:-6px"><svg class="icon"><use href="#i-lock"/></svg></span>
+						</div>
+						<div class="mn" style="left:130px;top:606px">
+							<div class="map-node" data-state="locked"><svg class="icon"><use href="#i-dumbbell"/></svg></div>
+							<span class="lockbadge"><svg class="icon"><use href="#i-lock"/></svg></span>
+						</div>
+						<div class="mn" style="left:196px;top:720px">
+							<span class="boss-tag">BOSS</span>
+							<div class="map-node" data-kind="boss" data-state="locked"><svg class="solid"><use href="#i-skull"/></svg></div>
+							<span class="label" style="color:var(--muted-foreground)">The Broken Bridge</span>
+						</div>
+					</div>
+				</div>
+			</div>
+			<div>
+				<div class="legend">
+					<div class="lgd" data-world="3"><div class="demo"><div class="map-node" data-state="locked"><svg class="icon"><use href="#i-lock"/></svg></div></div><b>Locked</b><span>stone fill, no gloss, lock glyph</span></div>
+					<div class="lgd" data-world="3"><div class="demo"><div class="map-node" data-state="available"><svg class="solid"><use href="#i-play"/></svg></div></div><b>Available</b><span>world color + gloss + ledge</span></div>
+					<div class="lgd" data-world="3"><div class="demo"><div class="map-node" data-state="current"><svg class="solid"><use href="#i-play"/></svg></div></div><b>Current</b><span>pulse ring + START bubble + Wick</span></div>
+					<div class="lgd" data-world="3"><div class="demo"><div class="map-node" data-state="completed"><svg class="icon"><use href="#i-check"/></svg></div><div class="stars3"><svg viewBox="0 0 24 24"><use href="#i-star" fill="var(--star)" stroke="var(--star-edge)" stroke-width="1.6"/></svg><svg viewBox="0 0 24 24"><use href="#i-star" fill="var(--star)" stroke="var(--star-edge)" stroke-width="1.6"/></svg><svg viewBox="0 0 24 24"><use href="#i-star" fill="var(--star-empty)" stroke="var(--border)" stroke-width="1.6"/></svg></div></div><b>Completed</b><span>check + 1 to 3 stars in an arc</span></div>
+					<div class="lgd" data-world="3"><div class="demo"><div class="map-node" data-state="perfect"><svg class="solid"><use href="#i-crown"/></svg></div></div><b>Perfect</b><span>3 stars turns the node gold</span></div>
+					<div class="lgd" data-world="6"><div class="demo"><div class="map-node" data-kind="boss" data-state="available"><svg class="solid"><use href="#i-skull"/></svg></div></div><b>Boss</b><span>96px, 8px ledge, world color</span></div>
+					<div class="lgd" data-world="3"><div class="demo"><div class="map-node" data-kind="side" data-state="available" style="--w:var(--special);--w-deep:var(--special-edge);--w-ink:var(--special-foreground)"><svg class="solid"><use href="#i-sparkle"/></svg></div></div><b>Side quest</b><span>56px, violet, dashed branch</span></div>
+					<div class="lgd" data-world="3"><div class="demo"><div class="map-node" data-state="available" style="--w:var(--info);--w-deep:var(--info-edge);--w-ink:var(--info-foreground)"><svg class="icon"><use href="#i-dumbbell"/></svg></div></div><b>Review</b><span>blue practice node (spaced repetition)</span></div>
+				</div>
+				<div class="panel map-notes">
+					<h3 style="font-size:16px;font-weight:800;margin-bottom:8px">Map rules</h3>
+					<ul>
+						<li>Node x offsets follow <span class="mono">[0, 60, 76, 60, 0, -60, -76, -60]</span>, rows every 104px, boss gets 116px.</li>
+						<li>Each world is a section with its banner sticky at the top and a 3-layer parallax backdrop (far motif, mid silhouettes, near props).</li>
+						<li>Floating "back to current" button appears when the current node scrolls off screen (Candy Crush).</li>
+						<li>Unlock: the trail between nodes redraws as solid road (700ms), the lock pops off, the node bounces once.</li>
+					</ul>
+				</div>
+			</div>
+		</div>
+	</div>
+</section>
+
+<!-- ═════════ LEVEL ═════════ -->
+<section class="s" id="level">
+	<div class="wrap">
+		<div class="s-head">
+			<div class="overline">05 · Level HUD</div>
+			<h2>Mission, spellbook, cast</h2>
+			<p>Segmented progress, hearth, shards and a combo chip up top. The mission reads like a quest scroll, the editor is a spellbook page, and the Cast button lives in the thumb zone.</p>
+		</div>
+		<div class="level-layout">
+			<div class="hud">
+				<button class="btn-ghost" aria-label="Quit level" style="padding:0 8px"><svg class="i icon"><use href="#i-x"/></svg></button>
+				<div class="seg" aria-label="Step 4 of 8"><i class="on"></i><i class="on"></i><i class="on"></i><i class="now"></i><i></i><i></i><i></i><i></i></div>
+				<span class="combo"><svg class="i solid" style="width:16px;height:16px"><use href="#i-flame"/></svg>x3</span>
+				<span class="stat streak hide-sm"><svg class="solid"><use href="#i-flame"/></svg>12</span>
+				<span class="stat gem"><svg class="solid"><use href="#i-gem"/></svg>86</span>
+			</div>
+			<div class="panel mission" data-world="3">
+				<div class="ribbon world-motif" data-world="3">
+					<div>
+						<div class="k">Mission · Starport Exchange</div>
+						<div class="t">Pilots of the Free Lanes</div>
+					</div>
+				</div>
+				<div class="body">
+					<p>The harbor master wants every pilot's <b>callsign</b> next to the <b>name of their faction</b>.</p>
+					<p class="muted">Some pilots fly for nobody. Keep them on the list, with an empty faction.</p>
+					<div class="goal"><svg class="i icon"><use href="#i-target"/></svg><div><b>Goal</b> · 5 rows, columns <span class="mono">callsign, faction</span>, ordered by callsign.</div></div>
+					<div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap">
+						<span class="type-badge" data-type="text"><span class="gl">Aa</span>LEFT JOIN</span>
+						<span class="type-badge" data-type="uuid"><span class="gl">∅</span>NULL</span>
+					</div>
+				</div>
+			</div>
+			<div class="panel spell">
+				<div class="spell-top">
+					<span class="tab on">Spell</span><span class="tab">Results</span><span class="tab">Schema</span>
+					<span style="margin-left:auto" class="floater"><svg class="i solid"><use href="#i-zap"/></svg>+15</span>
+				</div>
+				<div class="code" role="img" aria-label="SQL snippet with syntax colors">
+					<div class="ln"><span class="g">1</span><span><span class="tok-comment">-- pilots, with or without a faction</span></span></div>
+					<div class="ln"><span class="g">2</span><span><span class="tok-keyword">SELECT</span> <span class="tok-table">p</span><span class="tok-punct">.</span><span class="tok-ident">callsign</span><span class="tok-punct">,</span> <span class="tok-function">coalesce</span><span class="tok-punct">(</span><span class="tok-table">f</span><span class="tok-punct">.</span><span class="tok-ident">name</span><span class="tok-punct">,</span> <span class="tok-string">'—'</span><span class="tok-punct">)</span> <span class="tok-keyword">AS</span> <span class="tok-ident">faction</span></span></div>
+					<div class="ln"><span class="g">3</span><span><span class="tok-keyword">FROM</span> <span class="tok-table">pilots</span> <span class="tok-table">p</span></span></div>
+					<div class="ln active"><span class="g">4</span><span><span class="tok-keyword">LEFT JOIN</span> <span class="tok-table">factions</span> <span class="tok-table">f</span> <span class="tok-keyword">ON</span> <span class="tok-table">f</span><span class="tok-punct">.</span><span class="tok-ident">id</span> <span class="tok-operator">=</span> <span class="tok-table">p</span><span class="tok-punct">.</span><span class="tok-ident">faction_id</span><span class="cursor"></span></span></div>
+					<div class="ln"><span class="g">5</span><span><span class="tok-keyword">WHERE</span> <span class="tok-table">p</span><span class="tok-punct">.</span><span class="tok-ident">credits</span> <span class="tok-operator">&gt;=</span> <span class="tok-number">1000</span><span class="tok-punct">::</span><span class="tok-type">numeric</span> <span class="tok-keyword">AND</span> <span class="tok-table">p</span><span class="tok-punct">.</span><span class="tok-ident">rank</span> <span class="tok-operator">&lt;&gt;</span> <span class="tok-param">$1</span></span></div>
+					<div class="ln"><span class="g">6</span><span><span class="tok-keyword">ORDER BY</span> <span class="tok-ident">callsign</span> <span class="tok-keyword">NULLS LAST</span><span class="tok-punct">;</span></span></div>
+				</div>
+				<div class="qk-label">Quick keys · sits above the phone keyboard</div>
+				<div class="quickkeys">
+					<span class="keycap kw">SELECT</span><span class="keycap kw">FROM</span><span class="keycap kw">WHERE</span><span class="keycap kw">JOIN</span><span class="keycap">*</span><span class="keycap">,</span><span class="keycap">(</span><span class="keycap">)</span><span class="keycap">'</span><span class="keycap">=</span><span class="keycap">;</span><span class="keycap">⇥</span>
+				</div>
+				<div class="spell-bottom">
+					<button class="btn sm juicy juicy-paper talk" aria-label="Lantern hint, 2 left"><svg class="i icon"><use href="#i-bulb"/></svg><span class="lantern-txt">Lantern · </span>2</button>
+					<span class="grow"></span>
+					<button class="btn lg juicy juicy-primary juicy-label cast" style="min-width:180px"><svg class="i solid"><use href="#i-wand"/></svg>Cast</button>
+				</div>
+			</div>
+		</div>
+	</div>
+</section>
+
+<!-- ═════════ SCHEMA ═════════ -->
+<section class="s" id="schema">
+	<div class="wrap">
+		<div class="s-head">
+			<div class="overline">06 · Schema explorer</div>
+			<h2>Tables are treasure chests</h2>
+			<p>Each chest has a lid in its dataset tint, rivets, and columns as loot rows. Tables and columns the current query touches light up in lantern amber, and their relation turns into a marching amber trail.</p>
+		</div>
+		<div class="schema-stage" id="schemaStage">
+			<svg class="edge-svg" id="edgeSvg" aria-hidden="true"><path id="edgePath" d="" fill="none" stroke="var(--lantern)" stroke-width="2.5" stroke-dasharray="8 6" class="path-march" stroke-linecap="round"/></svg>
+			<div class="panel chest glow-lantern" data-lit="true" data-world="3" id="chestPilots">
+				<div class="lid"><span class="ico"><svg class="icon"><use href="#i-chest"/></svg></span><span class="nm">pilots</span><span class="rows">48 rows</span></div>
+				<ul class="cols">
+					<li><span class="kk pk"><svg class="icon"><use href="#i-key"/></svg></span><span class="cn">id</span><span class="type-badge" data-type="int"><span class="gl">#</span>int</span></li>
+					<li class="hot"><span class="kk"></span><span class="cn">callsign</span><span class="type-badge" data-type="text"><span class="gl">Aa</span>text</span></li>
+					<li class="hot" id="fkRow"><span class="kk fk"><svg class="icon"><use href="#i-link"/></svg></span><span class="cn">faction_id <span class="q">?</span></span><span class="type-badge" data-type="int"><span class="gl">#</span>int</span></li>
+					<li class="hot"><span class="kk"></span><span class="cn">credits</span><span class="type-badge" data-type="numeric"><span class="gl">#.#</span>numeric</span></li>
+					<li><span class="kk"></span><span class="cn">joined_at</span><span class="type-badge" data-type="datetime"><span class="gl">◷</span>timestamptz</span></li>
+				</ul>
+				<div style="padding:0 14px 12px"><span class="lit-tag"><svg class="i solid" style="width:12px;height:12px"><use href="#i-sparkle"/></svg>in your spell</span></div>
+			</div>
+			<div class="panel chest glow-lantern" data-lit="true" data-world="3" id="chestFactions">
+				<div class="lid"><span class="ico"><svg class="icon"><use href="#i-chest"/></svg></span><span class="nm">factions</span><span class="rows">6 rows</span></div>
+				<ul class="cols">
+					<li class="hot" id="pkRow"><span class="kk pk"><svg class="icon"><use href="#i-key"/></svg></span><span class="cn">id</span><span class="type-badge" data-type="int"><span class="gl">#</span>int</span></li>
+					<li class="hot"><span class="kk"></span><span class="cn">name</span><span class="type-badge" data-type="text"><span class="gl">Aa</span>text</span></li>
+					<li><span class="kk fk"><svg class="icon"><use href="#i-link"/></svg></span><span class="cn">homeworld_id</span><span class="type-badge" data-type="int"><span class="gl">#</span>int</span></li>
+				</ul>
+				<div style="padding:0 14px 12px"><span class="lit-tag"><svg class="i solid" style="width:12px;height:12px"><use href="#i-sparkle"/></svg>in your spell</span></div>
+			</div>
+			<div class="panel chest glow-lantern" data-lit="false" data-world="2">
+				<div class="lid"><span class="ico"><svg class="icon"><use href="#i-chest"/></svg></span><span class="nm">items</span><span class="rows">120 rows</span></div>
+				<ul class="cols">
+					<li><span class="kk pk"><svg class="icon"><use href="#i-key"/></svg></span><span class="cn">id</span><span class="type-badge" data-type="uuid"><span class="gl">id</span>uuid</span></li>
+					<li><span class="kk"></span><span class="cn">rarity</span><span class="type-badge" data-type="enum"><span class="gl">⋯</span>rarity</span></li>
+					<li><span class="kk"></span><span class="cn">tags</span><span class="type-badge" data-type="array"><span class="gl">[ ]</span>text[]</span></li>
+					<li><span class="kk"></span><span class="cn">attributes</span><span class="type-badge" data-type="jsonb"><span class="gl">{ }</span>jsonb</span></li>
+				</ul>
+				<div class="preview-pop"><span class="tok-punct">{</span> <span class="tok-function">"fire"</span><span class="tok-punct">:</span> <span class="tok-number">2</span><span class="tok-punct">,</span> <span class="tok-function">"slot"</span><span class="tok-punct">:</span> <span class="tok-string">"hand"</span><span class="tok-punct">,</span><br/>&nbsp;&nbsp;<span class="tok-function">"runes"</span><span class="tok-punct">:</span> <span class="tok-punct">[</span><span class="tok-string">"ᚠ"</span><span class="tok-punct">,</span> <span class="tok-string">"ᚱ"</span><span class="tok-punct">]</span> <span class="tok-punct">}</span></div>
+				<ul class="cols" style="padding-top:0">
+					<li><span class="kk"></span><span class="cn">embedding</span><span class="type-badge" data-type="vector"><span class="gl">→</span>vector(16)</span></li>
+				</ul>
+				<div class="vbars" aria-label="vector preview"><i style="height:40%"></i><i style="height:85%"></i><i style="height:20%"></i><i style="height:60%"></i><i style="height:95%"></i><i style="height:30%"></i><i style="height:50%"></i><i style="height:12%"></i><i style="height:70%"></i><i style="height:44%"></i><i style="height:88%"></i><i style="height:26%"></i><i style="height:58%"></i><i style="height:36%"></i><i style="height:76%"></i><i style="height:18%"></i></div>
+				<ul class="cols" style="padding-top:0">
+					<li><span class="kk"></span><span class="cn">lore_tsv</span><span class="type-badge" data-type="tsvector"><span class="gl">¶</span>tsvector</span></li>
+				</ul>
+				<div class="lexemes"><span>'dragon':3</span><span>'ember':1,7</span><span>'forg':5</span></div>
+			</div>
+		</div>
+		<div class="badge-wall" id="badgeWall"></div>
+
+		<div class="panel ledger">
+			<div class="ledger-head">
+				<svg class="i icon" style="color:var(--syn-keyword)"><use href="#i-table"/></svg><span class="t">Loot ledger</span><span class="muted" style="font-size:13px">5 rows · 3.2 ms</span>
+				<span style="margin-left:auto" class="type-badge" data-type="text"><span class="gl">✓</span>matches</span>
+			</div>
+			<div class="ledger-scroll">
+				<table class="loot">
+					<thead><tr><th>callsign</th><th>faction</th><th style="text-align:right">credits</th><th>joined_at</th></tr></thead>
+					<tbody>
+						<tr class="diff-ok"><td>ashwing</td><td>Free Lanes</td><td class="num">12,400.00</td><td>2287-03-14</td></tr>
+						<tr class="diff-ok"><td>brass-owl</td><td><span class="null-pill">NULL</span></td><td class="num">1,050.50</td><td>2289-11-02</td></tr>
+						<tr class="diff-ok"><td>corvid</td><td>Iron Pact</td><td class="num">8,800.00</td><td><span class="null-pill">NULL</span></td></tr>
+						<tr class="diff-ok"><td>dusk</td><td>Free Lanes</td><td class="num">3,075.25</td><td>2290-01-30</td></tr>
+						<tr class="diff-miss"><td>− ember</td><td>expected row missing</td><td class="num">—</td><td>—</td></tr>
+					</tbody>
+				</table>
+			</div>
+		</div>
+	</div>
+</section>
+
+<!-- ═════════ FEEDBACK ═════════ -->
+<section class="s" id="feedback">
+	<div class="wrap">
+		<div class="s-head">
+			<div class="overline">07 · Feedback</div>
+			<h2>The spell holds, or it fizzles</h2>
+			<p>A verdict sheet rises from the bottom after every cast. Correct pops a medal and a small burst; wrong shakes the spellbook once and names the rune that broke.</p>
+		</div>
+		<div class="fb-grid">
+			<div class="grid">
+				<div class="sheet ok" style="position:relative">
+					<div class="top">
+						<span class="medal"><svg class="icon" style="stroke-width:3"><use href="#i-check"/></svg></span>
+						<div><div class="ttl">The spell holds!</div><div class="msg">+15 aether · combo x3 · 3.2 ms</div></div>
+						<span class="spark" style="background:var(--star);left:44px;top:6px;transform:rotate(20deg)"></span><span class="spark" style="background:var(--xp);left:10px;top:14px;transform:rotate(-30deg)"></span><span class="spark" style="background:var(--gem);left:62px;top:52px;transform:rotate(45deg)"></span>
+					</div>
+					<div class="acts"><button class="btn juicy juicy-success juicy-label">Continue</button></div>
+				</div>
+				<div class="sheet bad">
+					<div class="top">
+						<span class="medal"><svg class="icon" style="stroke-width:3"><use href="#i-x"/></svg></span>
+						<div><div class="ttl">Fizzled</div><div class="msg">column "nmae" does not exist. Did you mean <span class="mono">name</span>? <span class="rune">42703</span></div></div>
+					</div>
+					<div class="acts"><button class="btn-ghost" style="color:inherit"><svg class="i icon"><use href="#i-bulb"/></svg>Hint</button><button class="btn juicy juicy-danger juicy-label">Try again</button></div>
+				</div>
+			</div>
+			<div class="toasts">
+				<div class="toast achv"><span class="tm"><svg class="solid"><use href="#i-trophy"/></svg></span><div><b>Achievement · Ledger Keeper</b><span>10 casts in a row without a fizzle</span></div></div>
+				<div class="toast streak"><span class="tm"><svg class="solid"><use href="#i-flame"/></svg></span><div><b>Hearth kept lit · 12 days</b><span>Come back tomorrow to reach 13</span></div></div>
+				<div class="toast hint"><span class="tm"><svg class="icon"><use href="#i-bulb"/></svg></span><div><b>Lantern lit</b><span>The columns you need now glow in the schema</span></div><span class="x"><svg class="i icon"><use href="#i-x"/></svg></span></div>
+				<div class="toast err"><span class="tm"><svg class="icon"><use href="#i-x"/></svg></span><div><b>Syntax rune broken</b><span>near "FORM" at line 3 · 42601</span></div></div>
+			</div>
+		</div>
+	</div>
+</section>
+
+<!-- ═════════ LEVEL COMPLETE ═════════ -->
+<section class="s" id="complete">
+	<div class="wrap">
+		<div class="s-head">
+			<div class="overline">08 · Level complete</div>
+			<h2>Stars land one by one</h2>
+			<p>Dialog pops (220ms), then each earned star drops in with a spring 220ms apart and a rising note. Stats count up underneath. <button class="btn-link" id="replayStars">Replay</button></p>
+		</div>
+		<div class="stage" data-world="3">
+			<div class="lc" id="lcCard" role="dialog" aria-labelledby="lcTitle">
+				<div class="big-stars" id="bigStars">
+					<svg class="lit" viewBox="0 0 24 24"><use href="#i-star" fill="var(--star)" stroke="var(--star-edge)" stroke-width="1.4" stroke-linejoin="round"/><path d="M8 8.5l1.2-2.2" stroke="#fff" stroke-opacity=".75" stroke-width="1.4" stroke-linecap="round"/></svg>
+					<svg class="lit s2" viewBox="0 0 24 24"><use href="#i-star" fill="var(--star)" stroke="var(--star-edge)" stroke-width="1.4" stroke-linejoin="round"/><path d="M8 8.5l1.2-2.2" stroke="#fff" stroke-opacity=".75" stroke-width="1.4" stroke-linecap="round"/></svg>
+					<svg viewBox="0 0 24 24"><use href="#i-star" fill="var(--star-empty)" stroke="var(--border)" stroke-width="1.4" stroke-linejoin="round"/></svg>
+				</div>
+				<div class="ribbon"><span>Chapter cleared</span></div>
+				<h3 id="lcTitle">Two Tables Meet</h3>
+				<p class="sub">You crossed your first bridge. The pilots and their factions are finally on speaking terms.</p>
+				<div class="lc-stats">
+					<div class="lc-stat xp"><div class="h">Aether</div><div class="v"><svg class="solid"><use href="#i-zap"/></svg><span data-count="120">120</span></div></div>
+					<div class="lc-stat acc"><div class="h">Accuracy</div><div class="v"><svg class="icon"><use href="#i-target"/></svg><span data-count="92">92</span>%</div></div>
+					<div class="lc-stat time"><div class="h">Time</div><div class="v"><svg class="icon"><use href="#i-clock"/></svg>4:12</div></div>
+				</div>
+				<div class="acts">
+					<button class="btn xl juicy juicy-primary juicy-label">Continue</button>
+					<button class="btn-ghost" style="justify-content:center;width:100%"><svg class="i icon"><use href="#i-rewind"/></svg>Replay for 3 stars</button>
+				</div>
+				<svg class="wick-cheer wick-svg" viewBox="0 0 100 120" aria-hidden="true"><use href="#wick"/></svg>
+			</div>
+		</div>
+	</div>
+</section>
+
+<!-- ═════════ WORLDS ═════════ -->
+<section class="s" id="worlds">
+	<div class="wrap">
+		<div class="s-head">
+			<div class="overline">09 · Worlds</div>
+			<h2>Eleven lands, eleven lanterns</h2>
+			<p>One accent per world, one CSS-only motif per world (no image assets). Ink-on-accent titles; the two deep hues (Observatory, Library) take white.</p>
+		</div>
+		<div class="worlds" id="worldGrid"></div>
+	</div>
+</section>
+</main>
+
+<footer class="end">
+	<div class="wrap">SQL Quest · Lantern Atlas · tokens injected from <span class="mono">docs/design/theme.css</span> · fonts: Lilita One, Atkinson Hyperlegible Next and Mono</div>
+</footer>
+
+<script>
+(function () {
+	// ---------- contrast ----------
+	function rgb(h) { h = h.replace('#', ''); return [0, 2, 4].map(function (i) { return parseInt(h.slice(i, i + 2), 16) / 255; }); }
+	function lum(h) { var c = rgb(h).map(function (v) { return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }); return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]; }
+	function ratio(a, b) { var x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); }
+	function chip(fg, bg, need) { var r = ratio(fg, bg); need = need || 4.5; return '<span class="ratio' + (r < need ? ' fail' : '') + '">' + (r >= need ? (need === 3 ? 'UI ' : 'AA ') : '✕ ') + r.toFixed(2) + '</span>'; }
+
+	var juicy = [
+		['Lantern (primary)', '#FFB020', '#CC8000', '#3B2600', 'Cast, Continue, main CTA'],
+		['Moss (success)', '#4CC764', '#2E9A46', '#08331A', 'correct, mastered'],
+		['Cinder (danger)', '#FF5A6A', '#D2334A', '#3F0711', 'wrong, boss, quit'],
+		['Aether (info / XP)', '#3AA8FF', '#1F7FD0', '#04243F', 'hints, XP, focus ring'],
+		['Hearth (warning / streak)', '#FF8A2B', '#D0631A', '#3A1600', 'streak, combo, warnings'],
+		['Shard (gem)', '#FF5FB0', '#CF3A86', '#3F0525', 'gems, shop'],
+		['Arcane (special)', '#A77BFF', '#7C52D6', '#1F0B4A', 'quiz, side quests, jsonb'],
+		['Star (reward)', '#FFD23F', '#E8A200', '#3B2A00', 'stars, perfect nodes']
+	];
+	document.getElementById('juicySwatches').innerHTML = juicy.map(function (j) {
+		return '<div class="sw"><div class="chipc" style="background:' + j[1] + ';color:' + j[3] + '"><span>Aa ink</span>' + chip(j[3], j[1]) + '<span class="edge" style="background:' + j[2] + '"></span></div>' +
+			'<div class="meta"><b>' + j[0] + '</b><code>' + j[1] + ' · edge ' + j[2] + ' · ink ' + j[3] + '</code><div class="muted">' + j[4] + '</div></div></div>';
+	}).join('');
+
+	document.querySelectorAll('.text-pairs').forEach(function (el) {
+		var pairs = JSON.parse(el.getAttribute('data-pairs'));
+		el.innerHTML = pairs.map(function (p) {
+			var ui = p[2].indexOf('3:1') > -1;
+			return '<div class="tp" style="background:' + p[1] + ';color:' + (ui ? (lum(p[1]) > 0.5 ? '#1D2436' : '#F4ECDC') : p[0]) + ';border:2px solid ' + (ui ? p[0] : 'transparent') + '"><span>' + p[2] + ' <span class="mono" style="font-size:11px;opacity:.8">' + p[0] + '</span></span>' + chip(p[0], p[1], ui ? 3 : 4.5) + '</div>';
+		}).join('');
+	});
+
+	var syn = [['keyword', 'SELECT', '#B54708', '#FFB547'], ['function', 'coalesce()', '#1D5FC0', '#74B9FF'], ['string', "'hand'", '#1F7A3A', '#86E39A'], ['number', '1000', '#B0256F', '#FF8EC8'], ['type', '::numeric', '#0E7480', '#5FD8D2'], ['operator', '<>', '#B42318', '#FF8A80'], ['comment', '-- note', '#6B7081', '#8B94AE'], ['param', '$1', '#6D3BD8', '#C7A6FF'], ['table', 'pilots', '#7A4800', '#FFD27A'], ['punct', '( , ;', '#5F6577', '#A6AEC4'], ['ident', 'callsign', '#1D2436', '#F4ECDC']];
+	function renderSyn() {
+		var dark = document.documentElement.classList.contains('dark');
+		var bg = dark ? '#0A1020' : '#FFFCF3';
+		document.getElementById('synGrid').innerHTML = syn.map(function (s) {
+			var c = dark ? s[3] : s[2];
+			return '<div class="syn"><i style="background:' + c + '"></i><span style="color:' + c + (s[0] === 'keyword' ? ';font-weight:700' : '') + (s[0] === 'comment' ? ';font-style:italic' : '') + '">' + s[1] + '</span><span style="margin-left:auto">' + chip(c, bg) + '</span></div>';
+		}).join('');
+	}
+	renderSyn();
+
+	// ---------- type badges ----------
+	var types = [['int', '#', 'int'], ['numeric', '#.#', 'numeric'], ['text', 'Aa', 'text'], ['bool', 'T/F', 'bool'], ['datetime', '◷', 'timestamptz'], ['uuid', 'id', 'uuid'], ['jsonb', '{ }', 'jsonb'], ['array', '[ ]', 'text[]'], ['enum', '⋯', 'enum'], ['range', '[ )', 'tstzrange'], ['vector', '→', 'vector'], ['tsvector', '¶', 'tsvector'], ['geometric', '△', 'point']];
+	document.getElementById('badgeWall').innerHTML = types.map(function (t) { return '<span class="type-badge" data-type="' + t[0] + '"><span class="gl">' + t[1] + '</span>' + t[2] + '</span>'; }).join('');
+
+	// ---------- worlds ----------
+	var worlds = [
+		['Tavern of First Queries', 'w-mug', 'Hearth', 'SELECT, WHERE, NULL, ORDER BY', 'Starport Exchange', 100],
+		['The Counting House', 'w-coin', 'Coin', 'expressions, GROUP BY, HAVING', 'Starport Exchange', 64],
+		['The Bridges', 'w-bridge', 'River', 'INNER, LEFT, self and cross joins', 'Starport Exchange', 40],
+		['The Nested Catacombs', 'w-arch', 'Moss', 'subqueries, EXISTS, CTEs, recursion', 'Guild of the Silver Dragon', 0],
+		['The Observatory', 'w-scope', 'Night sky', 'window functions, top N, gaps and islands', 'Bardic Beats', 0],
+		['The Forge', 'w-anvil', 'Molten', 'INSERT, UPDATE, MERGE, transactions', 'Wandering Star Inn', 0],
+		["The Architect's Tower", 'w-tower', 'Blueprint', 'DDL, constraints, normal forms, views', 'Guild of the Silver Dragon', 0],
+		["The Alchemist's Vault", 'w-flask', 'Potion', 'JSONB, arrays, enums, ranges', 'Wandering Star Inn', 0],
+		["The Oracle's Library", 'w-book', 'Vellum', 'full text, trigrams, vectors', 'Great Library of Aethel', 0],
+		['The Clockwork Engine', 'w-gear', 'Gunmetal', 'EXPLAIN, indexes, MVCC', 'Dungeon Delve Leaderboard', 0],
+		['The Astral Spire', 'w-spire', 'Aurora', 'PL/pgSQL, triggers, RLS', 'Great Library of Aethel', 0]
+	];
+	document.getElementById('worldGrid').innerHTML = worlds.map(function (w, i) {
+		var n = i + 1;
+		return '<article class="wb" data-world="' + n + '"><div class="art world-motif" data-world="' + n + '"><span class="num">World ' + n + ' · ' + w[2] + '</span><h3>' + w[0] + '</h3><span class="glyph"><svg class="icon" viewBox="0 0 24 24"><use href="#' + w[1] + '"/></svg></span></div>' +
+			'<div class="info"><p>' + w[3] + '</p><div class="row"><div class="bar"><i style="transform:scaleX(' + (w[5] / 100) + ')"></i></div><span class="k">' + w[5] + '%</span></div><span class="ds">' + w[4] + '</span></div></article>';
+	}).join('');
+
+	// ---------- schema edge (desktop) ----------
+	function drawEdge() {
+		var stage = document.getElementById('schemaStage'), a = document.getElementById('fkRow'), b = document.getElementById('pkRow');
+		var s = stage.getBoundingClientRect(), ra = a.getBoundingClientRect(), rb = b.getBoundingClientRect();
+		var x1 = ra.right - s.left + 2, y1 = ra.top + ra.height / 2 - s.top, x2 = rb.left - s.left - 2, y2 = rb.top + rb.height / 2 - s.top;
+		var mx = (x1 + x2) / 2;
+		document.getElementById('edgePath').setAttribute('d', 'M' + x1 + ' ' + y1 + ' C' + mx + ' ' + y1 + ' ' + mx + ' ' + y2 + ' ' + x2 + ' ' + y2);
+	}
+	drawEdge(); addEventListener('resize', drawEdge); if (document.fonts) document.fonts.ready.then(drawEdge);
+
+	// ---------- replay stars ----------
+	document.getElementById('replayStars').addEventListener('click', function () {
+		var card = document.getElementById('lcCard');
+		var clone = card.cloneNode(true); card.parentNode.replaceChild(clone, card);
+	});
+
+	// ---------- theme toggle ----------
+	var btn = document.getElementById('themeBtn');
+	function setIcon() { btn.innerHTML = '<svg class="i icon"><use href="' + (document.documentElement.classList.contains('dark') ? '#i-sun' : '#i-moon') + '"/></svg>'; }
+	setIcon();
+	btn.addEventListener('click', function () {
+		var d = document.documentElement.classList.toggle('dark');
+		try { localStorage.setItem('lantern-theme', d ? 'dark' : 'light'); } catch (e) {}
+		setIcon(); renderSyn();
+	});
+})();
+</script>
+</body>
+</html>
