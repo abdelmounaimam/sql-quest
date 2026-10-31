@@ -1,0 +1,33 @@
+### ch24-laying-foundations · Laying Foundations 🧱
+- **File** `src/content/chapters/ch24-laying-foundations.ts` · **World** The Architect's Tower · **Tier** apprentice · **Track** schema · **Dataset** `guild`
+- **Subtitle** CREATE TABLE with good types, keys, identities and defaults
+- **Concepts** `data-type-basics`, `create-table`, `primary-key`, `identity-columns`, `not-null-default`, `naming-conventions`, `drop-objects`
+- **Prerequisites** `ch21-the-pact`
+- **Grading** World 7 DDL is graded behaviourally. Every DDL `verifySql` starts by creating a hidden helper `pg_temp.try_sql(stmt text)` (in verifySql itself, so lesson try steps can use it too and the learner never sees it): a DML statement returns `ok` or its SQLSTATE, a SELECT returns its rows as text (`(1,Dragon Spire) ; (2,Lantern Loft)`). verifySql is then a `VALUES (n, probe, stmt)` list run in order. Any correct design passes whatever its constraint names, inline or table constraints, `ALWAYS` or `BY DEFAULT` identity.
+- **Lesson** (10 steps)
+  1. explain · The guild raises a tower and you are its architect. Types first: int/bigint, numeric(p,s) for gold, text, boolean, date, timestamptz.
+  2. quiz · Which type for gold with 2 decimals? (numeric(10,2); float drifts, text sorts '1200' before '85', money depends on locale)
+  3. explain · `CREATE TABLE name (column type constraints, ...)`: anatomy, no trailing comma (42601).
+  4. example · Create `notice_board`, insert a pinned notice, `SELECT *` it (posted_on filled by its DEFAULT).
+  5. explain · PRIMARY KEY = unique + not null; composite keys for pairs; surrogate vs natural keys.
+  6. explain · Identity columns: `GENERATED ALWAYS AS IDENTITY` vs `BY DEFAULT`; ALWAYS refuses explicit ids (428C9) unless `OVERRIDING SYSTEM VALUE`; serial is the old way.
+  7. explain · NOT NULL and DEFAULT; an explicit NULL is not the default.
+  8. explain · Naming: lower case snake_case, no reserved words (`user`, `order`), no quoted mixed case.
+  9. quiz · `DROP TABLE heroes;` fails with 2BP01. Why? (other tables have foreign keys to it; CASCADE would drop those constraints)
+  10. try · Create table `banners` with `id` (int identity primary key) and `motto` (text, required).
+- **Exercises**
+
+| id | mission | diff | kind | check | concepts | style |
+|---|---|---|---|---|---|---|
+| ch24-ex01 | Create `guild_halls`: **id** int identity PK, **name** text required, **region** text, **built_on** date. Probes: full row ok, name only ok, missing name 23502, `built_on = 'someday'` 22007, ids 1 and 2 generated, id is an identity, PK = id | 2 | ddl | state | create-table, primary-key | design |
+| ch24-ex02 | Fix `CREATE TABLE Order (ID serial, Name varchar(255), Gold float,);` (42601): create **orders** with **id** int identity PK, **name** text required, **gold** numeric(10,2) required default 0. Probes: column names/types/not null/identity, name-only insert gives gold 0.00 | 2 | ddl | state | naming-conventions, data-type-basics | fix |
+| ch24-ex03 | Create `party_members(quest_id int, hero_id int, role text)` where a hero joins a quest at most once (composite PK). Probes: same quest other hero ok, same hero other quest ok, duplicate pair 23505, NULL quest 23502 | 3 | ddl | state | primary-key | design |
+| ch24-ex04 | Error mission: setupSql creates `banners` with an ALWAYS identity. Insert banner id 7: **428C9** | 2 | mutation | error 428C9 | identity-columns | predict |
+| ch24-ex05 | Create `bounties`: **id** identity PK, **title** text required, **reward_gold** numeric(10,2) required default 0, **posted_at** timestamptz required default now, **is_open** boolean required default true. Probes: title-only row reads `(Rats again,0.00,t,t)`, explicit NULLs refused (23502) | 3 | ddl | state | not-null-default | design |
+| ch24-ex06 | Drop `hero_titles`, and `old_rumors` without an error even though it does not exist. Probes: hero_titles gone, heroes intact | 2 | ddl | state | drop-objects | write |
+| ch24-ex07 | Create `treasury_entries` (**id** identity PK, **amount** exact with 2 decimals, **recorded_at** instant with time zone, **approved** yes/no, **note** free text), insert three 0.10 tips and return the total. State checks the type categories (float rejected) | 3 | ddl | result+state | data-type-basics | design |
+| ch24-ex08 | **Boss · The Tower Registry**: `tower_floors` (floor_no natural PK, name required, guardian_hero_id optional, opened_on required default today), `floor_keys` (floor_no, hero_id, granted_at required default now, composite PK), `tower_visits` (identity id, hero_id and floor_no required, visited_at default now); drop the setupSql `tower_draft` (draft_notes has an FK to it and must survive) | 5 | ddl | state | create-table, primary-key, identity-columns, not-null-default, drop-objects, naming-conventions | design |
+
+- **Practice**: `ch24-pr01` data-type-basics: create `quest_log` choosing whole number, instant with time zone, free text and yes/no types (verify type categories, int/bigint and text/varchar both accepted); `ch24-pr02` data-type-basics: setupSql `old_purses(hero, gold text)`: return hero and gold richest first (cast to numeric; text sorts '85' above '1200'); `ch24-pr03` create-table: create `familiars(name, species, hero_id)`; `ch24-pr04` primary-key: `taverns` with `name` as natural PK; `ch24-pr05` identity-columns: insert banner id 99 with `OVERRIDING SYSTEM VALUE`; `ch24-pr06` identity-columns: insert a banner and RETURNING its generated id (3); `ch24-pr07` not-null-default: `INSERT ... DEFAULT VALUES` into setupSql `watch_posts`; `ch24-pr08` naming-conventions: fix `CREATE TABLE user (id int PRIMARY KEY, "Display Name" text)` into `app_users(id, display_name)`; `ch24-pr09` drop-objects: `DROP TABLE ... CASCADE` on a parent, the child survives without its FK.
+- **Negative cases to add**: plain `int PRIMARY KEY` without identity (ex01 full-row probe 23502), serial instead of identity (identity probe false), text for built_on (22007 probe ok), missing composite PK (surrogate id only), explicit NULL default confusion, `DROP TABLE old_rumors` without IF EXISTS (42P01), `DELETE FROM hero_titles` instead of DROP, float for amounts, timestamp without time zone, CASCADE on the wrong table. Accept: `BY DEFAULT` identity, table-level `PRIMARY KEY (...)`, `CONSTRAINT name PRIMARY KEY`, `DEFAULT CURRENT_TIMESTAMP`, `DEFAULT 0.00`, `numeric(12,2)` amounts, `varchar` notes, `DROP TABLE IF EXISTS hero_titles, old_rumors`.
+- **Notes**: ch24 avoids UNIQUE, CHECK, FOREIGN KEY and ALTER (ch25). Never put `now()` values in verify output: compare `posted_at IS NOT NULL` or `opened_on = current_date`. Failed probe inserts still burn identity values; probes look rows up by name, not by id, except the first ids of ex01.
