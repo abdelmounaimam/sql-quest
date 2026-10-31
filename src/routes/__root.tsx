@@ -41,7 +41,7 @@ export const Route = createRootRouteWithContext<RouterContext>()({
 			{ property: "og:site_name", content: "SQL Quest" },
 			{ property: "og:title", content: "SQL Quest: level up your PostgreSQL" },
 			{ property: "og:description", content: DESCRIPTION },
-			{ property: "og:image", content: "/brand/og-image.png" },
+			{ property: "og:image", content: "https://web-production-e47e5.up.railway.app/brand/og-image.png" },
 			{ property: "og:image:width", content: "1200" },
 			{ property: "og:image:height", content: "630" },
 			{
@@ -52,7 +52,7 @@ export const Route = createRootRouteWithContext<RouterContext>()({
 			{ name: "twitter:card", content: "summary_large_image" },
 			{ name: "twitter:title", content: "SQL Quest: level up your PostgreSQL" },
 			{ name: "twitter:description", content: DESCRIPTION },
-			{ name: "twitter:image", content: "/brand/og-image.png" },
+			{ name: "twitter:image", content: "https://web-production-e47e5.up.railway.app/brand/og-image.png" },
 			{
 				name: "theme-color",
 				content: "#FBF5E9",
