@@ -15,6 +15,8 @@ export type SqlRequest =
 	| { type: "run"; input: RunInput }
 	| { type: "judge"; input: JudgeInput }
 	| { type: "catalog"; datasetId: string }
+	/** Catalog of a fresh sandbox after the exercise setupSql and (optionally) the learner SQL. */
+	| { type: "liveCatalog"; datasetId: string; setupSql?: string; sql?: string }
 	| { type: "peek"; datasetId: string; table: string; limit?: number }
 	| { type: "functions"; datasetId: string };
 
@@ -23,6 +25,7 @@ export interface SqlResponseMap {
 	run: RunOutcome;
 	judge: Verdict;
 	catalog: Catalog;
+	liveCatalog: Catalog;
 	peek: ResultTable;
 	functions: string[];
 }

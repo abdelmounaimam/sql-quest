@@ -47,6 +47,7 @@ import { Markdown } from "./markdown";
 import { DiffView, ResultGrid } from "./result-grid";
 import { SchemaExplorer } from "./schema-explorer";
 import { QuickKeys, SqlEditor, type SqlEditorHandle } from "./sql-editor";
+import { StatementLog } from "./statement-log";
 import { type SolvedResult, VerdictSheet } from "./verdict";
 
 export type MissionMode = "exercise" | "practice" | "boss" | "review";
@@ -194,6 +195,8 @@ export function MissionScreen({
 	const [drawer, setDrawer] = useState<null | "schema" | "results">(null);
 	const [snap, setSnap] = useState<number | string | null>(0.45);
 	const [mood, setMood] = useState<WickMood>("idle");
+	// Last learner SQL replayed in a sandbox so the chests show what it created.
+	const [liveRun, setLiveRun] = useState({ sql: "", seq: 0 });
 
 	const shownHints = Math.max(chargedHints, freeHints);
 	const policy = feedbackPolicy({
@@ -244,7 +247,8 @@ export function MissionScreen({
 				sql: text,
 			}),
 		onMutate: () => setMood("thinking"),
-		onSuccess: (out) => {
+		onSuccess: (out, text) => {
+			setLiveRun((r) => ({ sql: text, seq: r.seq + 1 }));
 			setLastRun(out);
 			setVerdict(null);
 			setSheetOpen(false);
@@ -306,7 +310,8 @@ export function MissionScreen({
 			sfx("run");
 			setMood("thinking");
 		},
-		onSuccess: (v) => {
+		onSuccess: (v, text) => {
+			setLiveRun((r) => ({ sql: text, seq: r.seq + 1 }));
 			setVerdict(v);
 			setLastRun(null);
 			setDrawer(null);
@@ -532,6 +537,9 @@ export function MissionScreen({
 											datasetId={chapter.datasetId}
 											activeTables={activeTables}
 											sql={debouncedSql}
+											setupSql={exercise.setupSql}
+											liveSql={liveRun.sql}
+											liveSeq={liveRun.seq}
 										/>
 									</div>
 								</ResizablePanel>
@@ -610,6 +618,9 @@ export function MissionScreen({
 										activeTables={activeTables}
 										sql={debouncedSql}
 										showTabs={false}
+										setupSql={exercise.setupSql}
+										liveSql={liveRun.sql}
+										liveSeq={liveRun.seq}
 									/>
 								) : (
 									<div className="px-2">{results}</div>
@@ -906,6 +917,9 @@ function ResultsPanel({
 						</AlertDescription>
 					</Alert>
 				)}
+				{(lastRun.statements?.length ?? 0) > 1 ? (
+					<StatementLog statements={lastRun.statements} />
+				) : null}
 				{lastRun.ok ? (
 					<ResultGrid
 						table={lastRun.last ?? lastRun.results.at(-1)}
@@ -939,6 +953,9 @@ function ResultsPanel({
 						) : null}
 					</AlertDescription>
 				</Alert>
+			) : null}
+			{(v.statements?.length ?? 0) > 1 ? (
+				<StatementLog statements={v.statements} />
 			) : null}
 			{v.learnerLast || v.learnerResults.length ? (
 				<ResultGrid

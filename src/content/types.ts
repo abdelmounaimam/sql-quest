@@ -79,6 +79,12 @@ export type Check =
       matchColumnNames?: boolean
       /** Numeric tolerance for floats (default 1e-6). */
       tolerance?: number
+      /**
+       * Default false. When true, column type families must match (integer,
+       * decimal, text, boolean, date/time, json, array...) and values are not
+       * coerced: jsonb "25" is not 25, text '25' is not integer 25.
+       */
+      strictTypes?: boolean
     }
   /**
    * For INSERT/UPDATE/DELETE/DDL: after running the SQL, run `verifySql`
@@ -91,6 +97,8 @@ export type Check =
       verifySql: string
       orderMatters?: boolean
       matchColumnNames?: boolean
+      /** See the `result` check: compare type families, no coercion. */
+      strictTypes?: boolean
     }
   /** Both: e.g. UPDATE ... RETURNING, where output and final state matter. */
   | {
@@ -98,6 +106,8 @@ export type Check =
       verifySql: string
       orderMatters?: boolean
       matchColumnNames?: boolean
+      /** See the `result` check: compare type families, no coercion. */
+      strictTypes?: boolean
     }
   /** The SQL must fail with this SQLSTATE (e.g. '23505' unique_violation). */
   | { type: 'error'; sqlstate: string }

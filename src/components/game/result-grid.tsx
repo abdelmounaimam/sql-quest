@@ -3,7 +3,8 @@ import {
 	tableFeatures,
 	useTable,
 } from "@tanstack/react-table";
-import { useMemo } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
+import { useMemo, useRef } from "react";
 import type { DiffRow, ResultTable, TableDiff } from "#/engine/checker/types";
 import { cn } from "#/lib/utils";
 import { Badge } from "../ui/badge";
@@ -164,6 +165,21 @@ export function ResultGrid({
 	}, [namesKey, typesKey]);
 
 	const t = useTable({ features, columns, data });
+	const modelRows = t.getRowModel().rows;
+
+	// TanStack Virtual: only the visible rows are in the DOM (up to 10k rows).
+	const scrollRef = useRef<HTMLDivElement>(null);
+	const virtualizer = useVirtualizer({
+		count: modelRows.length,
+		getScrollElement: () => scrollRef.current,
+		estimateSize: () => 35,
+		overscan: 12,
+	});
+	const items = virtualizer.getVirtualItems();
+	const padTop = items.length ? items[0].start : 0;
+	const padBottom = items.length
+		? virtualizer.getTotalSize() - items[items.length - 1].end
+		: 0;
 
 	const head = (
 		<div className="ledger-head">
@@ -171,7 +187,9 @@ export function ResultGrid({
 			<span className="t">{caption}</span>
 			<span className="text-sm text-muted-foreground tabular">
 				{data.length} row{data.length === 1 ? "" : "s"}
-				{table?.truncated ? " (first 500)" : ""}
+				{table?.truncated
+					? ` (first ${data.length.toLocaleString("en-US")})`
+					: ""}
 			</span>
 			{meta ? <span className="ml-auto">{meta}</span> : null}
 		</div>
@@ -194,7 +212,11 @@ export function ResultGrid({
 	return (
 		<div className={cn("panel ledger", className)}>
 			{head}
-			<div className="overflow-auto overscroll-contain" style={{ maxHeight }}>
+			<div
+				ref={scrollRef}
+				className="overflow-auto overscroll-contain"
+				style={{ maxHeight }}
+			>
 				<table className="loot">
 					<thead>
 						{t.getHeaderGroups().map((g) => (
@@ -218,11 +240,20 @@ export function ResultGrid({
 						))}
 					</thead>
 					<tbody>
-						{t.getRowModel().rows.map((row, ri) => {
+						{padTop > 0 ? (
+							<tr>
+								<td style={{ height: padTop, padding: 0, border: 0 }} />
+							</tr>
+						) : null}
+						{items.map((vi) => {
+							const ri = vi.index;
+							const row = modelRows[ri];
 							const status = row.original.status;
 							return (
 								<tr
 									key={row.id}
+									data-index={ri}
+									ref={virtualizer.measureElement}
 									className={cn(
 										animate && ri < 12 && "rise",
 										status && `diff-${status}`,
@@ -259,6 +290,11 @@ export function ResultGrid({
 								</tr>
 							);
 						})}
+						{padBottom > 0 ? (
+							<tr>
+								<td style={{ height: padBottom, padding: 0, border: 0 }} />
+							</tr>
+						) : null}
 					</tbody>
 				</table>
 				{data.length === 0 ? (

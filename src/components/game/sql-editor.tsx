@@ -244,6 +244,10 @@ export function SqlEditor({
 				placeholder={placeholder}
 				onCreateEditor={(view) => {
 					viewRef.current = view;
+					// Dev only: lets browser playtests set the spell without typing.
+					if (import.meta.env.DEV && !readOnly)
+						(window as unknown as { __sqlqEditor?: EditorView }).__sqlqEditor =
+							view;
 				}}
 				basicSetup={{
 					autocompletion: autocomplete,

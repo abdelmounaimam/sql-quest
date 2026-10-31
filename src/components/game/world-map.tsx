@@ -5,11 +5,12 @@ import { toast } from "sonner";
 import type { Chapter } from "#/content/types";
 import type { ChapterStatus, NextActivity } from "#/engine/adaptive/types";
 import type { Progress } from "#/game/progress";
-import { sfx } from "#/game/sound";
+import { haptic, sfx } from "#/game/sound";
 import { useMediaQuery } from "#/hooks/use-media";
 import {
 	chapterById,
 	conceptName,
+	isSideQuest,
 	WORLD_GLYPHS,
 	type World,
 	worldNumber,
@@ -29,7 +30,7 @@ import {
 const COLUMN = 320;
 const CENTER = COLUMN / 2;
 const X_OFFSETS = [0, 60, 76, 60, 0, -60, -76, -60];
-const ROW = 104;
+const ROW = 116;
 const BOSS_ROW = 116;
 const TOP = 128;
 const BOTTOM = 96;
@@ -49,7 +50,7 @@ const MOTIF_NAMES = [
 ];
 
 type NodeState = "locked" | "available" | "current" | "completed" | "perfect";
-type NodeKind = "normal" | "boss" | "review";
+type NodeKind = "normal" | "boss" | "review" | "side";
 
 interface PlacedNode {
 	chapter: Chapter;
@@ -116,11 +117,46 @@ function smoothPath(points: { x: number; y: number }[]): string {
 	return d;
 }
 
+/** What the map looked like last time (to play unlock and walk sequences once). */
+interface MapMemory {
+	states: Record<string, NodeState>;
+	current: string | null;
+	openWorlds: number[];
+}
+const MEMORY_KEY = "sqlq-map-memory";
+function readMemory(): MapMemory | null {
+	try {
+		const raw = localStorage.getItem(MEMORY_KEY);
+		return raw ? (JSON.parse(raw) as MapMemory) : null;
+	} catch {
+		return null;
+	}
+}
+
+function nodeState(
+	ch: Chapter,
+	st: ChapterStatus | undefined,
+	current: string | null,
+): NodeState {
+	const stars = averageStars(ch, st);
+	return !st || st.state === "locked"
+		? "locked"
+		: st.state === "complete"
+			? stars >= 3
+				? "perfect"
+				: "completed"
+			: current === ch.id
+				? "current"
+				: "available";
+}
+
 export function WorldMap({ progress }: { progress: Progress }) {
 	const { statuses, next, reviews } = progress;
 	const current = activityChapter(next);
 	const currentRef = useRef<HTMLDivElement | null>(null);
 	const [offscreen, setOffscreen] = useState(false);
+	// Snapshot of the previous visit, read once on mount.
+	const [memory] = useState(readMemory);
 
 	const reviewByChapter = useMemo(() => {
 		const m = new Map<string, Progress["reviews"]>();
@@ -128,6 +164,70 @@ export function WorldMap({ progress }: { progress: Progress }) {
 			m.set(r.chapterId, [...(m.get(r.chapterId) ?? []), r]);
 		return m;
 	}, [reviews]);
+
+	const nowStates = useMemo(() => {
+		const out: Record<string, NodeState> = {};
+		for (const w of worlds)
+			for (const ch of w.chapters)
+				out[ch.id] = nodeState(ch, statuses[ch.id], current);
+		return out;
+	}, [statuses, current]);
+	const openWorlds = worlds
+		.filter((w) => w.chapters.some((c) => nowStates[c.id] !== "locked"))
+		.map((w) => w.index);
+
+	// Newly unlocked nodes and worlds since the last visit (first visit: none).
+	const fresh = useMemo(() => {
+		const out = new Set<string>();
+		if (!memory) return out;
+		for (const [id, st] of Object.entries(nowStates))
+			if (st !== "locked" && memory.states[id] === "locked") out.add(id);
+		return out;
+	}, [memory, nowStates]);
+	const freshWorlds = new Set(
+		memory
+			? openWorlds.filter((w) => !memory.openWorlds.includes(w) && w > 0)
+			: [],
+	);
+	const walkFrom =
+		memory?.current && memory.current !== current ? memory.current : null;
+
+	useEffect(() => {
+		const save = () => {
+			try {
+				localStorage.setItem(
+					MEMORY_KEY,
+					JSON.stringify({
+						states: nowStates,
+						current,
+						openWorlds,
+					} satisfies MapMemory),
+				);
+			} catch {
+				// ignore
+			}
+		};
+		// Let the sequences play, then remember the new state.
+		const t = window.setTimeout(save, 1600);
+		return () => {
+			window.clearTimeout(t);
+			save();
+		};
+	}, [nowStates, current, openWorlds]);
+
+	useEffect(() => {
+		if (fresh.size === 0 && freshWorlds.size === 0) return;
+		const t = window.setTimeout(() => {
+			sfx("unlock");
+			haptic("unlock");
+			currentRef.current?.scrollIntoView({
+				behavior: "smooth",
+				block: "center",
+			});
+		}, 400);
+		return () => window.clearTimeout(t);
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [fresh.size, freshWorlds.size]);
 
 	useEffect(() => {
 		const el = currentRef.current;
@@ -154,9 +254,12 @@ export function WorldMap({ progress }: { progress: Progress }) {
 						world={w}
 						startIndex={start}
 						statuses={statuses}
-						current={current}
+						states={nowStates}
 						reviewByChapter={reviewByChapter}
 						currentRef={currentRef}
+						fresh={fresh}
+						freshWorld={freshWorlds.has(w.index)}
+						walkFrom={walkFrom}
 					/>
 				);
 			})}
@@ -184,64 +287,84 @@ function WorldSection({
 	world,
 	startIndex,
 	statuses,
-	current,
+	states,
 	reviewByChapter,
 	currentRef,
+	fresh,
+	freshWorld,
+	walkFrom,
 }: {
 	world: World;
 	startIndex: number;
 	statuses: Record<string, ChapterStatus>;
-	current: string | null;
+	states: Record<string, NodeState>;
 	reviewByChapter: Map<string, Progress["reviews"]>;
 	currentRef: React.RefObject<HTMLDivElement | null>;
+	fresh: Set<string>;
+	freshWorld: boolean;
+	walkFrom: string | null;
 }) {
 	const n = worldNumber(world.index);
+	const reduce = useReducedMotion();
 	// Phones: a tighter wiggle so side labels fit in 390px.
 	const wide = useMediaQuery("(min-width: 640px)", true);
 	const sway = wide ? 1 : 0.45;
 	const nodes: PlacedNode[] = [];
 	let y = TOP;
-	world.chapters.forEach((ch, i) => {
+	let mainIndex = 0;
+	world.chapters.forEach((ch) => {
 		const st = statuses[ch.id];
-		const stars = averageStars(ch, st);
-		const state: NodeState =
-			!st || st.state === "locked"
-				? "locked"
-				: st.state === "complete"
-					? stars >= 3
-						? "perfect"
-						: "completed"
-					: current === ch.id
-						? "current"
-						: "available";
-		const kind: NodeKind =
-			st?.state === "boss-ready"
+		const state = states[ch.id] ?? "locked";
+		const side = isSideQuest(ch.id);
+		const kind: NodeKind = side
+			? "side"
+			: st?.state === "boss-ready"
 				? "boss"
 				: st?.state === "gauntlet"
 					? "review"
 					: "normal";
-		if (i > 0) y += kind === "boss" ? BOSS_ROW : ROW;
+		const prevMain = [...nodes].reverse().find((p) => p.kind !== "side");
+		if (side) {
+			// Side quest: branches off the previous main node, dashed, never on the road.
+			// Branch away from the anchor's label (labels sit toward the center line).
+			const anchorX = prevMain?.x ?? CENTER;
+			const dir = anchorX > CENTER ? 1 : -1;
+			nodes.push({
+				chapter: ch,
+				status: st,
+				x: Math.min(COLUMN + 40, Math.max(-40, anchorX + dir * 130 * sway)),
+				y: (prevMain?.y ?? y) + ROW * 0.62,
+				state,
+				kind,
+				stars: averageStars(ch, st),
+			});
+			y += ROW * 0.45;
+			return;
+		}
+		if (mainIndex > 0) y += kind === "boss" ? BOSS_ROW : ROW;
 		nodes.push({
 			chapter: ch,
 			status: st,
-			x: CENTER + X_OFFSETS[(startIndex + i) % X_OFFSETS.length] * sway,
+			x: CENTER + X_OFFSETS[(startIndex + mainIndex) % X_OFFSETS.length] * sway,
 			y,
 			state,
 			kind,
-			stars,
+			stars: averageStars(ch, st),
 		});
+		mainIndex++;
 	});
-	const height = y + BOTTOM;
+	const height = Math.max(...nodes.map((p) => p.y)) + BOTTOM;
+	const main = nodes.filter((p) => p.kind !== "side");
 	const traveledUntil = (() => {
-		const idx = nodes.findIndex((p) => p.state === "current");
+		const idx = main.findIndex((p) => p.state === "current");
 		if (idx >= 0) return idx;
 		let last = -1;
-		nodes.forEach((p, i) => {
+		main.forEach((p, i) => {
 			if (p.state === "completed" || p.state === "perfect") last = i;
 		});
 		return last;
 	})();
-	const pts = nodes.map((p) => ({ x: p.x, y: p.y }));
+	const pts = main.map((p) => ({ x: p.x, y: p.y }));
 	const traveled =
 		traveledUntil > 0 ? smoothPath(pts.slice(0, traveledUntil + 1)) : "";
 	const ahead = smoothPath(pts.slice(Math.max(0, traveledUntil)));
@@ -249,6 +372,23 @@ function WorldSection({
 		(p) => p.state === "completed" || p.state === "perfect",
 	).length;
 	const locked = nodes.every((p) => p.state === "locked");
+	const opensAfter = locked
+		? world.chapters[0].prerequisites
+				.map((id) => chapterById.get(id)?.title)
+				.filter(Boolean)
+				.join(" and ")
+		: "";
+
+	// Wick walks the road from the previous current node to the new one.
+	const cur = main.find((p) => p.state === "current");
+	const fromIdx = walkFrom
+		? main.findIndex((p) => p.chapter.id === walkFrom)
+		: -1;
+	const curIdx = cur ? main.indexOf(cur) : -1;
+	const walkPath =
+		fromIdx >= 0 && curIdx > fromIdx
+			? smoothPath(pts.slice(fromIdx, curIdx + 1))
+			: "";
 
 	return (
 		<section
@@ -260,15 +400,29 @@ function WorldSection({
 				containIntrinsicSize: `auto ${height + 90}px`,
 			}}
 		>
-			<div className="unit-banner world-motif" data-world={n}>
+			<motion.div
+				className="unit-banner world-motif"
+				data-world={n}
+				initial={
+					freshWorld && !reduce ? { clipPath: "inset(0 100% 0 0)" } : false
+				}
+				animate={{ clipPath: "inset(0 0% 0 0)" }}
+				transition={{ duration: 0.6, ease: [0.77, 0, 0.175, 1], delay: 0.3 }}
+			>
 				<div className="min-w-0">
 					<div className="wn">
 						World {world.index + 1} ·{" "}
 						{MOTIF_NAMES[(n - 1) % MOTIF_NAMES.length]}
+						{freshWorld ? " · newly unlocked!" : ""}
 					</div>
 					<h2 id={`world-${world.index}`} className="wt">
 						{world.name}
 					</h2>
+					{locked && opensAfter ? (
+						<div className="mt-1 text-xs font-extrabold opacity-85">
+							Opens after {opensAfter}
+						</div>
+					) : null}
 				</div>
 				<span className="ml-auto flex items-center gap-2">
 					<span className="rounded-full bg-[color-mix(in_oklab,var(--w-ink)_14%,transparent)] px-2.5 py-1 text-xs font-extrabold tabular">
@@ -279,7 +433,7 @@ function WorldSection({
 						className="size-10 opacity-90"
 					/>
 				</span>
-			</div>
+			</motion.div>
 			<div className="map-body" style={{ height }}>
 				<svg
 					className="layer-far"
@@ -321,6 +475,24 @@ function WorldSection({
 								strokeDasharray="0 18"
 							/>
 						) : null}
+						{nodes
+							.filter((p) => p.kind === "side")
+							.map((p) => {
+								const anchor =
+									[...main].reverse().find((m) => m.y < p.y) ?? main[0];
+								return anchor ? (
+									<path
+										key={`branch-${p.chapter.id}`}
+										d={`M ${anchor.x} ${anchor.y} C ${(anchor.x + p.x) / 2} ${anchor.y}, ${(anchor.x + p.x) / 2} ${p.y}, ${p.x} ${p.y}`}
+										fill="none"
+										stroke="var(--special)"
+										strokeOpacity=".75"
+										strokeWidth="4"
+										strokeDasharray="8 8"
+										strokeLinecap="round"
+									/>
+								) : null;
+							})}
 						{traveled ? (
 							<>
 								<path
@@ -341,11 +513,75 @@ function WorldSection({
 							node={p}
 							reviews={reviewByChapter.get(p.chapter.id) ?? []}
 							nodeRef={p.state === "current" ? currentRef : undefined}
+							fresh={fresh.has(p.chapter.id)}
 						/>
 					))}
+					{cur ? (
+						<WalkingWick target={cur} path={reduce ? "" : walkPath} />
+					) : null}
 				</div>
 			</div>
 		</section>
+	);
+}
+
+/**
+ * Wick beside the current node. When the current node moved since the last
+ * visit, Wick walks the road: 12 samples from getPointAtLength, WAAPI on
+ * transform with a small hop per sample, 700ms per node, then a squash.
+ */
+function WalkingWick({ target, path }: { target: PlacedNode; path: string }) {
+	const ref = useRef<HTMLDivElement>(null);
+	const pathRef = useRef<SVGPathElement>(null);
+	// Wick rests on the side opposite the node's label.
+	const side = target.x > CENTER ? 1 : -1;
+	const rest = { x: target.x + side * 70, y: target.y };
+	useEffect(() => {
+		const el = ref.current;
+		const p = pathRef.current;
+		if (!el || !p || !path) return;
+		const len = p.getTotalLength();
+		const steps = 12;
+		const frames: Keyframe[] = [];
+		for (let i = 0; i <= steps; i++) {
+			const pt = p.getPointAtLength((len * i) / steps);
+			const hop = i % 2 === 1 ? -6 : 0;
+			frames.push({
+				transform: `translate(${pt.x - rest.x}px, ${pt.y - rest.y + hop - 30}px)`,
+			});
+		}
+		frames.push({
+			transform: "translate(0px, 0px) scale(1.1, 0.9)",
+			offset: 0.97,
+		});
+		frames.push({ transform: "translate(0px, 0px) scale(1, 1)" });
+		const nodes = Math.max(1, Math.round(len / ROW));
+		const anim = el.animate(frames, {
+			duration: 700 * nodes + 120,
+			easing: "cubic-bezier(0.77, 0, 0.175, 1)",
+			delay: 500,
+		});
+		return () => anim.cancel();
+	}, [path, rest.x, rest.y]);
+	return (
+		<>
+			{path ? (
+				<svg
+					className="pointer-events-none absolute inset-0 overflow-visible opacity-0"
+					width={COLUMN}
+					aria-hidden="true"
+				>
+					<path ref={pathRef} d={path} />
+				</svg>
+			) : null}
+			<div
+				ref={ref}
+				className="wick-walker"
+				style={{ left: rest.x, top: rest.y }}
+			>
+				<Wick className="h-[58px] w-12" />
+			</div>
+		</>
 	);
 }
 
@@ -369,6 +605,10 @@ function RoadFace({ d }: { d: string }) {
 
 function nodeIcon(p: PlacedNode): GameIconName {
 	if (p.state === "locked") return "lock";
+	if (p.kind === "side")
+		return p.state === "completed" || p.state === "perfect"
+			? "check"
+			: "sparkle";
 	if (p.kind === "boss") return "skull";
 	if (p.kind === "review") return "dumbbell";
 	if (p.state === "perfect") return "crown";
@@ -380,10 +620,13 @@ function LevelNode({
 	node: p,
 	reviews,
 	nodeRef,
+	fresh,
 }: {
 	node: PlacedNode;
 	reviews: Progress["reviews"];
 	nodeRef?: React.RefObject<HTMLDivElement | null>;
+	/** Unlocked since the last visit: the lock pops off, the node bounces. */
+	fresh?: boolean;
 }) {
 	const navigate = useNavigate();
 	const reduce = useReducedMotion();
@@ -424,7 +667,13 @@ function LevelNode({
 					"--w-deep": "var(--info-edge)",
 					"--w-ink": "var(--info-foreground)",
 				} as React.CSSProperties)
-			: undefined;
+			: p.kind === "side" && !locked
+				? ({
+						"--w": "var(--special)",
+						"--w-deep": "var(--special-edge)",
+						"--w-ink": "var(--special-foreground)",
+					} as React.CSSProperties)
+				: undefined;
 
 	return (
 		<div
@@ -447,22 +696,47 @@ function LevelNode({
 				onClick={onClick}
 				className="map-node"
 				data-state={p.state}
-				data-kind={p.kind === "boss" ? "boss" : undefined}
+				data-kind={p.kind === "boss" || p.kind === "side" ? p.kind : undefined}
 				style={reviewStyle}
-				initial={reduce ? false : { opacity: 0, scale: 0.92 }}
-				whileInView={{ opacity: 1, scale: 1 }}
+				initial={
+					reduce ? false : fresh ? { scale: 0.92 } : { opacity: 0, scale: 0.92 }
+				}
+				whileInView={
+					fresh && !reduce
+						? { opacity: 1, scale: [0.92, 1.06, 1] }
+						: { opacity: 1, scale: 1 }
+				}
 				viewport={{ once: true, margin: "-40px" }}
-				transition={{ type: "spring", duration: 0.35, bounce: 0.2 }}
+				transition={
+					fresh
+						? { delay: 0.75, duration: 0.42, ease: [0.34, 1.56, 0.64, 1] }
+						: { type: "spring", duration: 0.35, bounce: 0.2 }
+				}
 				aria-label={`${chapter.title}: ${locked ? "locked" : (status?.state ?? "available").replace("-", " ")}`}
 			>
 				<GameIcon
 					name={nodeIcon(p)}
-					solid={["play", "crown", "skull"].includes(nodeIcon(p))}
+					solid={["play", "crown", "skull", "sparkle"].includes(nodeIcon(p))}
 				/>
 			</motion.button>
 			{locked ? (
 				<span className="lockbadge" aria-hidden="true">
 					<GameIcon name="lock" />
+				</span>
+			) : fresh && !reduce ? (
+				<motion.span
+					className="lockbadge"
+					aria-hidden="true"
+					initial={{ opacity: 1, y: 0, rotate: 0 }}
+					animate={{ opacity: 0, y: -12, rotate: 20 }}
+					transition={{ delay: 0.6, duration: 0.18, ease: [0.23, 1, 0.32, 1] }}
+				>
+					<GameIcon name="lock" />
+				</motion.span>
+			) : null}
+			{p.kind === "side" ? (
+				<span className="boss-tag !bg-special !text-special-foreground !shadow-[0_2px_0_var(--special-edge)]">
+					◇ SIDE
 				</span>
 			) : null}
 			{p.state === "completed" || p.state === "perfect" ? (
@@ -493,19 +767,6 @@ function LevelNode({
 				<small>{chapter.tier}</small>
 				{chapter.title}
 			</span>
-			{p.state === "current" ? (
-				<motion.div
-					layoutId="wick-walker"
-					className="pointer-events-none absolute top-1/2"
-					style={{
-						left: side > 0 ? "calc(100% + 18px)" : undefined,
-						right: side < 0 ? "calc(100% + 18px)" : undefined,
-					}}
-					transition={{ duration: 0.7, ease: [0.77, 0, 0.175, 1] }}
-				>
-					<Wick className="h-[58px] w-12 -translate-y-1/2" />
-				</motion.div>
-			) : null}
 			{reviews.length && !locked ? (
 				<Link
 					to="/play/$chapterId"

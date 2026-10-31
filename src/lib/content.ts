@@ -1,3 +1,4 @@
+import chapterIndex from "virtual:chapter-index";
 import type {
 	Chapter,
 	Concept,
@@ -17,9 +18,10 @@ type Mod<T> = { default: T };
 const datasetMods = import.meta.glob<Mod<Dataset>>("../content/datasets/*.ts", {
 	eager: true,
 });
-const chapterMods = import.meta.glob<Mod<Chapter>>("../content/chapters/*.ts", {
-	eager: true,
-});
+/** Full chapter modules: one lazy chunk per chapter, loaded when a level opens. */
+const chapterLoaders = import.meta.glob<Mod<Chapter>>(
+	"../content/chapters/*.ts",
+);
 const conceptMods = import.meta.glob<Mod<Concept[]>>(
 	["../content/concepts.ts", "../content/_concepts*.ts"],
 	{ eager: true },
@@ -34,8 +36,14 @@ function pick<T>(mods: Record<string, Mod<T>>, useSamples: boolean): T[] {
 		.map(([, m]) => m.default);
 }
 
-const realChapters = pick(chapterMods, false);
+const realChapters = chapterIndex
+	.filter((e) => !e.sample)
+	.map((e) => e.chapter);
 /**
+ * `chapters` below are LIGHT chapters from virtual:chapter-index (map, unlock
+ * graph, adaptive engine): lesson bodies, prompts, solutions and hints are
+ * empty. Use loadChapter(id) for the playable chapter.
+ *
  * True while the app runs on the underscore dev samples.
  * VITE_SQLQ_CONTENT=samples forces the samples (handy for testing every UI path).
  */
@@ -43,10 +51,30 @@ export const USING_SAMPLES =
 	import.meta.env.VITE_SQLQ_CONTENT === "samples" || realChapters.length === 0;
 
 export const chapters: Chapter[] = (
-	USING_SAMPLES ? pick(chapterMods, true) : realChapters
+	USING_SAMPLES
+		? chapterIndex.filter((e) => e.sample).map((e) => e.chapter)
+		: realChapters
 )
 	.slice()
 	.sort((a, b) => a.order - b.order);
+
+const fileByChapter = new Map(chapterIndex.map((e) => [e.chapter.id, e.file]));
+const loaded = new Map<string, Promise<Chapter | undefined>>();
+
+/** The full, playable chapter (lazy chunk, cached). */
+export function loadChapter(id: string): Promise<Chapter | undefined> {
+	let p = loaded.get(id);
+	if (!p) {
+		const file = fileByChapter.get(id);
+		const loader = file
+			? chapterLoaders[`../content/chapters/${file}`]
+			: undefined;
+		p = loader ? loader().then((m) => m.default) : Promise.resolve(undefined);
+		loaded.set(id, p);
+		p.catch(() => loaded.delete(id));
+	}
+	return p;
+}
 
 const neededDatasets = new Set(chapters.map((c) => c.datasetId));
 export const datasets: Dataset[] = [
@@ -175,4 +203,18 @@ export const WORLD_GLYPHS = [
 export function worldOfChapter(chapterId: string): number {
 	const w = worlds.find((x) => x.chapters.some((c) => c.id === chapterId));
 	return worldNumber(w?.index ?? 0);
+}
+
+/**
+ * Optional side quests (◇ in docs/levels/level-map.md): drawn as branches off
+ * the main road and never on the path to the next world.
+ */
+export const SIDE_QUESTS = new Set([
+	"ch23-many-hands",
+	"ch34-exotic-matter",
+	"ch43-trials-of-mastery",
+]);
+
+export function isSideQuest(chapterId: string): boolean {
+	return SIDE_QUESTS.has(chapterId);
 }

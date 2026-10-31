@@ -14,6 +14,7 @@ const cases: Record<string, CaseSet> = {
 	},
 	"ch34-ex02": {
 		reject: [
+			{ sql: "SELECT network(set_masklen(ip, 24))::text AS block, count(*) AS visits FROM access_log WHERE family(ip) = 4 GROUP BY 1;", why: "text, not a cidr (strictTypes)" },
 			{ sql: "SELECT network(set_masklen(ip, 24)), count(*) FROM access_log GROUP BY 1;", why: "IPv6 visits kept" },
 			{ sql: "SELECT network(set_masklen(ip, 16)), count(*) FROM access_log WHERE family(ip) = 4 GROUP BY 1;", why: "/16 instead of /24" },
 		],

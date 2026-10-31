@@ -129,7 +129,7 @@ export function Onboarding() {
 				}}
 				aria-labelledby="onboarding-title"
 			>
-				<Logo />
+				<Logo size="lg" />
 				<div>
 					<h1
 						id="onboarding-title"

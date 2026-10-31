@@ -123,7 +123,7 @@ const chapter: Chapter = {
 			concepts: ["jsonb-operators"],
 			solutionSql:
 				"SELECT hero_id, (doc -> 'coins' ->> 'gold')::int AS gold\nFROM inventories\nWHERE doc -> 'coins' ? 'gold'\nORDER BY gold DESC;",
-			check: { type: "result", orderMatters: true },
+			check: { type: "result", orderMatters: true, strictTypes: true },
 			hints: [
 				"Filter out inventories without a `gold` key, then sort.",
 				"`->>` gives text: cast to int **before** sorting, or '980' beats '3000'.",
@@ -220,7 +220,7 @@ const chapter: Chapter = {
 			concepts: ["jsonb-decomposition"],
 			solutionSql:
 				"SELECT i.hero_id, it ->> 'item' AS item, (it ->> 'qty')::int AS qty\nFROM inventories i,\n     jsonb_array_elements(i.doc -> 'bags') AS b,\n     jsonb_array_elements(b -> 'items') AS it;",
-			check: { type: "result" },
+			check: { type: "result", strictTypes: true },
 			hints: [
 				"Two levels of arrays: bags, then items inside each bag.",
 				"Call `jsonb_array_elements` twice in FROM, the second on the output of the first.",

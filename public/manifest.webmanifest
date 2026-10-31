@@ -1,12 +1,15 @@
 {
   "name": "SQL Quest",
   "short_name": "SQL Quest",
-  "description": "A game that teaches SQL and PostgreSQL level by level, with a real Postgres engine in your browser.",
+  "description": "A game that teaches SQL and PostgreSQL level by level: 43 levels across 11 worlds, with a real Postgres 18 engine running in your browser, even offline.",
   "id": "/",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
   "orientation": "any",
+  "lang": "en",
+  "dir": "ltr",
   "background_color": "#0E1424",
   "theme_color": "#0E1424",
   "categories": ["education", "games", "developer"],
@@ -14,6 +17,29 @@
     { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
     { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
     { "src": "/icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "/icons/monochrome-512.png", "sizes": "512x512", "type": "image/png", "purpose": "monochrome" },
     { "src": "/icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ],
+  "shortcuts": [
+    {
+      "name": "Continue",
+      "short_name": "Continue",
+      "description": "Jump to your next mission",
+      "url": "/?continue=1",
+      "icons": [{ "src": "/icons/shortcut-continue-96.png", "sizes": "96x96", "type": "image/png" }]
+    },
+    {
+      "name": "World map",
+      "short_name": "Map",
+      "description": "Open the Atlas",
+      "url": "/",
+      "icons": [{ "src": "/icons/shortcut-map-96.png", "sizes": "96x96", "type": "image/png" }]
+    }
+  ],
+  "screenshots": [
+    { "src": "/screenshots/wide-map.webp", "sizes": "1440x900", "type": "image/webp", "form_factor": "wide", "label": "The Atlas: eleven worlds of SQL levels" },
+    { "src": "/screenshots/wide-mission.webp", "sizes": "1440x900", "type": "image/webp", "form_factor": "wide", "label": "Write a spell, cast it, watch the chests light up" },
+    { "src": "/screenshots/narrow-map.webp", "sizes": "390x844", "type": "image/webp", "form_factor": "narrow", "label": "The Atlas on your phone" },
+    { "src": "/screenshots/narrow-mission.webp", "sizes": "390x844", "type": "image/webp", "form_factor": "narrow", "label": "Missions with a SQL quick-key bar" }
   ]
 }

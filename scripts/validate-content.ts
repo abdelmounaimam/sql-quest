@@ -208,9 +208,10 @@ async function workerMain(input: WorkerInput) {
 			if (tables[i].columns.length > 0) return tables[i];
 		return undefined;
 	};
+	/** `codes`: SQLSTATEs raised by the script itself (not the 25P02 cascade), even when recovered. */
 	type Outcome =
-		| { ok: true; tables: ResultTable[]; state?: ResultTable }
-		| { ok: false; code?: string; message: string };
+		| { ok: true; tables: ResultTable[]; state?: ResultTable; codes: string[] }
+		| { ok: false; code?: string; message: string; codes: string[] };
 
 	/** Runs sql (+ verifySql) in a fresh sandbox, the way the app does. */
 	async function run(item: Item, sql: string): Promise<Outcome> {
@@ -218,22 +219,41 @@ async function workerMain(input: WorkerInput) {
 		try {
 			box = await provider.open(dataset.id, item.setupSql);
 			let tables: ResultTable[];
+			let codes: string[] = [];
 			try {
-				tables = (await box.exec(sql)).map(toResultTable);
+				// psql semantics, like the app: errors inside a transaction block
+				// that a ROLLBACK [TO SAVEPOINT] recovers do not fail the script.
+				const out = box.execScript
+					? await box.execScript(sql)
+					: { results: await box.exec(sql), statements: [], error: undefined };
+				codes = out.statements
+					.filter((st) => st.error && !st.aborted)
+					.map((st) => st.error?.code ?? "?");
+				if (out.error !== undefined) {
+					const e = out.error;
+					return {
+						ok: false,
+						code: (e as { code?: string }).code,
+						message: errText(e),
+						codes: codes.length ? codes : [(e as { code?: string }).code ?? "?"],
+					};
+				}
+				tables = out.results.map(toResultTable);
 			} catch (e) {
-				return { ok: false, code: (e as { code?: string }).code, message: errText(e) };
+				const code = (e as { code?: string }).code;
+				return { ok: false, code, message: errText(e), codes: [code ?? "?"] };
 			}
 			const check = item.check;
 			if (check && (check.type === "state" || check.type === "result+state")) {
 				try {
 					const v = (await box.exec(check.verifySql)).map(toResultTable);
 					const state = lastWithColumns(v) ?? v.at(-1);
-					return { ok: true, tables, state };
+					return { ok: true, tables, state, codes };
 				} catch (e) {
-					return { ok: true, tables, state: undefined };
+					return { ok: true, tables, state: undefined, codes };
 				}
 			}
-			return { ok: true, tables };
+			return { ok: true, tables, codes };
 		} finally {
 			await box?.close().catch(() => {});
 		}
@@ -242,8 +262,9 @@ async function workerMain(input: WorkerInput) {
 	/** Same decision as the app's judge(), against a precomputed expected outcome. */
 	function verdict(check: Check, expected: Outcome, got: Outcome): string | null {
 		if (check.type === "error") {
-			if (got.ok) return "ran without error";
-			return got.code === check.sqlstate ? null : `failed with ${got.code ?? "?"} instead`;
+			// Same rule as the app: any statement failing with the SQLSTATE passes.
+			if (!got.codes.length) return "ran without error";
+			return got.codes.includes(check.sqlstate) ? null : `failed with ${got.codes[0]} instead`;
 		}
 		if (!got.ok) return `error ${got.message}`;
 		if (!expected.ok) return "reference failed";
@@ -256,6 +277,7 @@ async function workerMain(input: WorkerInput) {
 				orderMatters: check.orderMatters,
 				matchColumnNames: check.matchColumnNames,
 				tolerance: check.type === "result" ? check.tolerance : undefined,
+				strictTypes: check.strictTypes,
 			});
 			if (!c.equal) return c.errorType ?? "mismatch";
 		}
@@ -265,6 +287,7 @@ async function workerMain(input: WorkerInput) {
 			const c = compareTables(expected.state, got.state, {
 				orderMatters: check.orderMatters,
 				matchColumnNames: check.matchColumnNames,
+				strictTypes: check.strictTypes,
 			});
 			if (!c.equal) return `wrong_final_state (${c.errorType})`;
 		}
@@ -283,9 +306,9 @@ async function workerMain(input: WorkerInput) {
 		}
 		const check = item.check;
 		if (check.type === "error") {
-			if (expected.ok) failures.push(`solution succeeded, expected SQLSTATE ${check.sqlstate}`);
-			else if (expected.code !== check.sqlstate)
-				failures.push(`expected SQLSTATE ${check.sqlstate}, got ${expected.message}`);
+			if (!expected.codes.length) failures.push(`solution succeeded, expected SQLSTATE ${check.sqlstate}`);
+			else if (!expected.codes.includes(check.sqlstate))
+				failures.push(`expected SQLSTATE ${check.sqlstate}, got ${expected.ok ? expected.codes[0] : expected.message}`);
 		} else {
 			if (!expected.ok) {
 				failures.push(`solution fails: ${expected.message}`);

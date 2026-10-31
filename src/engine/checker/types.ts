@@ -16,10 +16,48 @@ export interface RawResult {
 	affectedRows?: number;
 }
 
+/** Outcome of one statement of a learner script (the per-statement log). */
+export interface StatementOutcome {
+	/** 0-based statement index in the script. */
+	index: number;
+	/** Statement text, trimmed, at most 200 characters. */
+	sql: string;
+	/** 0-based offset of the statement in the full script. */
+	offset: number;
+	ok: boolean;
+	/** Command tag (SELECT, INSERT, BEGIN, ROLLBACK...) when it succeeded. */
+	command?: string;
+	/** Rows returned (SELECT / RETURNING) or affected (DML). */
+	rowCount?: number;
+	/** Error with line/column relative to the full script. */
+	error?: SqlErrorInfo;
+	/** True for statements skipped because the transaction was aborted (25P02). */
+	aborted?: boolean;
+}
+
+/**
+ * psql-style script run (no ON_ERROR_STOP): outside a transaction block the
+ * first error stops the script; inside BEGIN ... the following statements
+ * fail with 25P02 until ROLLBACK / ROLLBACK TO SAVEPOINT recovers.
+ */
+export interface ScriptOutcome {
+	/** Results of the statements that succeeded, in order. */
+	results: RawResult[];
+	statements: StatementOutcome[];
+	/**
+	 * The error that ended the script unrecovered (first error of an aborted
+	 * transaction that was never rolled back, or an error outside a
+	 * transaction). Position already shifted to the full script.
+	 */
+	error?: unknown;
+}
+
 /** A sandboxed, throwaway database. */
 export interface Sandbox {
-	/** Runs one or many statements, returns one RawResult per statement. Throws a SqlErrorLike on failure. */
+	/** Runs one or many statements, returns one RawResult per statement. Throws a SqlErrorLike on an unrecovered failure. */
 	exec(sql: string): Promise<RawResult[]>;
+	/** Same run, never throws for SQL errors: results + per-statement log. */
+	execScript?(sql: string): Promise<ScriptOutcome>;
 	close(): Promise<void>;
 }
 
@@ -51,6 +89,7 @@ export type ErrorType =
 	| "wrong_column_names"
 	| "wrong_row_count"
 	| "wrong_values"
+	| "wrong_types"
 	| "wrong_order"
 	| "wrong_final_state"
 	| "expected_error"
@@ -119,6 +158,8 @@ export interface Verdict {
 	stateExpected?: ResultTable;
 	stateGot?: ResultTable;
 	stateDiff?: TableDiff;
+	/** Per-statement log of the learner script (empty when it did not run). */
+	statements: StatementOutcome[];
 	durationMs: number;
 }
 
@@ -128,6 +169,8 @@ export interface RunOutcome {
 	last?: ResultTable;
 	error?: SqlErrorInfo;
 	errorType?: ErrorType;
+	/** Per-statement log of the script (empty when it did not run). */
+	statements: StatementOutcome[];
 	durationMs: number;
 }
 

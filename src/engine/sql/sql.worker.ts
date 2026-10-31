@@ -2,11 +2,14 @@
 import { judge, runSql } from "#/engine/checker";
 import {
 	createPGliteProvider,
+	execScript,
 	functionNames,
 	introspectCatalog,
+	introspectDatabase,
 	peekTable,
 } from "#/engine/checker/pglite-provider";
 import type { DatasetDef, WorkerEnvelope, WorkerReply } from "./protocol";
+import { loadSnapshot, saveSnapshot, snapshotKey } from "./snapshots";
 
 /**
  * PGlite lives here, off the main thread. One base DB per dataset is cached;
@@ -15,8 +18,19 @@ import type { DatasetDef, WorkerEnvelope, WorkerReply } from "./protocol";
  * this worker (PGlite ignores statement_timeout).
  */
 
+/** Rows kept for display (the grid is virtualized); comparison always uses every row. */
+const DISPLAY = { displayLimit: 10_000 };
+
 const known = new Map<string, DatasetDef>();
-const provider = createPGliteProvider({ getDataset: (id) => known.get(id) });
+// Initialised bases are cached in IndexedDB: the second visit restores the
+// dump instead of re-running the dataset setupSql (dungeon: 100k rows).
+const provider = createPGliteProvider(
+	{ getDataset: (id) => known.get(id) },
+	{
+		restore: async (def) => loadSnapshot(await snapshotKey(def)),
+		persist: async (def, dump) => saveSnapshot(await snapshotKey(def), dump),
+	},
+);
 
 async function handle(env: WorkerEnvelope): Promise<unknown> {
 	for (const d of env.datasets) {
@@ -33,11 +47,21 @@ async function handle(env: WorkerEnvelope): Promise<unknown> {
 			return { ms: Math.round(performance.now() - t) };
 		}
 		case "run":
-			return runSql(provider, r.input);
+			return runSql(provider, r.input, DISPLAY);
 		case "judge":
-			return judge(provider, r.input);
+			return judge(provider, r.input, DISPLAY);
 		case "catalog":
 			return introspectCatalog(provider, r.datasetId);
+		case "liveCatalog": {
+			const box = await provider.openDb(r.datasetId, r.setupSql);
+			try {
+				// psql-style replay of the learner script; errors just stop it.
+				if (r.sql?.trim()) await execScript(box.db, r.sql);
+				return await introspectDatabase(box.db, { datasetId: r.datasetId });
+			} finally {
+				await box.close();
+			}
+		}
 		case "peek":
 			return peekTable(provider, r.datasetId, r.table, r.limit);
 		case "functions":

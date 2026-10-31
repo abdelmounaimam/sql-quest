@@ -199,3 +199,127 @@ export function valuesEqual(
 export function bucketKey(row: Canon[]): string {
 	return JSON.stringify(row, (_k, v) => (typeof v === "number" ? "#" : v));
 }
+
+// ---------------------------------------------------------------------------
+// Strict types (Check.strictTypes)
+// ---------------------------------------------------------------------------
+
+/**
+ * Type family of a Postgres type name (pg_type.typname) for strict checks.
+ * Choices (documented in the content contract):
+ *  - int2 / int4 / int8 are one family ("integer"): count(*) is bigint,
+ *    learners should not fail on int vs bigint.
+ *  - numeric (and money) is "decimal", float4 / float8 is "float": exact vs
+ *    approximate numbers are different types, which is the point of the
+ *    World 8 type lessons.
+ *  - text, varchar, bpchar, name, citext are "text".
+ *  - date, time(tz), timestamp, timestamptz and interval are each their own
+ *    family (timestamp vs timestamptz matters).
+ *  - json and jsonb are "json"; arrays are "<element family>[]"; anything
+ *    else (enums, ranges, domains, vector...) is its own type name.
+ */
+const FAMILY: Record<string, string> = {
+	int2: "integer",
+	int4: "integer",
+	int8: "integer",
+	numeric: "decimal",
+	money: "decimal",
+	float4: "float",
+	float8: "float",
+	text: "text",
+	varchar: "text",
+	bpchar: "text",
+	name: "text",
+	citext: "text",
+	bool: "boolean",
+	date: "date",
+	time: "time",
+	timetz: "time",
+	timestamp: "timestamp",
+	timestamptz: "timestamptz",
+	interval: "interval",
+	json: "json",
+	jsonb: "json",
+	uuid: "uuid",
+	bytea: "bytea",
+};
+
+export function typeFamily(typeName: string | undefined): string | undefined {
+	if (!typeName) return undefined;
+	if (typeName.startsWith("_")) {
+		const el = typeFamily(typeName.slice(1));
+		return el ? `${el}[]` : undefined;
+	}
+	return FAMILY[typeName] ?? typeName;
+}
+
+const PRETTY: Record<string, string> = {
+	int2: "smallint",
+	int4: "integer",
+	int8: "bigint",
+	float4: "real",
+	float8: "double precision",
+	bpchar: "char",
+	varchar: "varchar",
+	bool: "boolean",
+	timestamptz: "timestamptz",
+	timetz: "timetz",
+};
+
+/** Human name of a pg type name (int4 -> integer, _text -> text[]). */
+export function prettyType(typeName: string | undefined): string {
+	if (!typeName) return "unknown";
+	if (typeName.startsWith("_")) return `${prettyType(typeName.slice(1))}[]`;
+	return PRETTY[typeName] ?? typeName;
+}
+
+/** JSON values compared without coercion: "25" stays a string. */
+function canonJsonStrict(value: unknown): Canon {
+	if (value === null || value === undefined) return null;
+	if (typeof value === "number" || typeof value === "boolean") return value;
+	if (typeof value === "string") return value;
+	if (Array.isArray(value)) return value.map(canonJsonStrict);
+	if (typeof value === "object") {
+		const out: { [key: string]: Canon } = {};
+		for (const k of Object.keys(value as object).sort()) {
+			out[k] = canonJsonStrict((value as Record<string, unknown>)[k]);
+		}
+		return out;
+	}
+	return String(value);
+}
+
+/**
+ * Comparison form that respects the column type: numeric-looking strings
+ * become numbers only in number columns (int8 / numeric arrive as text);
+ * text columns keep strings as they are; json keeps "25" distinct from 25.
+ */
+export function canonicalizeTyped(
+	value: unknown,
+	typeName: string | undefined,
+): Canon {
+	const fam = typeFamily(typeName);
+	if (value === null || value === undefined) return null;
+	if (fam === undefined) return canonicalize(value);
+	const base = fam.replace(/(\[\])+$/, "");
+	if (Array.isArray(value)) {
+		const el = typeName?.startsWith("_") ? typeName.slice(1) : typeName;
+		return value.map((v) => canonicalizeTyped(v, el));
+	}
+	if (base === "json") {
+		// json (not jsonb) arrives as raw text; jsonb arrives parsed, where a
+		// JS string is a JSON string scalar ("7") and must stay one.
+		if (typeof value === "string" && typeName === "json") {
+			try {
+				return canonJsonStrict(JSON.parse(value));
+			} catch {
+				return value;
+			}
+		}
+		return canonJsonStrict(value);
+	}
+	if (base === "text" || base === "uuid" || base === "bytea") {
+		return typeof value === "string" ? value : canonicalize(value);
+	}
+	return canonicalize(value);
+}

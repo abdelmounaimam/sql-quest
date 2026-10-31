@@ -103,7 +103,7 @@ const chapter: Chapter = {
 			kind: "query",
 			concepts: ["numeric-types"],
 			solutionSql: "SELECT name, (nightly_rate * 100)::int AS cents FROM rooms;",
-			check: { type: "result" },
+			check: { type: "result", strictTypes: true },
 			hints: [
 				"Multiply first, then cast.",
 				"Casting 65.50 to int rounds it to 66 before the multiplication.",

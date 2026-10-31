@@ -6,6 +6,7 @@ import {
 } from "@tanstack/react-router";
 import { z } from "zod";
 import { BossIntro } from "#/components/game/boss-intro";
+import { DatasetGate } from "#/components/game/dataset-gate";
 import { GateCheck } from "#/components/game/gate-check";
 import { LessonPlayer } from "#/components/game/lesson-player";
 import { LevelComplete } from "#/components/game/level-complete";
@@ -13,13 +14,7 @@ import { LevelHub } from "#/components/game/level-hub";
 import { type MissionMode, MissionScreen } from "#/components/game/mission";
 import { Splash } from "#/components/game/splash";
 import { useProgress } from "#/game/progress";
-import {
-	bossOf,
-	chapterById,
-	chapters,
-	findExercise,
-	worldOfChapter,
-} from "#/lib/content";
+import { bossOf, chapters, loadChapter, worldOfChapter } from "#/lib/content";
 
 const searchSchema = z.object({
 	phase: z
@@ -37,11 +32,13 @@ export type PlaySearch = z.infer<typeof searchSchema>;
 export const Route = createFileRoute("/_game/play/$chapterId")({
 	ssr: false,
 	validateSearch: searchSchema,
-	loader: ({ params }) => {
-		const chapter = chapterById.get(params.chapterId);
+	// Full chapter = a lazy chunk (lesson bodies, prompts, solutions).
+	loader: async ({ params }) => {
+		const chapter = await loadChapter(params.chapterId);
 		if (!chapter) throw notFound();
-		return { chapterId: chapter.id };
+		return { chapter };
 	},
+	pendingComponent: () => <Splash label="Unrolling the map" />,
 	component: PlayPage,
 	notFoundComponent: () => (
 		<div className="p-10 text-center text-muted-foreground">
@@ -51,12 +48,10 @@ export const Route = createFileRoute("/_game/play/$chapterId")({
 });
 
 function PlayPage() {
-	const { chapterId } = Route.useLoaderData();
+	const { chapter } = Route.useLoaderData();
 	const search = Route.useSearch();
 	const navigate = useNavigate({ from: Route.fullPath });
 	const progress = useProgress();
-	const chapter = chapterById.get(chapterId);
-	if (!chapter) return null;
 	if (!progress.ready) return <Splash label="Loading your progress" />;
 
 	const status = progress.statuses[chapter.id];
@@ -77,20 +72,30 @@ function PlayPage() {
 
 	if (search.phase === "learn")
 		return (
-			<LessonPlayer
-				key={chapter.id}
-				chapter={chapter}
-				initialStep={search.step ?? 0}
-				onStep={(step) =>
-					void navigate({ search: { phase: "learn", step }, replace: true })
-				}
-				onFinish={toHub}
-			/>
+			<DatasetGate datasetId={chapter.datasetId}>
+				<LessonPlayer
+					key={chapter.id}
+					chapter={chapter}
+					initialStep={search.step ?? 0}
+					onStep={(step) =>
+						void navigate({ search: { phase: "learn", step }, replace: true })
+					}
+					onFinish={toHub}
+				/>
+			</DatasetGate>
 		);
 
 	if (search.phase === "mission" && search.ex) {
-		const ref = findExercise(search.ex);
-		if (!ref || ref.chapter.id !== chapter.id)
+		const main = chapter.exercises.find((e) => e.id === search.ex);
+		const drill = main
+			? undefined
+			: chapter.practice.find((e) => e.id === search.ex);
+		const ref = main
+			? { exercise: main, pool: "main" as const }
+			: drill
+				? { exercise: drill, pool: "practice" as const }
+				: undefined;
+		if (!ref)
 			return (
 				<div className="p-10 text-center text-muted-foreground">
 					Unknown mission.
@@ -131,20 +136,22 @@ function PlayPage() {
 		};
 
 		return (
-			<MissionScreen
-				key={exercise.id}
-				chapter={chapter}
-				exercise={exercise}
-				mode={mode}
-				world={world}
-				segments={
-					mode === "practice" && drillSegments.length
-						? drillSegments
-						: mainSegments
-				}
-				onNext={onNext}
-				nextLabel={mode === "review" ? "Back to the map" : "Continue"}
-			/>
+			<DatasetGate datasetId={chapter.datasetId} setupSql={exercise.setupSql}>
+				<MissionScreen
+					key={exercise.id}
+					chapter={chapter}
+					exercise={exercise}
+					mode={mode}
+					world={world}
+					segments={
+						mode === "practice" && drillSegments.length
+							? drillSegments
+							: mainSegments
+					}
+					onNext={onNext}
+					nextLabel={mode === "review" ? "Back to the map" : "Continue"}
+				/>
+			</DatasetGate>
 		);
 	}
 
@@ -174,17 +181,19 @@ function PlayPage() {
 				/>
 			);
 		return (
-			<MissionScreen
-				key={boss.id}
-				chapter={chapter}
-				exercise={boss}
-				mode="boss"
-				world={world}
-				segments={mainSegments}
-				onNext={() => setSearch({ phase: "complete" })}
-				onBossDefeat={() => setSearch({ phase: "gate" })}
-				nextLabel="Claim your rewards"
-			/>
+			<DatasetGate datasetId={chapter.datasetId} setupSql={boss.setupSql}>
+				<MissionScreen
+					key={boss.id}
+					chapter={chapter}
+					exercise={boss}
+					mode="boss"
+					world={world}
+					segments={mainSegments}
+					onNext={() => setSearch({ phase: "complete" })}
+					onBossDefeat={() => setSearch({ phase: "gate" })}
+					nextLabel="Claim your rewards"
+				/>
+			</DatasetGate>
 		);
 	}
 

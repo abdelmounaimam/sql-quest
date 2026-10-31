@@ -104,7 +104,7 @@ const chapter: Chapter = {
 			concepts: ["timezones"],
 			solutionSql:
 				"SELECT b.id, b.checked_in_at AT TIME ZONE r.timezone AS local_check_in\nFROM bookings b\nJOIN rooms ro ON ro.id = b.room_id\nJOIN realms r ON r.id = ro.realm_id\nWHERE b.status IN ('checked_in', 'checked_out');",
-			check: { type: "result" },
+			check: { type: "result", strictTypes: true },
 			hints: [
 				"The time zone lives in `realms`, reached through `rooms`.",
 				"`AT TIME ZONE` accepts a column, not only a literal.",
@@ -127,7 +127,7 @@ const chapter: Chapter = {
 				"SELECT b.id, b.created_at::date AS created_on\nFROM bookings b\nJOIN rooms ro ON ro.id = b.room_id\nWHERE ro.realm_id = 4;",
 			solutionSql:
 				"SELECT b.id, (b.created_at AT TIME ZONE r.timezone)::date AS created_on\nFROM bookings b\nJOIN rooms ro ON ro.id = b.room_id\nJOIN realms r ON r.id = ro.realm_id\nWHERE ro.realm_id = 4;",
-			check: { type: "result" },
+			check: { type: "result", strictTypes: true },
 			hints: [
 				"Run the starter: every date is one day early.",
 				"`::date` on a timestamptz cuts the day in the **session** time zone (GMT). Convert to the local wall clock first.",
@@ -148,7 +148,7 @@ const chapter: Chapter = {
 			concepts: ["timezones"],
 			solutionSql:
 				"SELECT id,\n       lower(shift) AT TIME ZONE 'Europe/Paris' AS starts,\n       upper(shift) AT TIME ZONE 'Europe/Paris' AS ends,\n       upper(shift) - lower(shift) AS duration\nFROM staff_shifts\nWHERE staff_name = 'Odile';",
-			check: { type: "result" },
+			check: { type: "result", strictTypes: true },
 			hints: [
 				"`lower` and `upper` give the bounds of the tstzrange.",
 				"Convert each bound to the Paris wall clock with AT TIME ZONE; subtract the instants for the duration.",

@@ -124,7 +124,7 @@ const chapter: Chapter = {
 			concepts: ["network-types"],
 			solutionSql:
 				"SELECT network(set_masklen(ip, 24)) AS block, count(*) AS visits\nFROM access_log\nWHERE family(ip) = 4\nGROUP BY 1;",
-			check: { type: "result" },
+			check: { type: "result", strictTypes: true },
 			hints: [
 				"Widen each address to a /24 mask, then take its network.",
 				"`set_masklen(ip, 24)` changes the mask, `network(...)` zeroes the host part; `family(ip) = 4` drops IPv6.",

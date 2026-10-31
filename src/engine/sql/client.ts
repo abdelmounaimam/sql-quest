@@ -139,11 +139,22 @@ class SqlClient {
 		});
 	}
 
-	async warm(datasetId: string, setupSql?: string) {
+	/** Builds (or restores) the dataset base and the exercise base. Returns the time spent in ms (0 if already warm). */
+	async warm(datasetId: string, setupSql?: string): Promise<number> {
 		const key = `${datasetId}\u0000${setupSql ?? ""}`;
-		if (this.warmed.has(key) && this.worker) return;
-		await this.send({ type: "warm", datasetId, setupSql }, WARM_TIMEOUT_MS);
+		if (this.warmed.has(key) && this.worker) return 0;
+		const r = await this.send(
+			{ type: "warm", datasetId, setupSql },
+			WARM_TIMEOUT_MS,
+		);
 		this.warmed.add(key);
+		return r.ms;
+	}
+
+	isWarm(datasetId: string, setupSql?: string): boolean {
+		return (
+			!!this.worker && this.warmed.has(`${datasetId}\u0000${setupSql ?? ""}`)
+		);
 	}
 
 	async run(input: RunInput) {
@@ -162,6 +173,15 @@ class SqlClient {
 
 	catalog(datasetId: string) {
 		return this.send({ type: "catalog", datasetId }, WARM_TIMEOUT_MS);
+	}
+
+	/** Catalog after setupSql and the learner's SQL (World 7 CREATE/ALTER, World 8 types, World 11 functions). */
+	async liveCatalog(datasetId: string, setupSql?: string, sql?: string) {
+		await this.warm(datasetId, setupSql);
+		return this.send(
+			{ type: "liveCatalog", datasetId, setupSql, sql },
+			JUDGE_TIMEOUT_MS,
+		);
 	}
 
 	peek(datasetId: string, table: string, limit = 50) {

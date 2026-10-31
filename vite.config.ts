@@ -14,6 +14,7 @@ import { tanstackStart } from "@tanstack/react-start/plugin/vite";
 import viteReact, { reactCompilerPreset } from "@vitejs/plugin-react";
 import { nitro } from "nitro/vite";
 import { defineConfig, type Plugin } from "vite";
+import { chapterIndex } from "./vite-plugins/chapter-index";
 
 /**
  * Dev only: Vite does not serve unknown extensions from node_modules, and
@@ -100,7 +101,22 @@ const config = defineConfig({
 		devtools(),
 		servePgliteData(),
 		pwaServiceWorker(),
-		nitro({ rollupConfig: { external: [/^@sentry\//, "node:sqlite"] } }),
+		chapterIndex(),
+		nitro({
+			rollupConfig: { external: [/^@sentry\//, "node:sqlite"] },
+			// MIME fixes for PGlite assets (*.data, *.tar.gz).
+			plugins: ["./src/server/nitro/asset-types.ts"],
+			routeRules: {
+				// Hashed build assets: cache forever.
+				"/assets/**": {
+					headers: { "cache-control": "public, max-age=31536000, immutable" },
+				},
+				// The service worker and manifest must always revalidate.
+				"/sw.js": { headers: { "cache-control": "no-cache" } },
+				"/manifest.webmanifest": { headers: { "cache-control": "no-cache" } },
+				"/api/**": { headers: { "cache-control": "no-store" } },
+			},
+		}),
 		tailwindcss(),
 		tanstackStart(),
 		viteReact(),

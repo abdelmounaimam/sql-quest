@@ -9,14 +9,23 @@ import {
 	ReactFlow,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Eye, X } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import { createContext, use, useMemo, useState } from "react";
+import {
+	createContext,
+	use,
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+} from "react";
 import type {
 	Catalog,
 	CatalogColumn,
 	CatalogTable,
 } from "#/engine/checker/pglite-provider";
+import { sqlClient } from "#/engine/sql/client";
 import { useCatalog, usePeek } from "#/game/sql-queries";
 import { datasetById } from "#/lib/content";
 import { cn } from "#/lib/utils";
@@ -171,6 +180,8 @@ interface ExplorerCtx {
 	onPeek: (t: string) => void;
 	notes?: Record<string, string>;
 	columnNotes?: Record<string, string>;
+	/** Tables ("t") and columns ("t.c") that appeared since the previous catalog. */
+	fresh: Set<string>;
 }
 const Ctx = createContext<ExplorerCtx | null>(null);
 
@@ -194,9 +205,16 @@ function ChestColumn({
 					table.sampleRows.columns.findIndex((c) => c.name === col.name)
 				]
 			: undefined;
+	const isNew = !!ctx?.fresh.has(`${table.name}.${col.name}`);
 	return (
-		<li
-			className={cn(hot && "hot")}
+		<motion.li
+			initial={isNew ? { opacity: 0, x: -8 } : false}
+			animate={{ opacity: 1, x: 0 }}
+			transition={{ duration: 0.26, ease: [0.23, 1, 0.32, 1], delay: 0.15 }}
+			className={cn(
+				hot && "hot",
+				isNew && "shadow-[inset_3px_0_0_var(--success)]",
+			)}
 			title={ctx?.columnNotes?.[`${table.name}.${col.name}`]}
 		>
 			<span
@@ -247,7 +265,7 @@ function ChestColumn({
 			) : (
 				<TypeBadge col={col} />
 			)}
-		</li>
+		</motion.li>
 	);
 }
 
@@ -262,49 +280,57 @@ export function Chest({
 	const lit = !!ctx?.active.has(table.name);
 	const dim =
 		ctx?.hovered && ctx.hovered !== table.name && !ctx.related.has(table.name);
+	const isNew = !!ctx?.fresh.has(table.name);
 	return (
-		<Card
-			variant="chest"
-			data-lit={lit}
-			className={cn(
-				"transition-opacity duration-(--duration-fast)",
-				dim && "opacity-40",
-				compact ? "w-60" : "w-full",
-			)}
-			onMouseEnter={() => ctx?.setHovered(table.name)}
-			onMouseLeave={() => ctx?.setHovered(null)}
+		<motion.div
+			initial={isNew ? { opacity: 0, y: 12, scale: 0.97 } : false}
+			animate={{ opacity: 1, y: 0, scale: 1 }}
+			transition={{ type: "spring", duration: 0.45, bounce: 0.2 }}
 		>
-			<button
-				type="button"
-				className="lid w-full text-left"
-				onClick={() => ctx?.onPeek(table.name)}
-				title="Peek at the loot"
+			<Card
+				variant="chest"
+				data-lit={lit}
+				className={cn(
+					"transition-opacity duration-(--duration-fast)",
+					dim && "opacity-40",
+					compact ? "w-60" : "w-full",
+				)}
+				onMouseEnter={() => ctx?.setHovered(table.name)}
+				onMouseLeave={() => ctx?.setHovered(null)}
 			>
-				<span className="ico">
-					<GameIcon name="chest" />
-				</span>
-				<span className="nm truncate">{table.name}</span>
-				<span className="rows flex items-center gap-1 tabular">
-					{table.kind !== "table" ? `${table.kind} · ` : ""}
-					{table.rowCount} rows <Eye className="size-3.5" />
-				</span>
-			</button>
-			{!compact && ctx?.notes?.[table.name] ? (
-				<p className="px-3 pt-2.5 text-xs text-muted-foreground">
-					{ctx.notes[table.name]}
-				</p>
-			) : null}
-			<ul className="chest-cols">
-				{table.columns.map((c) => (
-					<ChestColumn key={c.name} table={table} col={c} />
-				))}
-			</ul>
-			{lit ? (
-				<div className="px-3 pb-3">
-					<span className="lit-tag">+ In your spell</span>
-				</div>
-			) : null}
-		</Card>
+				<button
+					type="button"
+					className="lid w-full text-left"
+					onClick={() => ctx?.onPeek(table.name)}
+					title="Peek at the loot"
+				>
+					<span className="ico">
+						<GameIcon name="chest" />
+					</span>
+					<span className="nm truncate">{table.name}</span>
+					<span className="rows flex items-center gap-1 tabular">
+						{table.kind !== "table" ? `${table.kind} · ` : ""}
+						{table.rowCount} rows <Eye className="size-3.5" />
+					</span>
+				</button>
+				{!compact && ctx?.notes?.[table.name] ? (
+					<p className="px-3 pt-2.5 text-xs text-muted-foreground">
+						{ctx.notes[table.name]}
+					</p>
+				) : null}
+				<ul className="chest-cols">
+					{table.columns.map((c) => (
+						<ChestColumn key={c.name} table={table} col={c} />
+					))}
+				</ul>
+				{lit || isNew ? (
+					<div className="flex gap-2 px-3 pb-3">
+						{isNew ? <Badge variant="success">+ New chest</Badge> : null}
+						{lit ? <span className="lit-tag">+ In your spell</span> : null}
+					</div>
+				) : null}
+			</Card>
+		</motion.div>
 	);
 }
 
@@ -468,6 +494,31 @@ function PeekPanel({
 
 // ───────────────────────────── explorer
 
+/** Tables/columns present now but not in the previous catalog of this dataset. */
+function useFreshKeys(
+	datasetId: string,
+	catalog: Catalog | undefined,
+): Set<string> {
+	const prev = useRef<{ id: string; keys: Set<string> } | null>(null);
+	const keys = useMemo(() => {
+		const k = new Set<string>();
+		for (const t of catalog?.tables ?? []) {
+			k.add(t.name);
+			for (const c of t.columns) k.add(`${t.name}.${c.name}`);
+		}
+		return k;
+	}, [catalog]);
+	const fresh = useMemo(() => {
+		const p = prev.current;
+		if (!p || p.id !== datasetId || !catalog) return new Set<string>();
+		return new Set([...keys].filter((k) => !p.keys.has(k)));
+	}, [keys, datasetId, catalog]);
+	useEffect(() => {
+		if (catalog) prev.current = { id: datasetId, keys };
+	}, [keys, datasetId, catalog]);
+	return fresh;
+}
+
 /** Words of the query: tables and columns the spell touches. */
 function queryWords(sql: string): Set<string> {
 	return new Set(
@@ -486,6 +537,9 @@ export function SchemaExplorer({
 	defaultView,
 	className,
 	showTabs = true,
+	setupSql,
+	liveSql,
+	liveSeq = 0,
 }: {
 	datasetId: string;
 	activeTables?: Set<string>;
@@ -493,8 +547,30 @@ export function SchemaExplorer({
 	defaultView?: "diagram" | "chests";
 	className?: string;
 	showTabs?: boolean;
+	/** Exercise setupSql: the chests show the sandbox catalog, not the bare dataset. */
+	setupSql?: string;
+	/** Learner SQL of the last run/cast, replayed in a sandbox to show what it created. */
+	liveSql?: string;
+	/** Bumped after each run/cast. */
+	liveSeq?: number;
 }) {
-	const catalog = useCatalog(datasetId);
+	const base = useCatalog(datasetId);
+	const liveEnabled = !!setupSql?.trim() || liveSeq > 0;
+	const live = useQuery({
+		queryKey: ["liveCatalog", datasetId, setupSql ?? "", liveSeq],
+		queryFn: () =>
+			sqlClient().liveCatalog(
+				datasetId,
+				setupSql,
+				liveSeq > 0 ? liveSql : undefined,
+			),
+		enabled: liveEnabled,
+		placeholderData: keepPreviousData,
+		staleTime: Number.POSITIVE_INFINITY,
+		retry: false,
+	});
+	const catalog = liveEnabled && live.data ? live : base;
+	const fresh = useFreshKeys(datasetId, catalog.data);
 	const dataset = datasetById.get(datasetId);
 	const [hovered, setHovered] = useState<string | null>(null);
 	const [peek, setPeek] = useState<string | null>(null);
@@ -515,7 +591,14 @@ export function SchemaExplorer({
 	}, [hovered, catalog.data]);
 
 	const words = useMemo(() => queryWords(sql), [sql]);
-	const active = activeTables ?? new Set<string>();
+	// Lit chests: what the caller passed plus any table of the LIVE catalog the spell names
+	// (a table the learner just created is not in the base schema).
+	const active = useMemo(() => {
+		const out = new Set(activeTables ?? []);
+		for (const t of catalog.data?.tables ?? [])
+			if (words.has(t.name.toLowerCase())) out.add(t.name);
+		return out;
+	}, [activeTables, catalog.data, words]);
 	const unknownHint = useMemo(() => {
 		// "FROM pilot" where only "pilots" exists: suggest the near chest.
 		if (!catalog.data) return null;
@@ -542,13 +625,16 @@ export function SchemaExplorer({
 		active,
 		activeColumns: words,
 		onPeek: setPeek,
+		fresh,
 		notes: dataset?.tableNotes,
 		columnNotes: dataset?.columnNotes,
 	};
 
 	const tables = catalog.data
 		? [...catalog.data.tables].sort(
-				(a, b) => Number(active.has(b.name)) - Number(active.has(a.name)),
+				(a, b) =>
+					Number(fresh.has(b.name)) - Number(fresh.has(a.name)) ||
+					Number(active.has(b.name)) - Number(active.has(a.name)),
 			)
 		: [];
 

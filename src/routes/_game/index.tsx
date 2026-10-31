@@ -1,13 +1,20 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, Navigate } from "@tanstack/react-router";
+import { z } from "zod";
 import { GameIcon } from "#/components/game/icons";
 import { Splash } from "#/components/game/splash";
-import { NextUpCard, WorldMap } from "#/components/game/world-map";
+import {
+	activityLink,
+	NextUpCard,
+	WorldMap,
+} from "#/components/game/world-map";
 import { Badge } from "#/components/ui/badge";
 import { useGame, useProgress } from "#/game/progress";
 import { chapters, conceptName, USING_SAMPLES } from "#/lib/content";
 
 export const Route = createFileRoute("/_game/")({
 	ssr: false,
+	// ?continue=1 (PWA shortcut "Continue"): jump straight to the next activity.
+	validateSearch: z.object({ continue: z.coerce.number().optional() }),
 	component: MapPage,
 });
 
@@ -15,7 +22,10 @@ function MapPage() {
 	const progress = useProgress();
 	const name = useGame((s) => s.profile?.name);
 	const streak = useGame((s) => s.streak);
+	const search = Route.useSearch();
 	if (!progress.ready) return <Splash />;
+	const next = activityLink(progress.next);
+	if (search.continue && next) return <Navigate {...next} replace />;
 	const complete = chapters.filter(
 		(c) => progress.statuses[c.id]?.state === "complete",
 	).length;

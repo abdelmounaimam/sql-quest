@@ -18,6 +18,9 @@ const Devtools = import.meta.env.DEV
 	? lazy(() => import("#/integrations/devtools"))
 	: () => null;
 
+const DESCRIPTION =
+	"A game that teaches SQL and PostgreSQL level by level: 43 levels, 11 worlds, a real Postgres 18 engine in your browser.";
+
 /** Runs before paint: applies the saved theme so there is no flash. */
 const THEME_BOOT = `(function(){try{var s=JSON.parse(localStorage.getItem('sqlq-game')||'{}').settings||{};var t=s.theme||'dark';if(t==='system'){t=matchMedia('(prefers-color-scheme: light)').matches?'light':'dark'}var d=document.documentElement;d.classList.toggle('dark',t==='dark');d.style.colorScheme=t;if(s.reducedMotion==='reduce')d.classList.add('reduce-motion')}catch(e){}})()`;
 
@@ -31,11 +34,25 @@ export const Route = createRootRouteWithContext<RouterContext>()({
 					"width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content",
 			},
 			{ title: "SQL Quest: level up your PostgreSQL" },
+			{ name: "description", content: DESCRIPTION },
+			{ name: "application-name", content: "SQL Quest" },
+			{ name: "apple-mobile-web-app-title", content: "SQL Quest" },
+			{ property: "og:type", content: "website" },
+			{ property: "og:site_name", content: "SQL Quest" },
+			{ property: "og:title", content: "SQL Quest: level up your PostgreSQL" },
+			{ property: "og:description", content: DESCRIPTION },
+			{ property: "og:image", content: "/brand/og-image.png" },
+			{ property: "og:image:width", content: "1200" },
+			{ property: "og:image:height", content: "630" },
 			{
-				name: "description",
+				property: "og:image:alt",
 				content:
-					"A game that teaches SQL and PostgreSQL level by level, right in your browser.",
+					"SQL Quest: Wick the lantern flame next to the SQL Quest wordmark",
 			},
+			{ name: "twitter:card", content: "summary_large_image" },
+			{ name: "twitter:title", content: "SQL Quest: level up your PostgreSQL" },
+			{ name: "twitter:description", content: DESCRIPTION },
+			{ name: "twitter:image", content: "/brand/og-image.png" },
 			{
 				name: "theme-color",
 				content: "#FBF5E9",
@@ -70,8 +87,14 @@ export const Route = createRootRouteWithContext<RouterContext>()({
 			},
 			{ rel: "stylesheet", href: appCss },
 			{ rel: "manifest", href: "/manifest.webmanifest" },
-			{ rel: "icon", href: "/icons/icon.svg", type: "image/svg+xml" },
-			{ rel: "apple-touch-icon", href: "/icons/apple-touch-icon.png" },
+			{ rel: "icon", href: "/favicon.ico", sizes: "48x48" },
+			{ rel: "icon", href: "/favicon.svg", type: "image/svg+xml" },
+			{ rel: "icon", href: "/favicon.png", type: "image/png", sizes: "48x48" },
+			{
+				rel: "apple-touch-icon",
+				href: "/icons/apple-touch-icon.png",
+				sizes: "180x180",
+			},
 		],
 		scripts: [{ children: THEME_BOOT }],
 	}),

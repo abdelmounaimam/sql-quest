@@ -31,8 +31,13 @@ export interface StoredLesson {
 	completedAt: number;
 }
 
+/**
+ * SQL_QUEST_DB points at the sqlite file (Railway: a volume at /data,
+ * SQL_QUEST_DB=/data/sql-quest.db). Its parent dir is created on first use.
+ * Local dev default: ./.data/sql-quest.db.
+ */
 const DB_PATH = resolve(
-	process.env.SQL_QUEST_DB ?? resolve(process.cwd(), ".data/sql-quest.db"),
+	process.env.SQL_QUEST_DB || resolve(process.cwd(), ".data/sql-quest.db"),
 );
 
 let db: DatabaseSync | null = null;
@@ -85,6 +90,14 @@ function rowToProfile(r: Record<string, unknown>): ProfileRow {
 }
 
 export const repo = {
+	/** Trivial query for health checks. */
+	ping(): boolean {
+		const r = open().prepare("select 1 as ok").get() as
+			| { ok: number }
+			| undefined;
+		return r?.ok === 1;
+	},
+
 	getProfile(id: string): ProfileRow | null {
 		const r = open().prepare("select * from profiles where id = ?").get(id);
 		return r ? rowToProfile(r as Record<string, unknown>) : null;

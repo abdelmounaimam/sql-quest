@@ -7,6 +7,7 @@ const cases: Record<string, CaseSet> = {
 	},
 	"ch29-ex01": {
 		reject: [
+			{ sql: "SELECT name, nightly_rate * 100 AS cents FROM rooms;", why: "numeric cents, not an integer (strictTypes)" },
 			{ sql: "SELECT name, nightly_rate::int * 100 FROM rooms;", why: "casts (rounds) before multiplying" },
 			{ sql: "SELECT name, nightly_rate FROM rooms;", why: "not in cents" },
 		],

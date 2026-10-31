@@ -190,3 +190,16 @@ describe("errors", () => {
 		});
 	});
 });
+
+describe("strict type families", () => {
+	it("maps pg types to families and pretty names", async () => {
+		const { typeFamily, prettyType } = await import("./normalize");
+		expect(typeFamily("int8")).toBe("integer");
+		expect(typeFamily("int2")).toBe(typeFamily("int4"));
+		expect(typeFamily("numeric")).not.toBe(typeFamily("float8"));
+		expect(typeFamily("_text")).toBe("text[]");
+		expect(typeFamily("varchar")).toBe("text");
+		expect(typeFamily("timestamptz")).not.toBe(typeFamily("timestamp"));
+		expect(prettyType("_int4")).toBe("integer[]");
+	});
+});

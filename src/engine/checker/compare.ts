@@ -3,7 +3,9 @@ import {
 	type Canon,
 	canonEqual,
 	canonicalize,
+	canonicalizeTyped,
 	DEFAULT_TOLERANCE,
+	typeFamily,
 } from "./normalize";
 import type { DiffRow, ResultTable, TableDiff } from "./types";
 
@@ -11,6 +13,8 @@ export interface CompareOptions {
 	orderMatters?: boolean;
 	matchColumnNames?: boolean;
 	tolerance?: number;
+	/** Compare column type families and do not coerce values (Check.strictTypes). */
+	strictTypes?: boolean;
 	/** Max rows kept per side in the returned diff (default 500). */
 	displayLimit?: number;
 }
@@ -18,6 +22,7 @@ export interface CompareOptions {
 export type CompareErrorType =
 	| "wrong_column_count"
 	| "wrong_column_names"
+	| "wrong_types"
 	| "wrong_row_count"
 	| "wrong_order"
 	| "wrong_values";
@@ -26,7 +31,7 @@ export interface CompareResult {
 	equal: boolean;
 	errorType?: CompareErrorType;
 	diff: TableDiff;
-	/** For wrong_column_names: 0-based index of the first differing column. */
+	/** For wrong_column_names / wrong_types: 0-based index of the first differing column. */
 	columnIndex?: number;
 	/** Column indexes (expected side) involved in value differences, most frequent first. */
 	suspectColumns: number[];
@@ -134,8 +139,13 @@ export function compareTables(
 ): CompareResult {
 	const tol = options.tolerance ?? DEFAULT_TOLERANCE;
 	const limit = options.displayLimit ?? 500;
-	const exp = expected.rows.map((r) => r.map(canonicalize));
-	const gt = got.rows.map((r) => r.map(canonicalize));
+	const canonRow = (table: ResultTable) =>
+		options.strictTypes
+			? (r: unknown[]) =>
+					r.map((v, i) => canonicalizeTyped(v, table.columns[i]?.typeName))
+			: (r: unknown[]) => r.map(canonicalize);
+	const exp = expected.rows.map(canonRow(expected));
+	const gt = got.rows.map(canonRow(got));
 	const expectedColumns = expected.columns.length;
 	const gotColumns = got.columns.length;
 
@@ -248,6 +258,20 @@ export function compareTables(
 					...base,
 					equal: false,
 					errorType: "wrong_column_names",
+					columnIndex: i,
+				};
+			}
+		}
+	}
+	if (options.strictTypes) {
+		for (let i = 0; i < expectedColumns; i++) {
+			const e = typeFamily(expected.columns[i].typeName);
+			const g = typeFamily(got.columns[i].typeName);
+			if (e !== undefined && g !== undefined && e !== g) {
+				return {
+					...base,
+					equal: false,
+					errorType: "wrong_types",
 					columnIndex: i,
 				};
 			}

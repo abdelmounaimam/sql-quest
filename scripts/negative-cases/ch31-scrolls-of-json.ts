@@ -17,6 +17,8 @@ const cases: Record<string, CaseSet> = {
 	},
 	"ch31-ex02": {
 		reject: [
+			{ sql: "SELECT hero_id, doc -> 'coins' -> 'gold' AS gold FROM inventories WHERE doc -> 'coins' ? 'gold' ORDER BY (doc -> 'coins' ->> 'gold')::int DESC;", why: "jsonb number, not an integer (strictTypes)" },
+			{ sql: "SELECT hero_id, doc -> 'coins' ->> 'gold' AS gold FROM inventories WHERE doc -> 'coins' ? 'gold' ORDER BY (doc -> 'coins' ->> 'gold')::int DESC;", why: "text gold in the right order, still not an integer (strictTypes)" },
 			{ sql: "SELECT hero_id, doc -> 'coins' ->> 'gold' AS gold FROM inventories WHERE doc -> 'coins' ? 'gold' ORDER BY gold DESC;", why: "text sort: 980 before 3000" },
 			{ sql: "SELECT hero_id, (doc -> 'coins' ->> 'gold')::int AS gold FROM inventories ORDER BY gold DESC;", why: "keeps inventories without gold (NULL first)" },
 		],
@@ -54,6 +56,7 @@ const cases: Record<string, CaseSet> = {
 	},
 	"ch31-ex07": {
 		reject: [
+			{ sql: "SELECT i.hero_id, it -> 'item' AS item, it -> 'qty' AS qty FROM inventories i, jsonb_array_elements(i.doc -> 'bags') AS b, jsonb_array_elements(b -> 'items') AS it;", why: "jsonb values instead of text and integer (strictTypes)" },
 			{ sql: "SELECT i.hero_id, it ->> 'item', (it ->> 'qty')::int FROM inventories i, jsonb_array_elements(i.doc -> 'bags' -> 0 -> 'items') it;", why: "first bag only" },
 		],
 		accept: [

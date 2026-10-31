@@ -6,7 +6,7 @@ import {
 	toSqlErrorInfo,
 } from "./errors";
 import { findForbidden } from "./forbidden";
-import { toDisplayValue } from "./normalize";
+import { prettyType, toDisplayValue } from "./normalize";
 import type {
 	ErrorType,
 	JudgeInput,
@@ -18,6 +18,7 @@ import type {
 	Sandbox,
 	SandboxProvider,
 	SqlErrorInfo,
+	StatementOutcome,
 	Verdict,
 } from "./types";
 
@@ -57,16 +58,48 @@ function lastWithColumns(tables: ResultTable[]): ResultTable | undefined {
 }
 
 type ExecOutcome =
-	| { ok: true; tables: ResultTable[] }
-	| { ok: false; error: SqlErrorInfo };
+	| { ok: true; tables: ResultTable[]; statements: StatementOutcome[] }
+	| { ok: false; error: SqlErrorInfo; statements: StatementOutcome[] };
 
+/**
+ * Runs a script psql style when the sandbox supports it (see execScript in
+ * pglite-provider): an error inside a transaction block that is later
+ * recovered with ROLLBACK [TO SAVEPOINT] does not fail the script.
+ */
 async function execSafe(sandbox: Sandbox, sql: string): Promise<ExecOutcome> {
+	if (sandbox.execScript) {
+		try {
+			const out = await sandbox.execScript(sql);
+			if (out.error !== undefined)
+				return {
+					ok: false,
+					error: toSqlErrorInfo(out.error, sql),
+					statements: out.statements,
+				};
+			return {
+				ok: true,
+				tables: out.results.map(toResultTable),
+				statements: out.statements,
+			};
+		} catch (err) {
+			return { ok: false, error: toSqlErrorInfo(err, sql), statements: [] };
+		}
+	}
 	try {
 		const raw = await sandbox.exec(sql);
-		return { ok: true, tables: raw.map(toResultTable) };
+		return { ok: true, tables: raw.map(toResultTable), statements: [] };
 	} catch (err) {
-		return { ok: false, error: toSqlErrorInfo(err, sql) };
+		return { ok: false, error: toSqlErrorInfo(err, sql), statements: [] };
 	}
+}
+
+/** Errors raised by the script itself (not the 25P02 cascade of an aborted transaction). */
+function scriptErrors(out: ExecOutcome): SqlErrorInfo[] {
+	const errs = out.statements
+		.filter((s) => s.error && !s.aborted)
+		.map((s) => s.error as SqlErrorInfo);
+	if (!errs.length && !out.ok) return [out.error];
+	return errs;
 }
 
 async function closeQuietly(sandbox: Sandbox | undefined) {
@@ -161,6 +194,13 @@ function compareTexts(
 				message: `Column ${i + 1} differs: expected "${expected.columns[i]?.name}", got "${got.columns[i]?.name}". Use AS to rename it.`,
 			};
 		}
+		case "wrong_types": {
+			const i = c.columnIndex ?? 0;
+			return {
+				title: "Wrong type",
+				message: `Column ${i + 1}${got.columns[i]?.name ? ` ("${got.columns[i].name}")` : ""} has type ${prettyType(got.columns[i]?.typeName)}, expected ${prettyType(expected.columns[i]?.typeName)}. The values may look alike, but the types differ: cast it (::type) or pick the right function.`,
+			};
+		}
 		case "wrong_row_count":
 			return {
 				title: "Wrong number of rows",
@@ -194,8 +234,12 @@ function compareTexts(
 
 function baseVerdict(
 	t0: number,
-): Pick<Verdict, "learnerResults" | "durationMs"> {
-	return { learnerResults: [], durationMs: Math.round(now() - t0) };
+): Pick<Verdict, "learnerResults" | "statements" | "durationMs"> {
+	return {
+		learnerResults: [],
+		statements: [],
+		durationMs: Math.round(now() - t0),
+	};
 }
 
 function preflight(
@@ -242,6 +286,7 @@ export async function runSql(
 			results: [],
 			errorType: pre.type,
 			error: { message: pre.message },
+			statements: [],
 			durationMs: Math.round(now() - t0),
 		};
 	}
@@ -255,6 +300,7 @@ export async function runSql(
 				results: [],
 				error: out.error,
 				errorType: classifyError(out.error.code),
+				statements: out.statements,
 				durationMs: Math.round(now() - t0),
 			};
 		}
@@ -263,6 +309,7 @@ export async function runSql(
 			ok: true,
 			results,
 			last: lastWithColumns(results),
+			statements: out.statements,
 			durationMs: Math.round(now() - t0),
 		};
 	} catch (err) {
@@ -271,6 +318,7 @@ export async function runSql(
 			results: [],
 			errorType: "internal",
 			error: toSqlErrorInfo(err, ""),
+			statements: [],
 			durationMs: Math.round(now() - t0),
 		};
 	} finally {
@@ -308,9 +356,13 @@ export async function judge(
 			? learner.tables.map((t) => truncate(t, limit))
 			: [];
 		const learnerLast = lastWithColumns(learnerResults);
-		const learnerPart = { learnerResults, learnerLast };
+		const learnerPart = {
+			learnerResults,
+			learnerLast,
+			statements: learner.statements,
+		};
 		const done = (
-			v: Omit<Verdict, "durationMs" | "learnerResults">,
+			v: Omit<Verdict, "durationMs" | "learnerResults" | "statements">,
 		): Verdict => ({
 			...learnerPart,
 			...v,
@@ -318,8 +370,12 @@ export async function judge(
 		});
 
 		// --- error checks -------------------------------------------------
+		// The mission passes when ANY statement of the script failed with the
+		// expected SQLSTATE, even if a later ROLLBACK [TO SAVEPOINT] recovered
+		// the transaction (psql semantics). The 25P02 cascade is ignored.
 		if (check.type === "error") {
-			if (learner.ok) {
+			const errors = scriptErrors(learner);
+			if (!errors.length) {
 				return done({
 					pass: false,
 					errorType: "expected_error",
@@ -327,20 +383,22 @@ export async function judge(
 					message: `Your SQL ran without error, but this mission wants it to fail with ${describeSqlstate(check.sqlstate)}.`,
 				});
 			}
-			if (learner.error.code === check.sqlstate) {
+			const hit = errors.find((e) => e.code === check.sqlstate);
+			if (hit) {
 				return done({
 					pass: true,
 					title: "Correct!",
-					message: `Postgres refused it with ${describeSqlstate(check.sqlstate)}, exactly as expected: ${learner.error.message}.`,
-					sqlError: learner.error,
+					message: `Postgres refused it with ${describeSqlstate(check.sqlstate)}, exactly as expected: ${hit.message}.`,
+					sqlError: hit,
 				});
 			}
+			const first = errors[0];
 			return done({
 				pass: false,
 				errorType: "wrong_error",
 				title: "Wrong error",
-				message: `Expected ${describeSqlstate(check.sqlstate)}, got ${describeSqlstate(learner.error.code)}: ${learner.error.message}.`,
-				sqlError: learner.error,
+				message: `Expected ${describeSqlstate(check.sqlstate)}, got ${describeSqlstate(first.code)}: ${first.message}.`,
+				sqlError: first,
 			});
 		}
 
@@ -366,7 +424,10 @@ export async function judge(
 			});
 		}
 
-		const verdict: Omit<Verdict, "durationMs" | "learnerResults"> = {
+		const verdict: Omit<
+			Verdict,
+			"durationMs" | "learnerResults" | "statements"
+		> = {
 			pass: true,
 			title: "Correct!",
 			message: "",
@@ -403,6 +464,7 @@ export async function judge(
 				orderMatters: check.orderMatters,
 				matchColumnNames: check.matchColumnNames,
 				tolerance: check.type === "result" ? check.tolerance : undefined,
+				strictTypes: check.strictTypes,
 				displayLimit: limit,
 			});
 			verdict.diff = cmp.diff;
@@ -470,6 +532,7 @@ export async function judge(
 			const cmp = compareTables(expTable, gotTable, {
 				orderMatters: check.orderMatters,
 				matchColumnNames: check.matchColumnNames,
+				strictTypes: check.strictTypes,
 				displayLimit: limit,
 			});
 			verdict.stateDiff = cmp.diff;
@@ -512,6 +575,7 @@ export function timeoutVerdict(ms: number): Verdict {
 		title: "Too slow",
 		message: timeoutText(ms),
 		learnerResults: [],
+		statements: [],
 		durationMs: ms,
 	};
 }
@@ -522,6 +586,7 @@ export function timeoutRunOutcome(ms: number): RunOutcome {
 		results: [],
 		errorType: "timeout",
 		error: { message: timeoutText(ms) },
+		statements: [],
 		durationMs: ms,
 	};
 }

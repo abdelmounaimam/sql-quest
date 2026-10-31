@@ -7,6 +7,7 @@ const cases: Record<string, CaseSet> = {
 	},
 	"ch33-ex01": {
 		reject: [
+			{ sql: "SELECT b.id, (b.checked_in_at AT TIME ZONE r.timezone) AT TIME ZONE 'UTC' AS local_check_in FROM bookings b JOIN rooms ro ON ro.id = b.room_id JOIN realms r ON r.id = ro.realm_id WHERE b.status IN ('checked_in', 'checked_out');", why: "wall clock turned back into a timestamptz (strictTypes)" },
 			{ sql: "SELECT b.id, b.checked_in_at AT TIME ZONE 'UTC' FROM bookings b WHERE b.status IN ('checked_in', 'checked_out');", why: "Crossroads clock for everyone" },
 			{ sql: "SELECT b.id, b.checked_in_at FROM bookings b WHERE b.status IN ('checked_in', 'checked_out');", why: "instant, not local wall clock" },
 			{ sql: "SELECT b.id, b.checked_in_at AT TIME ZONE r.timezone FROM bookings b JOIN rooms ro ON ro.id = b.room_id JOIN realms r ON r.id = ro.realm_id WHERE b.status IN ('checked_in', 'checked_out') AND b.checked_in_at IS NOT NULL;", why: "drops booking 9" },
@@ -15,6 +16,7 @@ const cases: Record<string, CaseSet> = {
 	},
 	"ch33-ex02": {
 		reject: [
+			{ sql: "SELECT b.id, date_trunc('day', b.created_at AT TIME ZONE r.timezone) AS created_on FROM bookings b JOIN rooms ro ON ro.id = b.room_id JOIN realms r ON r.id = ro.realm_id WHERE ro.realm_id = 4;", why: "a midnight timestamp, not a date (strictTypes)" },
 			{ sql: "SELECT b.id, (b.created_at AT TIME ZONE 'UTC')::date FROM bookings b JOIN rooms ro ON ro.id = b.room_id WHERE ro.realm_id = 4;", why: "UTC date" },
 			{ sql: "SELECT b.id, date_trunc('day', b.created_at) FROM bookings b JOIN rooms ro ON ro.id = b.room_id WHERE ro.realm_id = 4;", why: "date_trunc in the session time zone" },
 		],
@@ -22,6 +24,7 @@ const cases: Record<string, CaseSet> = {
 	},
 	"ch33-ex03": {
 		reject: [
+			{ sql: "SELECT id, (lower(shift) AT TIME ZONE 'Europe/Paris') AT TIME ZONE 'UTC', (upper(shift) AT TIME ZONE 'Europe/Paris') AT TIME ZONE 'UTC', upper(shift) - lower(shift) FROM staff_shifts WHERE staff_name = 'Odile';", why: "wall clock as timestamptz (strictTypes)" },
 			{ sql: "SELECT id, lower(shift) AT TIME ZONE 'Europe/Paris', upper(shift) AT TIME ZONE 'Europe/Paris', (upper(shift) AT TIME ZONE 'Europe/Paris') - (lower(shift) AT TIME ZONE 'Europe/Paris') FROM staff_shifts WHERE staff_name = 'Odile';", why: "wall clock difference ignores DST" },
 			{ sql: "SELECT id, lower(shift), upper(shift), upper(shift) - lower(shift) FROM staff_shifts WHERE staff_name = 'Odile';", why: "GMT instants instead of Paris wall clock" },
 		],

@@ -7,6 +7,7 @@ const cases: Record<string, CaseSet> = {
 	},
 	"ch32-ex01": {
 		reject: [
+			{ sql: "SELECT hero_id, jsonb_path_query(doc, '$.bags[*].items[*] ? (@.qty > 2).item') AS item FROM inventories;", why: "jsonb strings, not text (strictTypes)" },
 			{ sql: "SELECT hero_id, jsonb_path_query(doc, '$.bags[*].items[0] ? (@.qty > 2).item') #>> '{}' FROM inventories;", why: "first item of each bag only" },
 			{ sql: "SELECT hero_id, jsonb_path_query(doc, '$.bags[*].items[*] ? (@.qty >= 2).item') #>> '{}' FROM inventories;", why: "2 included" },
 		],
@@ -35,6 +36,7 @@ const cases: Record<string, CaseSet> = {
 	},
 	"ch32-ex04": {
 		reject: [
+			{ sql: "SELECT i.hero_id, jt.slot, jt.item, jt.qty FROM inventories i, JSON_TABLE(i.doc, '$.bags[*]' COLUMNS (slot text PATH '$.slot', NESTED PATH '$.items[*]' COLUMNS (item text PATH '$.item', qty text PATH '$.qty'))) AS jt;", why: "slot and qty declared as text (strictTypes)" },
 			{ sql: "SELECT i.hero_id, (b ->> 'slot')::int, it ->> 'item', (it ->> 'qty')::int FROM inventories i, jsonb_array_elements(i.doc -> 'bags') b, jsonb_array_elements(b -> 'items') it;", why: "drops Finn's empty bag" },
 		],
 		accept: [
@@ -87,6 +89,18 @@ const cases: Record<string, CaseSet> = {
 	},
 	"ch32-pr08": {
 		reject: [{ sql: "SELECT hero_id FROM hero_titles WHERE titles ?| ARRAY['title', 'since'];", why: "any key, not all" }],
+	},
+	"ch32-pr02": {
+		reject: [{ sql: "SELECT hero_id, json_value(doc, '$.coins.gold') AS gold FROM inventories;", why: "json_value returns text by default (strictTypes)" }],
+		accept: ["SELECT hero_id, json_value(doc, '$.coins.gold' RETURNING integer) FROM inventories;"],
+	},
+	"ch32-pr03": {
+		reject: [
+			{
+				sql: "SELECT jt.* FROM items, JSON_TABLE(attributes, '$' COLUMNS (set text PATH '$.set', level text PATH '$.requires.level', slots jsonb PATH '$.slots')) AS jt WHERE id = 2;",
+				why: "level declared as text (strictTypes)",
+			},
+		],
 	},
 };
 

@@ -97,7 +97,7 @@ const chapter: Chapter = {
 			concepts: ["sql-json-path"],
 			solutionSql:
 				"SELECT hero_id, jsonb_path_query(doc, '$.bags[*].items[*] ? (@.qty > 2).item') #>> '{}' AS item\nFROM inventories;",
-			check: { type: "result" },
+			check: { type: "result", strictTypes: true },
 			hints: [
 				"Walk every bag and every item, then filter on qty.",
 				"`jsonb_path_query(doc, '$.bags[*].items[*] ? (@.qty > 2)')` returns the items; add `.item` to get the name.",
@@ -154,7 +154,7 @@ const chapter: Chapter = {
 			concepts: ["json-table"],
 			solutionSql:
 				"SELECT i.hero_id, jt.slot, jt.item, jt.qty\nFROM inventories i,\n     JSON_TABLE(i.doc, '$.bags[*]'\n       COLUMNS (slot int PATH '$.slot',\n                NESTED PATH '$.items[*]'\n                  COLUMNS (item text PATH '$.item', qty int PATH '$.qty'))) AS jt;",
-			check: { type: "result" },
+			check: { type: "result", strictTypes: true },
 			hints: [
 				"The row path is the bags; the items are an array inside each bag.",
 				"`NESTED PATH '$.items[*]' COLUMNS (...)` unrolls the inner array and keeps empty bags as a NULL row.",
@@ -276,7 +276,7 @@ const chapter: Chapter = {
 			kind: "query",
 			concepts: ["sql-json-path"],
 			solutionSql: "SELECT hero_id, json_value(doc, '$.coins.gold' RETURNING int) AS gold FROM inventories;",
-			check: { type: "result" },
+			check: { type: "result", strictTypes: true },
 			hints: [
 				"json_value extracts one scalar.",
 				"Add `RETURNING int` to type it.",
@@ -294,7 +294,7 @@ const chapter: Chapter = {
 			concepts: ["json-table"],
 			solutionSql:
 				"SELECT jt.*\nFROM items,\n     JSON_TABLE(attributes, '$' COLUMNS (set text PATH '$.set', level int PATH '$.requires.level', slots jsonb PATH '$.slots')) AS jt\nWHERE id = 2;",
-			check: { type: "result" },
+			check: { type: "result", strictTypes: true },
 			hints: [
 				"The row path is the root `$`: one row per document.",
 				"Each column gets a type and a PATH.",

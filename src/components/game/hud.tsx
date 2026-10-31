@@ -1,5 +1,12 @@
 import { Link } from "@tanstack/react-router";
-import { Map as MapIcon, Settings, User, Volume2, VolumeX } from "lucide-react";
+import {
+	Dumbbell,
+	Map as MapIcon,
+	Settings,
+	User,
+	Volume2,
+	VolumeX,
+} from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useState } from "react";
 import { levelFromXp } from "#/engine/adaptive";
@@ -8,7 +15,8 @@ import { useGame } from "#/game/progress";
 import { gameActions } from "#/game/store";
 import { cn } from "#/lib/utils";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
-import { GameIcon, Wick } from "./icons";
+import { GameIcon } from "./icons";
+import { Logo } from "./logo";
 
 export function useEngineStatus(): EngineStatus {
 	const [s, setS] = useState<EngineStatus>("idle");
@@ -128,7 +136,7 @@ function EngineDot() {
 	const online = useOnline();
 	return (
 		<span
-			className="hidden items-center gap-1.5 text-xs font-bold text-muted-foreground lg:flex"
+			className="hidden items-center gap-1.5 text-xs font-bold text-muted-foreground md:flex lg:hidden"
 			title="SQL engine: PGlite (PostgreSQL 18) in a Web Worker"
 		>
 			<span
@@ -170,16 +178,7 @@ function SoundToggle() {
 }
 
 export function Brand({ compact }: { compact?: boolean }) {
-	return (
-		<span className="flex items-center gap-2">
-			<Wick className="h-9 w-[30px]" />
-			{compact ? null : (
-				<span className="font-display text-[22px] leading-none tracking-[0.02em] text-foreground">
-					SQL Quest
-				</span>
-			)}
-		</span>
-	);
+	return <Logo compact={compact} size="sm" />;
 }
 
 const NAV = [
@@ -207,7 +206,10 @@ export function Hud() {
 				<AetherStat className="hidden sm:inline-flex" />
 				<div className="flex-1" />
 				<EngineDot />
-				<nav className="hidden items-center gap-1 md:flex" aria-label="Main">
+				<nav
+					className="hidden items-center gap-1 md:flex lg:hidden"
+					aria-label="Main"
+				>
 					{NAV.map(({ to, label, icon: Icon }) => (
 						<Link
 							key={to}
@@ -242,5 +244,85 @@ export function TabBar() {
 				))}
 			</div>
 		</nav>
+	);
+}
+
+/**
+ * Desktop left rail (lg+): Map, Practice, Profile, Settings. The top bar keeps
+ * the brand and stats; its nav hides at lg so the rail is the one navigation.
+ */
+export function LeftRail({ practice }: { practice?: React.ReactNode }) {
+	return (
+		<aside
+			className="sticky top-14 hidden h-[calc(100dvh-3.5rem)] flex-col gap-2 border-r-2 border-border px-4 py-6 lg:flex"
+			aria-label="Main"
+		>
+			{NAV.slice(0, 1).map(({ to, label, icon: Icon }) => (
+				<RailLink
+					key={to}
+					to={to}
+					label={label}
+					icon={<Icon strokeWidth={2.25} />}
+				/>
+			))}
+			{practice ?? (
+				<span
+					className="flex h-12 items-center gap-3 rounded-lg px-4 text-[15px] font-extrabold text-muted-foreground opacity-60"
+					title="No drill or review due right now"
+				>
+					<Dumbbell strokeWidth={2.25} className="size-5" /> Practice
+				</span>
+			)}
+			{NAV.slice(1).map(({ to, label, icon: Icon }) => (
+				<RailLink
+					key={to}
+					to={to}
+					label={label}
+					icon={<Icon strokeWidth={2.25} />}
+				/>
+			))}
+			<div className="mt-auto">
+				<EngineDotRail />
+			</div>
+		</aside>
+	);
+}
+
+function RailLink({
+	to,
+	label,
+	icon,
+}: {
+	to: "/" | "/profile" | "/settings";
+	label: string;
+	icon: React.ReactNode;
+}) {
+	return (
+		<Link
+			to={to}
+			activeOptions={{ exact: to === "/" }}
+			className="flex h-12 items-center gap-3 rounded-lg border-2 border-transparent px-4 text-[15px] font-extrabold text-muted-foreground hover:bg-accent hover:text-foreground data-[status=active]:border-border data-[status=active]:bg-card data-[status=active]:text-(--syn-keyword) data-[status=active]:shadow-[0_3px_0_var(--ledge)] [&_svg]:size-5"
+		>
+			{icon}
+			{label}
+		</Link>
+	);
+}
+
+function EngineDotRail() {
+	const engine = useEngineStatus();
+	return (
+		<span
+			className="flex items-center gap-2 text-xs font-bold text-muted-foreground"
+			title="SQL engine: PGlite (PostgreSQL 18) in a Web Worker"
+		>
+			<span
+				className={cn(
+					"size-2 rounded-full",
+					engine === "idle" ? "bg-success" : "animate-pulse bg-lantern",
+				)}
+			/>
+			Postgres 18 · TZ GMT
+		</span>
 	);
 }

@@ -14,6 +14,7 @@ import {
 } from "@electric-sql/pglite";
 import type { ExtensionName } from "#/content/types";
 import { toResultTable } from "./checker";
+import { toSqlErrorInfo } from "./errors";
 import { splitStatements } from "./split";
 import type {
 	RawField,
@@ -21,6 +22,8 @@ import type {
 	ResultTable,
 	Sandbox,
 	SandboxProvider,
+	ScriptOutcome,
+	StatementOutcome,
 } from "./types";
 
 /**
@@ -63,6 +66,116 @@ function shiftErrorPosition(err: unknown, offset: number): unknown {
 			position: String(pos + offset),
 		});
 	}
+}
+
+/** Statement text for the per-statement log: first line-ish, at most 200 chars. */
+function clip(text: string): string {
+	const t = text.replace(/\s+/g, " ").trim();
+	return t.length > 200 ? `${t.slice(0, 199)}…` : t;
+}
+
+function inTransaction(db: PGliteInterface, fallback: boolean): boolean {
+	const fn = (db as unknown as { isInTransaction?: () => boolean })
+		.isInTransaction;
+	return typeof fn === "function" ? fn.call(db) : fallback;
+}
+
+/**
+ * Errors without a position (constraint violations, 25P02...) point at the
+ * start of their statement, so the editor can still mark the right line.
+ */
+function withStatementPosition(err: unknown, offset: number): unknown {
+	if (!err || typeof err !== "object") return err;
+	const e = err as { position?: string | number };
+	if (e.position !== undefined && e.position !== null && e.position !== "")
+		return err;
+	try {
+		e.position = String(offset + 1);
+	} catch {
+		// frozen error object: keep it as is
+	}
+	return err;
+}
+
+/** Strip leading comments to look at the statement keyword. */
+function keyword(text: string): string {
+	return text
+		.replace(/^(\s|--[^\n]*\n?|\/\*[\s\S]*?\*\/)+/, "")
+		.slice(0, 40)
+		.toLowerCase();
+}
+
+/**
+ * Run a script on a raw PGlite db, psql style (no ON_ERROR_STOP):
+ *  - statements run one by one (VACUUM, CALL with COMMIT... work);
+ *  - outside a transaction block the first error stops the script;
+ *  - inside BEGIN ... an error aborts the transaction: the following
+ *    statements fail with 25P02 (logged with `aborted: true`) until ROLLBACK
+ *    or ROLLBACK TO SAVEPOINT succeeds, which recovers the script;
+ *  - COMMIT / END on an aborted transaction silently rolls back (tag
+ *    ROLLBACK): the script is NOT recovered, the first error is reported.
+ * Never throws for SQL errors: `error` is the unrecovered error, with its
+ * position shifted onto the full script.
+ */
+export async function execScript(
+	db: PGliteInterface,
+	sql: string,
+): Promise<ScriptOutcome> {
+	const results: RawResult[] = [];
+	const statements: StatementOutcome[] = [];
+	let pending: unknown;
+	let textTx = false;
+	const stmts = splitStatements(sql);
+	for (let i = 0; i < stmts.length; i++) {
+		const st = stmts[i];
+		const kw = keyword(st.text);
+		const entry: StatementOutcome = {
+			index: i,
+			sql: clip(st.text),
+			offset: st.offset,
+			ok: false,
+		};
+		try {
+			const part = (await db.exec(st.text, {
+				rowMode: "array",
+				parsers: RAW_TEXT_PARSERS,
+			})) as unknown as RawResult[];
+			results.push(...part);
+			const last = part.at(-1);
+			entry.ok = true;
+			entry.command = last?.command ?? kw.split(/\s/)[0]?.toUpperCase();
+			if (last)
+				entry.rowCount = last.fields.length
+					? last.rows.length
+					: (last.affectedRows ?? undefined);
+			statements.push(entry);
+			if (/^(begin|start\s+transaction)\b/.test(kw)) textTx = true;
+			if (
+				/^(commit|end|rollback|abort)\b/.test(kw) &&
+				!/^rollback\s+to\b/.test(kw)
+			)
+				textTx = false;
+			// Success while aborted = ROLLBACK [TO SAVEPOINT] (recovered) or a
+			// COMMIT that turned into a rollback (not recovered).
+			if (pending !== undefined && !/^(commit|end)\b/.test(kw))
+				pending = undefined;
+		} catch (err) {
+			const shifted = withStatementPosition(
+				shiftErrorPosition(err, st.offset),
+				st.offset,
+			);
+			entry.error = toSqlErrorInfo(shifted, sql);
+			const inTx = inTransaction(db, textTx);
+			if (pending !== undefined && entry.error.code === "25P02")
+				entry.aborted = true;
+			statements.push(entry);
+			if (!inTx) return { results, statements, error: pending ?? shifted };
+			if (pending === undefined) pending = shifted;
+		}
+	}
+	return pending === undefined
+		? { results, statements }
+		: { results, statements, error: pending };
 }
 
 export interface DatasetSource {
@@ -154,7 +267,19 @@ function annotate(
 	}));
 }
 
+export interface PGliteProviderOptions {
+	/** Return a dumpDataDir() snapshot of the initialised base DB, if cached. */
+	restore?: (def: DatasetSource) => Promise<Blob | File | undefined>;
+	/** Store a fresh dumpDataDir("gzip") snapshot (called without being awaited). */
+	persist?: (def: DatasetSource, dump: Blob | File) => Promise<void>;
+}
+
 export interface PGliteProvider extends SandboxProvider {
+	/** A fresh clone of the exercise base, as a raw db (caller closes it). */
+	openDb(
+		datasetId: string,
+		setupSql?: string,
+	): Promise<{ db: PGliteInterface; close(): Promise<void> }>;
 	/** The dataset base DB (do not mutate it, do not close it). */
 	base(datasetId: string): Promise<PGliteInterface>;
 	/** Type name for an oid as known by the dataset base. */
@@ -168,6 +293,7 @@ const EXERCISE_LRU_SIZE = 4;
 
 export function createPGliteProvider(
 	registry: DatasetRegistry,
+	opts: PGliteProviderOptions = {},
 ): PGliteProvider {
 	const bases = new Map<string, Promise<CachedDb>>();
 	const exerciseBases = new Map<string, Promise<CachedDb>>();
@@ -180,12 +306,32 @@ export function createPGliteProvider(
 				return Promise.reject(new Error(`Unknown dataset "${datasetId}"`));
 			p = (async () => {
 				const extensions = await loadExtensions(def.extensions);
+				// 1. Cached snapshot (instant second visit).
+				const dump = opts.restore
+					? await opts.restore(def).catch(() => undefined)
+					: undefined;
+				if (dump) {
+					try {
+						const db = await PGlite.create({ loadDataDir: dump, extensions });
+						return { db, types: await readTypes(db) };
+					} catch {
+						// corrupt or incompatible snapshot: rebuild below
+					}
+				}
+				// 2. Fresh build from the dataset setupSql.
 				const db = await PGlite.create({ extensions });
 				try {
 					await db.exec(def.setupSql);
 				} catch (err) {
 					await db.close().catch(() => {});
 					throw err;
+				}
+				if (opts.persist) {
+					const persist = opts.persist;
+					void db
+						.dumpDataDir("gzip")
+						.then((file) => persist(def, file))
+						.catch(() => {});
 				}
 				return { db, types: await readTypes(db) };
 			})();
@@ -231,31 +377,39 @@ export function createPGliteProvider(
 	}
 
 	return {
+		async openDb(datasetId, setupSql) {
+			const src = await exerciseBaseFor(datasetId, setupSql);
+			const db = await src.db.clone();
+			let closed = false;
+			return {
+				db,
+				async close() {
+					if (closed) return;
+					closed = true;
+					await db.close();
+				},
+			};
+		},
 		async open(datasetId, setupSql) {
 			const src = await exerciseBaseFor(datasetId, setupSql);
 			const db = await src.db.clone();
 			let types = src.types;
 			let closed = false;
+			const runScript = async (sql: string): Promise<ScriptOutcome> => {
+				const out = await execScript(db, sql);
+				// Learner DDL may have created types (CREATE TYPE ... AS ENUM).
+				const unknown = out.results.some((r) =>
+					r.fields.some((f) => !types.has(f.dataTypeID)),
+				);
+				if (unknown) types = await readTypes(db);
+				return { ...out, results: annotate(out.results, types) };
+			};
 			const sandbox: Sandbox = {
+				execScript: runScript,
 				async exec(sql) {
-					const res: RawResult[] = [];
-					for (const stmt of splitStatements(sql)) {
-						try {
-							const part = (await db.exec(stmt.text, {
-								rowMode: "array",
-								parsers: RAW_TEXT_PARSERS,
-							})) as unknown as RawResult[];
-							res.push(...part);
-						} catch (err) {
-							throw shiftErrorPosition(err, stmt.offset);
-						}
-					}
-					// Learner DDL may have created types (CREATE TYPE ... AS ENUM).
-					const unknown = res.some((r) =>
-						r.fields.some((f) => !types.has(f.dataTypeID)),
-					);
-					if (unknown) types = await readTypes(db);
-					return annotate(res, types);
+					const out = await runScript(sql);
+					if (out.error !== undefined) throw out.error;
+					return out.results;
 				},
 				async close() {
 					if (closed) return;
@@ -418,7 +572,17 @@ export async function introspectCatalog(
 	opts: { sampleRows?: number } = {},
 ): Promise<Catalog> {
 	const db = await provider.base(datasetId);
+	return introspectDatabase(db, { ...opts, datasetId });
+}
+
+/** Catalog of any PGlite db (dataset base, or a sandbox after learner DDL). */
+export async function introspectDatabase(
+	db: PGliteInterface,
+	opts: { sampleRows?: number; datasetId?: string } = {},
+): Promise<Catalog> {
+	const datasetId = opts.datasetId ?? "";
 	const sampleLimit = opts.sampleRows ?? 5;
+	const typeNames = await readTypes(db);
 
 	const cols = await rowsOf<
 		[
@@ -570,12 +734,7 @@ export async function introspectCatalog(
 				parsers: RAW_TEXT_PARSERS,
 			},
 		)) as unknown as RawResult;
-		const types = new Map<number, string>();
-		for (const f of sample.fields) {
-			const tn = await provider.typeName(datasetId, f.dataTypeID);
-			if (tn) types.set(f.dataTypeID, tn);
-		}
-		t.sampleRows = toResultTable(annotate([sample], types)[0]);
+		t.sampleRows = toResultTable(annotate([sample], typeNames)[0]);
 		for (const c of t.columns) {
 			if (c.category !== "json") continue;
 			const vals = await rowsOf<[unknown]>(

@@ -459,3 +459,208 @@ describe("statement splitting", () => {
 		]);
 	});
 });
+
+describe("strictTypes", () => {
+	it("loose mode accepts text '25' for integer 25, strict mode rejects it", async () => {
+		const loose = await j("select '25'::text as n", "select 25 as n");
+		expect(loose.pass).toBe(true);
+		const strict = await j(
+			"select '25'::text as n",
+			"select 25 as n",
+			result({ strictTypes: true }),
+		);
+		expect(strict.pass).toBe(false);
+		expect(strict.errorType).toBe("wrong_types");
+		expect(strict.message).toMatch(/text, expected integer/);
+	});
+
+	it('rejects jsonb "25" against jsonb 25 in strict mode only', async () => {
+		const sol = `select '{"age": 25}'::jsonb as j`;
+		const bad = `select '{"age": "25"}'::jsonb as j`;
+		expect((await j(bad, sol)).pass).toBe(true);
+		const strict = await j(bad, sol, result({ strictTypes: true }));
+		expect(strict.pass).toBe(false);
+		expect(strict.errorType).toBe("wrong_values");
+	});
+
+	it("treats int2/int4/int8 as one family but numeric and float as different", async () => {
+		expect(
+			(
+				await j(
+					"select count(*) from orders",
+					"select 3::int",
+					result({ strictTypes: true }),
+				)
+			).pass,
+		).toBe(true);
+		const v = await j(
+			"select 0.5::float8",
+			"select 0.5::numeric",
+			result({ strictTypes: true }),
+		);
+		expect(v.errorType).toBe("wrong_types");
+		expect((await j("select 0.5::float8", "select 0.5::numeric")).pass).toBe(
+			true,
+		);
+	});
+
+	it("still compares int8 and numeric values (raw text) as numbers", async () => {
+		const v = await j(
+			"select 2::int8 as n, 1.50::numeric as p",
+			"select 2::int8, 1.5::numeric",
+			result({ strictTypes: true }),
+		);
+		expect(v.pass).toBe(true);
+	});
+
+	it("applies to state checks", async () => {
+		const check: Check = {
+			type: "state",
+			verifySql:
+				"select name, attrs->'stock' as stock from products where id = 1",
+			strictTypes: true,
+		};
+		const sol = `update products set attrs = attrs || '{"stock": 7}' where id = 1`;
+		expect((await j(sol, sol, check)).pass).toBe(true);
+		const bad = `update products set attrs = attrs || '{"stock": "7"}' where id = 1`;
+		const v = await j(bad, sol, check);
+		expect(v.pass).toBe(false);
+		expect(v.errorType).toBe("wrong_final_state");
+	});
+});
+
+describe("psql-style transactions and the statement log", () => {
+	it("outside a transaction the first error stops the script", async () => {
+		const out = await runSql(provider, {
+			datasetId: shop.id,
+			sql: "select 1; select nope from products; select 3;",
+		});
+		expect(out.ok).toBe(false);
+		expect(out.error?.code).toBe("42703");
+		expect(out.statements.map((s) => s.ok)).toEqual([true, false]);
+		expect(out.statements[1].error?.line).toBe(1);
+	});
+
+	it("inside BEGIN an error aborts: later statements fail with 25P02, unrecovered COMMIT reports the first error", async () => {
+		const out = await runSql(provider, {
+			datasetId: shop.id,
+			sql: "begin;\ninsert into categories values (1, 'Dup');\nselect 1;\ncommit;",
+		});
+		expect(out.ok).toBe(false);
+		expect(out.error?.code).toBe("23505");
+		expect(out.error?.line).toBe(2);
+		expect(
+			out.statements.map((s) => [s.ok, s.error?.code, s.aborted ?? false]),
+		).toEqual([
+			[true, undefined, false],
+			[false, "23505", false],
+			[false, "25P02", true],
+			[true, undefined, false],
+		]);
+		expect(out.statements[3].command).toBe("ROLLBACK");
+	});
+
+	it("ROLLBACK TO SAVEPOINT recovers and the script goes on", async () => {
+		const sql = `begin;
+insert into categories values (10, 'Garden');
+savepoint s1;
+insert into categories values (1, 'Dup');
+select 1;
+rollback to savepoint s1;
+insert into categories values (11, 'Kitchen');
+commit;
+select name from categories where id >= 10 order by id;`;
+		const out = await runSql(provider, { datasetId: shop.id, sql });
+		expect(out.ok).toBe(true);
+		expect(out.last?.rows).toEqual([["Garden"], ["Kitchen"]]);
+		expect(
+			out.statements.filter((s) => !s.ok).map((s) => s.error?.code),
+		).toEqual(["23505", "25P02"]);
+		expect(out.statements).toHaveLength(9);
+	});
+
+	it("a recovered script is judged on its results; error checks match any statement", async () => {
+		const sql = `begin; savepoint s; insert into categories values (1, 'Dup'); rollback to savepoint s; commit; select count(*) from categories;`;
+		const v = await j(sql, "select count(*) from categories");
+		expect(v.pass).toBe(true);
+		expect(v.statements.length).toBe(6);
+		const e = await j(sql, "insert into categories values (1, 'Dup')", {
+			type: "error",
+			sqlstate: "23505",
+		});
+		expect(e.pass).toBe(true);
+		const wrong = await j(sql, "x", { type: "error", sqlstate: "23503" });
+		expect(wrong.errorType).toBe("wrong_error");
+	});
+
+	it("a full ROLLBACK also recovers", async () => {
+		const out = await runSql(provider, {
+			datasetId: shop.id,
+			sql: "begin; select 1/0; rollback; select 42;",
+		});
+		expect(out.ok).toBe(true);
+		expect(out.last?.rows[0][0]).toBe(42);
+	});
+});
+
+describe("provider extras", () => {
+	it("openDb gives a raw clone and introspectDatabase sees learner DDL", async () => {
+		const { introspectDatabase, execScript } = await import(
+			"./pglite-provider"
+		);
+		const box = await provider.openDb(shop.id);
+		try {
+			const out = await execScript(
+				box.db,
+				"create table quests (id int primary key, title text not null);",
+			);
+			expect(out.error).toBeUndefined();
+			const cat = await introspectDatabase(box.db);
+			const q = cat.tables.find((t) => t.name === "quests");
+			expect(q?.columns.map((c) => c.name)).toEqual(["id", "title"]);
+		} finally {
+			await box.close();
+		}
+		const base = await introspectCatalog(provider, shop.id);
+		expect(base.tables.some((t) => t.name === "quests")).toBe(false);
+	});
+
+	it("restores the base DB from a persisted snapshot", async () => {
+		let saved: Blob | File | undefined;
+		const p1 = createPGliteProvider(
+			{ getDataset: (id) => (id === shop.id ? shop : undefined) },
+			{
+				restore: async () => undefined,
+				persist: async (_d, dump) => {
+					saved = dump;
+				},
+			},
+		);
+		await (await p1.open(shop.id)).close();
+		for (let i = 0; i < 50 && !saved; i++)
+			await new Promise((r) => setTimeout(r, 100));
+		await p1.dispose();
+		expect(saved).toBeDefined();
+		let built = false;
+		const p2 = createPGliteProvider(
+			{
+				getDataset: (id) =>
+					id === shop.id ? { ...shop, setupSql: "select 1/0" } : undefined,
+			},
+			{
+				restore: async () => saved,
+				persist: async () => {
+					built = true;
+				},
+			},
+		);
+		const out = await runSql(p2, {
+			datasetId: shop.id,
+			sql: "select count(*)::int from products",
+		});
+		expect(out.ok).toBe(true);
+		expect(out.last?.rows[0][0]).toBe(4);
+		expect(built).toBe(false);
+		await p2.dispose();
+	});
+});
