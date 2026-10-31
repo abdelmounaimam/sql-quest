@@ -5,7 +5,8 @@ import TanStackQueryDevtools from "./tanstack-query/devtools";
 export default function Devtools() {
 	return (
 		<TanStackDevtools
-			config={{ position: "bottom-left" }}
+			// Hidden unless the URL carries ?tanstack-devtools, so the trigger never covers game controls.
+			config={{ position: "bottom-left", requireUrlFlag: true }}
 			plugins={[
 				{ name: "Tanstack Router", render: <TanStackRouterDevtoolsPanel /> },
 				TanStackQueryDevtools,
