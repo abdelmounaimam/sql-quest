@@ -13,7 +13,7 @@ export function SkillRadar({
 }) {
 	const n = points.length;
 	const c = size / 2;
-	const r = size / 2 - 42;
+	const r = size / 2 - 58;
 	const at = (i: number, v: number) => {
 		const ang = -Math.PI / 2 + (i * 2 * Math.PI) / n;
 		return [c + Math.cos(ang) * r * v, c + Math.sin(ang) * r * v] as const;
@@ -23,7 +23,7 @@ export function SkillRadar({
 	return (
 		<svg
 			viewBox={`0 0 ${size} ${size}`}
-			className="w-full max-w-[320px]"
+			className="w-full max-w-[340px] overflow-visible"
 			role="img"
 			aria-label={`Skill radar: ${points.map((p) => `${label(p.axis)} ${Math.round(p.value * 100)}%`).join(", ")}`}
 		>
@@ -56,8 +56,8 @@ export function SkillRadar({
 			})}
 			<motion.polygon
 				points={poly((i) => Math.max(0.04, points[i].value))}
-				fill="color-mix(in oklab, var(--reward) 28%, transparent)"
-				stroke="var(--reward)"
+				fill="color-mix(in oklab, var(--lantern) 28%, transparent)"
+				stroke="var(--lantern)"
 				strokeWidth={2.5}
 				strokeLinejoin="round"
 				initial={{ scale: 0, opacity: 0 }}
@@ -68,7 +68,7 @@ export function SkillRadar({
 			{points.map((p, i) => {
 				const [x, y] = at(i, Math.max(0.04, p.value));
 				return (
-					<circle key={p.axis} cx={x} cy={y} r={3.5} fill="var(--reward)" />
+					<circle key={p.axis} cx={x} cy={y} r={3.5} fill="var(--lantern)" />
 				);
 			})}
 		</svg>

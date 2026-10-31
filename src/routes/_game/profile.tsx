@@ -117,7 +117,7 @@ function ProfilePage() {
 									className={cn(
 										"rounded-xl border p-3 text-center",
 										got
-											? "border-reward/50 bg-[color-mix(in_oklab,var(--reward)_8%,var(--card))]"
+											? "border-lantern/60 bg-accent"
 											: "border-border opacity-45 grayscale",
 									)}
 									title={a.description}
@@ -378,7 +378,7 @@ function Leaderboard() {
 	return (
 		<section className="panel p-5">
 			<h2 className="mb-3 flex items-center gap-2 font-display text-lg text-foreground">
-				<Trophy className="size-5 text-reward" /> Leaderboard
+				<Trophy className="size-5 text-(--syn-keyword)" /> Leaderboard
 			</h2>
 			{isLoading ? (
 				<p className="text-sm text-muted-foreground">Loading…</p>
@@ -393,9 +393,7 @@ function Leaderboard() {
 							key={r.id}
 							className={cn(
 								"flex items-center gap-3 rounded-xl px-3 py-2",
-								r.id === me
-									? "bg-[color-mix(in_oklab,var(--reward)_14%,var(--muted))]"
-									: "bg-muted",
+								r.id === me ? "bg-accent" : "bg-muted",
 							)}
 						>
 							<span className="w-6 font-display text-muted-foreground">
@@ -408,7 +406,7 @@ function Leaderboard() {
 							<span className="font-mono text-xs text-muted-foreground">
 								lvl {r.level} · {r.solved} solved
 							</span>
-							<span className="font-display text-reward">{r.xp}</span>
+							<span className="font-display text-xp-text tabular">{r.xp}</span>
 						</li>
 					))}
 				</ol>

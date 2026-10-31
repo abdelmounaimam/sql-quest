@@ -13,7 +13,13 @@ import { LevelHub } from "#/components/game/level-hub";
 import { type MissionMode, MissionScreen } from "#/components/game/mission";
 import { Splash } from "#/components/game/splash";
 import { useProgress } from "#/game/progress";
-import { bossOf, chapterById, chapters, findExercise } from "#/lib/content";
+import {
+	bossOf,
+	chapterById,
+	chapters,
+	findExercise,
+	worldOfChapter,
+} from "#/lib/content";
 
 const searchSchema = z.object({
 	phase: z
@@ -54,6 +60,18 @@ function PlayPage() {
 	if (!progress.ready) return <Splash label="Loading your progress" />;
 
 	const status = progress.statuses[chapter.id];
+	const world = worldOfChapter(chapter.id);
+	const solvedIds = new Set(
+		progress.attempts.filter((a) => a.solved).map((a) => a.exerciseId),
+	);
+	const mainSegments = chapter.exercises.map((e) => ({
+		id: e.id,
+		done: solvedIds.has(e.id),
+	}));
+	const drillSegments = (status.gauntlet?.exerciseIds ?? []).map((id) => ({
+		id,
+		done: status.gauntlet?.clearedIds.includes(id) ?? false,
+	}));
 	const setSearch = (s: PlaySearch) => void navigate({ search: s });
 	const toHub = () => setSearch({ phase: "hub" });
 
@@ -118,6 +136,12 @@ function PlayPage() {
 				chapter={chapter}
 				exercise={exercise}
 				mode={mode}
+				world={world}
+				segments={
+					mode === "practice" && drillSegments.length
+						? drillSegments
+						: mainSegments
+				}
 				onNext={onNext}
 				nextLabel={mode === "review" ? "Back to the map" : "Continue"}
 			/>
@@ -155,6 +179,8 @@ function PlayPage() {
 				chapter={chapter}
 				exercise={boss}
 				mode="boss"
+				world={world}
+				segments={mainSegments}
 				onNext={() => setSearch({ phase: "complete" })}
 				onBossDefeat={() => setSearch({ phase: "gate" })}
 				nextLabel="Claim your rewards"

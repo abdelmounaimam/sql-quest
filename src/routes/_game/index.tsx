@@ -1,9 +1,10 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { motion } from "motion/react";
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { GameIcon } from "#/components/game/icons";
 import { Splash } from "#/components/game/splash";
 import { NextUpCard, WorldMap } from "#/components/game/world-map";
+import { Badge } from "#/components/ui/badge";
 import { useGame, useProgress } from "#/game/progress";
-import { chapters, USING_SAMPLES } from "#/lib/content";
+import { chapters, conceptName, USING_SAMPLES } from "#/lib/content";
 
 export const Route = createFileRoute("/_game/")({
 	ssr: false,
@@ -13,39 +14,77 @@ export const Route = createFileRoute("/_game/")({
 function MapPage() {
 	const progress = useProgress();
 	const name = useGame((s) => s.profile?.name);
+	const streak = useGame((s) => s.streak);
 	if (!progress.ready) return <Splash />;
 	const complete = chapters.filter(
 		(c) => progress.statuses[c.id]?.state === "complete",
 	).length;
 
 	return (
-		<div className="mx-auto w-full max-w-3xl px-4 pt-6 sm:px-6">
-			<motion.div
-				initial={{ opacity: 0, y: 10 }}
-				animate={{ opacity: 1, y: 0 }}
-				className="mb-5 flex items-end justify-between gap-3"
-			>
-				<div>
-					<p className="text-sm text-muted-foreground">
-						{name ? `Welcome back, ${name}` : "Welcome, explorer"}
-					</p>
-					<h1 className="font-display text-3xl leading-none text-foreground sm:text-4xl">
-						World map
-					</h1>
+		<div className="mx-auto grid w-full max-w-[1240px] gap-6 px-4 pt-6 pb-10 md:px-8 lg:grid-cols-[minmax(0,1fr)_340px]">
+			<div className="flex min-w-0 flex-col gap-5">
+				<div className="flex items-end justify-between gap-3">
+					<div>
+						<p className="text-sm font-bold text-muted-foreground">
+							{name ? `Welcome back, ${name}` : "Welcome, explorer"}
+						</p>
+						<h1 className="font-display text-title">The Atlas</h1>
+					</div>
+					<div className="flex flex-col items-end gap-1">
+						<Badge variant="outline" className="tabular">
+							{complete}/{chapters.length} levels
+						</Badge>
+						{USING_SAMPLES ? (
+							<Badge variant="warning">dev samples</Badge>
+						) : null}
+					</div>
 				</div>
-				<div className="text-right font-mono text-xs text-muted-foreground">
-					{complete}/{chapters.length} levels
-					{USING_SAMPLES ? (
-						<div className="mt-1 rounded bg-secondary px-1.5 py-0.5 text-[10px] text-reward">
-							dev samples
-						</div>
-					) : null}
+				<div className="lg:hidden">
+					<NextUpCard progress={progress} />
 				</div>
-			</motion.div>
-			<div className="mb-6">
-				<NextUpCard progress={progress} />
+				<WorldMap progress={progress} />
 			</div>
-			<WorldMap progress={progress} />
+			<aside className="hidden flex-col gap-5 lg:flex lg:sticky lg:top-20 lg:self-start">
+				<NextUpCard progress={progress} />
+				<section
+					className="panel flex items-center gap-4 p-5"
+					aria-label="Hearth"
+				>
+					<span className="grid size-14 place-items-center rounded-2xl bg-warning-soft text-streak">
+						<GameIcon name="flame" className="size-8" />
+					</span>
+					<div>
+						<div className="font-display text-3xl leading-none text-streak-text tabular">
+							{streak} day{streak === 1 ? "" : "s"}
+						</div>
+						<p className="text-sm text-muted-foreground">
+							{streak > 0
+								? "Hearth is lit. Cast once a day to keep it burning."
+								: "Cast a spell today to light your hearth."}
+						</p>
+					</div>
+				</section>
+				{progress.reviews.length ? (
+					<section
+						className="panel flex flex-col gap-3 p-5"
+						aria-label="Reviews due"
+					>
+						<div className="kicker text-info-soft-foreground">Fading runes</div>
+						{progress.reviews.slice(0, 4).map((r) => (
+							<Link
+								key={r.conceptId}
+								to="/play/$chapterId"
+								params={{ chapterId: r.chapterId }}
+								search={{ phase: "mission", ex: r.exerciseId, review: true }}
+								className="flex items-center gap-3 rounded-lg bg-info-soft px-3 py-2 font-extrabold text-info-soft-foreground no-underline"
+							>
+								<GameIcon name="dumbbell" />
+								{conceptName(r.conceptId)}
+							</Link>
+						))}
+					</section>
+				) : null}
+			</aside>
 		</div>
 	);
 }

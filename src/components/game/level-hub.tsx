@@ -14,8 +14,16 @@ import { MASTERY_THRESHOLD } from "#/engine/adaptive";
 import type { ChapterStatus } from "#/engine/adaptive/types";
 import type { Progress } from "#/game/progress";
 import { sfx } from "#/game/sound";
-import { bossOf, conceptName, datasetById, findExercise } from "#/lib/content";
+import {
+	bossOf,
+	conceptName,
+	datasetById,
+	findExercise,
+	WORLD_GLYPHS,
+	worldOfChapter,
+} from "#/lib/content";
 import { cn } from "#/lib/utils";
+import { WorldGlyph } from "./icons";
 import { StarRow } from "./stars";
 
 export function MasteryBar({
@@ -66,6 +74,7 @@ export function LevelHub({
 	onGate: () => void;
 }) {
 	const dataset = datasetById.get(chapter.datasetId);
+	const world = worldOfChapter(chapter.id);
 	const boss = bossOf(chapter);
 	const mains = chapter.exercises.filter((e) => !e.boss);
 	const solved = new Set(
@@ -85,30 +94,29 @@ export function LevelHub({
 			<motion.header
 				initial={{ opacity: 0, y: 12 }}
 				animate={{ opacity: 1, y: 0 }}
-				className="panel relative mb-6 overflow-hidden p-5 sm:p-6"
+				transition={{ duration: 0.22, ease: [0.23, 1, 0.32, 1] }}
+				className="panel relative mb-6 overflow-hidden"
+				data-world={world}
 			>
-				<div
-					className="pointer-events-none absolute -top-20 -right-20 size-64 rounded-full opacity-30 blur-3xl"
-					style={{ background: dataset?.accent ?? "var(--reward)" }}
-				/>
-				<div className="relative flex items-start gap-4">
-					<div className="grid size-16 shrink-0 place-items-center rounded-2xl bg-secondary text-4xl">
-						{chapter.emoji}
-					</div>
-					<div className="min-w-0">
-						<div className="text-[11px] font-bold tracking-[0.2em] text-reward uppercase">
-							{chapter.world} · {chapter.tier}
+				<div className="mission-ribbon world-motif" data-world={world}>
+					<div className="min-w-0 flex-1">
+						<div className="k">
+							{chapter.world} · {chapter.tier} · {chapter.track}
 						</div>
-						<h1 className="font-display text-2xl leading-tight text-foreground sm:text-3xl">
-							{chapter.title}
-						</h1>
-						<p className="text-sm text-muted-foreground">{chapter.subtitle}</p>
-						<p className="mt-1 text-xs text-muted-foreground">
-							Dataset: {dataset?.emoji} {dataset?.name}
-						</p>
+						<h1 className="t text-[28px]">{chapter.title}</h1>
 					</div>
+					<WorldGlyph
+						name={WORLD_GLYPHS[world - 1]}
+						className="size-12 opacity-90"
+					/>
 				</div>
-				<div className="relative mt-5 grid gap-3 sm:grid-cols-2">
+				<div className="px-5 pt-4 sm:px-6">
+					<p className="text-muted-foreground">{chapter.subtitle}</p>
+					<p className="mt-1 text-xs font-bold text-muted-foreground">
+						Treasure: {dataset?.name}
+					</p>
+				</div>
+				<div className="relative grid gap-3 px-5 pt-4 pb-5 sm:grid-cols-2 sm:px-6">
 					{chapter.concepts.map((c) => (
 						<div key={c}>
 							<div className="mb-1 flex justify-between text-xs">
@@ -158,9 +166,9 @@ export function LevelHub({
 					<motion.li
 						initial={{ scale: 0.95, opacity: 0 }}
 						animate={{ scale: 1, opacity: 1 }}
-						className="relative ml-14 rounded-2xl border-2 border-destructive bg-[color-mix(in_oklab,var(--destructive)_8%,var(--card))] p-4"
+						className="relative ml-16 rounded-2xl border-2 border-info/50 bg-info-soft p-4 text-info-soft-foreground"
 					>
-						<div className="flex items-center gap-2 font-display text-destructive">
+						<div className="flex items-center gap-2 font-display text-xl">
 							<Swords className="size-5" /> Practice gauntlet
 						</div>
 						<ul className="mt-1 space-y-0.5 text-sm text-foreground">
@@ -272,13 +280,26 @@ function HubStep({
 			className="relative flex items-center gap-3"
 		>
 			<div
-				className={cn(
-					"relative z-10 grid size-14 shrink-0 place-items-center rounded-2xl border-4 border-background",
-					state === "done" && "bg-success text-success-foreground",
-					state === "open" && "bg-reward text-reward-foreground",
-					state === "boss" && "bg-destructive text-destructive-foreground",
-					state === "locked" && "bg-secondary text-muted-foreground",
-				)}
+				className="map-node relative z-10 shrink-0"
+				data-state={state === "locked" ? "locked" : "available"}
+				style={
+					{
+						"--node-size": "3.5rem",
+						...(state === "done"
+							? {
+									"--w": "var(--success)",
+									"--w-deep": "var(--success-edge)",
+									"--w-ink": "var(--success-foreground)",
+								}
+							: state === "boss"
+								? {
+										"--w": "var(--destructive)",
+										"--w-deep": "var(--destructive-edge)",
+										"--w-ink": "var(--destructive-foreground)",
+									}
+								: {}),
+					} as React.CSSProperties
+				}
 			>
 				{state === "done" ? (
 					<Check className="size-6" />

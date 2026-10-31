@@ -3,10 +3,11 @@ import {
 	tableFeatures,
 	useTable,
 } from "@tanstack/react-table";
-import { motion } from "motion/react";
 import { useMemo } from "react";
 import type { DiffRow, ResultTable, TableDiff } from "#/engine/checker/types";
 import { cn } from "#/lib/utils";
+import { Badge } from "../ui/badge";
+import { GameIcon } from "./icons";
 
 const features = tableFeatures({});
 type GridRow = {
@@ -27,6 +28,14 @@ const NUMERIC_TYPES = new Set([
 	"oid",
 ]);
 
+function isNumeric(value: unknown, typeName?: string) {
+	return (
+		typeof value === "number" ||
+		(typeName ? NUMERIC_TYPES.has(typeName) : false)
+	);
+}
+
+/** One cell of the loot ledger. NULL is the Void: a dashed pill, never empty. */
 export function Cell({
 	value,
 	typeName,
@@ -35,17 +44,15 @@ export function Cell({
 	typeName?: string;
 }) {
 	if (value === null || value === undefined)
-		return (
-			<span className="rounded bg-secondary px-1.5 py-0.5 font-mono text-[10px] font-bold tracking-wider text-muted-foreground">
-				NULL
-			</span>
-		);
+		return <span className="null-pill">NULL</span>;
 	if (typeof value === "boolean")
 		return (
 			<span
 				className={cn(
-					"font-mono text-xs font-bold",
-					value ? "text-success" : "text-destructive",
+					"font-bold",
+					value
+						? "text-success-soft-foreground"
+						: "text-destructive-soft-foreground",
 				)}
 			>
 				{value ? "true" : "false"}
@@ -55,7 +62,7 @@ export function Cell({
 		const text = JSON.stringify(value);
 		return (
 			<span
-				className="block max-w-[22rem] truncate font-mono text-xs text-special"
+				className="block max-w-[22rem] truncate text-(--type-jsonb)"
 				title={JSON.stringify(value, null, 2)}
 			>
 				{text}
@@ -64,51 +71,39 @@ export function Cell({
 	}
 	const s = String(value);
 	if (typeName === "vector" || typeName === "halfvec")
-		return <span className="font-mono text-xs text-special">{s}</span>;
+		return <span className="text-(--type-vector-fg)">{s}</span>;
 	if (typeName === "json" || typeName === "jsonb")
 		return (
 			<span
-				className="block max-w-[22rem] truncate font-mono text-xs text-special"
+				className="block max-w-[22rem] truncate text-(--type-jsonb)"
 				title={s}
 			>
 				{s}
 			</span>
 		);
 	return (
-		<span
-			className={cn(
-				"font-mono text-xs whitespace-pre",
-				(typeof value === "number" ||
-					(typeName && NUMERIC_TYPES.has(typeName))) &&
-					"text-reward",
-			)}
-		>
+		<span className="whitespace-pre">
 			{s.length > 160 ? `${s.slice(0, 160)}…` : s}
 		</span>
 	);
 }
 
-const STATUS_STYLE: Record<DiffRow["status"], string> = {
+const STATUS_GLYPH: Record<DiffRow["status"], string> = {
 	match: "",
-	missing:
-		"bg-[color-mix(in_oklab,var(--destructive)_16%,transparent)] shadow-[inset_3px_0_0_var(--destructive)]",
-	extra:
-		"bg-[color-mix(in_oklab,var(--reward)_16%,transparent)] shadow-[inset_3px_0_0_var(--reward)]",
-	moved:
-		"bg-[color-mix(in_oklab,var(--info)_12%,transparent)] shadow-[inset_3px_0_0_var(--info)]",
-	changed:
-		"bg-[color-mix(in_oklab,var(--destructive)_10%,transparent)] shadow-[inset_3px_0_0_var(--destructive)]",
+	missing: "−",
+	extra: "+",
+	moved: "↕",
+	changed: "≠",
 };
-
 const STATUS_LABEL: Record<DiffRow["status"], string> = {
-	match: "",
-	missing: "missing",
-	extra: "extra",
-	moved: "moved",
-	changed: "wrong",
+	match: "matches",
+	missing: "expected row missing",
+	extra: "extra row",
+	moved: "wrong position",
+	changed: "values differ",
 };
 
-/** Result set grid (TanStack Table). Optional per-row diff statuses. */
+/** The loot ledger (TanStack Table). Optional per-row diff statuses. */
 export function ResultGrid({
 	table,
 	rows,
@@ -116,17 +111,18 @@ export function ResultGrid({
 	typeNames,
 	className,
 	maxHeight = "22rem",
-	caption,
+	caption = "Loot ledger",
+	meta,
 	animate = true,
 }: {
 	table?: ResultTable;
-	/** Diff rows override table rows. */
 	rows?: DiffRow[];
 	columnNames?: string[];
 	typeNames?: (string | undefined)[];
 	className?: string;
 	maxHeight?: string;
 	caption?: string;
+	meta?: React.ReactNode;
 	animate?: boolean;
 }) {
 	const names = columnNames ?? table?.columns.map((c) => c.name) ?? [];
@@ -150,83 +146,74 @@ export function ResultGrid({
 	const columns = useMemo(() => {
 		const colNames = namesKey ? namesKey.split("\u0000") : [];
 		const colTypes = typesKey.split("\u0000").map((t) => t || undefined);
-		return helper.columns([
-			helper.display({
-				id: "__n",
-				header: "#",
-				cell: (ctx) => (
-					<span className="font-mono text-[10px] text-muted-foreground">
-						{ctx.row.index + 1}
-					</span>
-				),
-			}),
-			...colNames.map((name, i) =>
+		return helper.columns(
+			colNames.map((name, i) =>
 				helper.accessor((r) => r.cells[i], {
 					id: `c${i}`,
 					header: () => (
-						<span className="flex flex-col">
-							<span>{name}</span>
-							{colTypes[i] ? (
-								<span className="font-mono text-[9px] font-normal tracking-normal text-muted-foreground normal-case">
-									{colTypes[i]}
-								</span>
-							) : null}
-						</span>
+						<>
+							{name}
+							{colTypes[i] ? <span className="ty">{colTypes[i]}</span> : null}
+						</>
 					),
 					cell: (ctx) => <Cell value={ctx.getValue()} typeName={colTypes[i]} />,
+					meta: { typeName: colTypes[i] },
 				}),
 			),
-		]);
+		);
 	}, [namesKey, typesKey]);
 
 	const t = useTable({ features, columns, data });
 
+	const head = (
+		<div className="ledger-head">
+			<GameIcon name="table" className="text-muted-foreground" />
+			<span className="t">{caption}</span>
+			<span className="text-sm text-muted-foreground tabular">
+				{data.length} row{data.length === 1 ? "" : "s"}
+				{table?.truncated ? " (first 500)" : ""}
+			</span>
+			{meta ? <span className="ml-auto">{meta}</span> : null}
+		</div>
+	);
+
 	if (names.length === 0)
 		return (
-			<div
-				className={cn(
-					"rounded-xl border border-dashed border-border p-4 text-sm text-muted-foreground",
-					className,
-				)}
-			>
-				{table?.command
-					? `${table.command} done${typeof table.affectedRows === "number" ? `, ${table.affectedRows} row(s) affected` : ""}. No result set.`
-					: "No result set."}
+			<div className={cn("panel ledger", className)}>
+				{head}
+				<p className="p-4 text-sm text-muted-foreground">
+					{table && table.rowCount > 0
+						? `${table.rowCount} rows came back with no columns at all: name the columns you want after SELECT.`
+						: table?.command
+							? `${table.command} done${typeof table.affectedRows === "number" ? `, ${table.affectedRows} row(s) affected` : ""}. This spell returned no loot.`
+							: "No result set."}
+				</p>
 			</div>
 		);
 
 	return (
-		<div
-			className={cn(
-				"overflow-hidden rounded-xl border border-border",
-				className,
-			)}
-		>
-			{caption ? (
-				<div className="flex items-center justify-between border-b border-border bg-muted px-3 py-1.5 text-xs font-bold tracking-wide text-muted-foreground uppercase">
-					<span>{caption}</span>
-					<span className="font-mono normal-case">
-						{data.length} row{data.length === 1 ? "" : "s"}
-						{table?.truncated ? " (truncated)" : ""}
-					</span>
-				</div>
-			) : null}
-			<div className="overflow-auto" style={{ maxHeight }}>
-				<table className="w-full border-collapse text-left text-sm">
-					<thead className="sticky top-0 z-10 bg-card">
+		<div className={cn("panel ledger", className)}>
+			{head}
+			<div className="overflow-auto overscroll-contain" style={{ maxHeight }}>
+				<table className="loot">
+					<thead>
 						{t.getHeaderGroups().map((g) => (
 							<tr key={g.id}>
-								{g.headers.map((h) => (
+								{showStatus ? (
+									<th aria-label="Diff" />
+								) : (
+									<th aria-label="Row" />
+								)}
+								{g.headers.map((h, i) => (
 									<th
 										key={h.id}
-										className="border-b border-border px-3 py-2 text-[11px] font-bold tracking-wide whitespace-nowrap text-foreground uppercase"
+										className={cn(
+											isNumeric(undefined, types[i]) && "text-right",
+										)}
 									>
 										<t.FlexRender header={h} />
 									</th>
 								))}
-								{showStatus ? (
-									<th className="border-b border-border px-2" />
-								) : null}
 							</tr>
 						))}
 					</thead>
@@ -234,71 +221,62 @@ export function ResultGrid({
 						{t.getRowModel().rows.map((row, ri) => {
 							const status = row.original.status;
 							return (
-								<motion.tr
+								<tr
 									key={row.id}
-									initial={animate ? { opacity: 0, x: -6 } : false}
-									animate={{ opacity: 1, x: 0 }}
-									transition={{ delay: Math.min(ri, 20) * 0.02 }}
 									className={cn(
-										"border-b border-border/60 last:border-0 even:bg-[color-mix(in_oklab,var(--muted)_60%,transparent)]",
-										status && STATUS_STYLE[status],
+										animate && ri < 12 && "rise",
+										status && `diff-${status}`,
 									)}
+									style={
+										animate && ri < 12
+											? { animationDelay: `${ri * 30}ms` }
+											: undefined
+									}
 								>
+									<td
+										className="rn"
+										title={status ? STATUS_LABEL[status] : undefined}
+									>
+										{showStatus ? (
+											<span className="font-bold">
+												{status ? STATUS_GLYPH[status] : ""}
+											</span>
+										) : (
+											ri + 1
+										)}
+									</td>
 									{row.getAllCells().map((cell, ci) => (
 										<td
 											key={cell.id}
 											className={cn(
-												"px-3 py-1.5 align-top",
-												ci > 0 &&
-													row.original.changed?.includes(ci - 1) &&
-													"bg-[color-mix(in_oklab,var(--destructive)_22%,transparent)]",
+												isNumeric(cell.getValue(), types[ci]) && "num",
+												row.original.changed?.includes(ci) && "cell-changed",
 											)}
 										>
 											<t.FlexRender cell={cell} />
 										</td>
 									))}
-									{showStatus ? (
-										<td className="px-2 py-1.5 text-right">
-											{status && status !== "match" ? (
-												<span
-													className={cn(
-														"rounded px-1.5 py-0.5 text-[10px] font-bold uppercase",
-														status === "missing" &&
-															"bg-destructive text-destructive-foreground",
-														status === "extra" &&
-															"bg-reward text-reward-foreground",
-														status === "moved" &&
-															"bg-info text-info-foreground",
-														status === "changed" &&
-															"bg-destructive text-destructive-foreground",
-													)}
-												>
-													{STATUS_LABEL[status]}
-												</span>
-											) : null}
-										</td>
-									) : null}
-								</motion.tr>
+								</tr>
 							);
 						})}
 					</tbody>
 				</table>
 				{data.length === 0 ? (
-					<div className="p-4 text-center text-sm text-muted-foreground">
-						0 rows
-					</div>
+					<p className="p-4 text-center text-sm text-muted-foreground">
+						0 rows: the chest was empty.
+					</p>
 				) : null}
 			</div>
 		</div>
 	);
 }
 
-/** Expected vs got, side by side on desktop, stacked on phones. */
+/** Expected vs got, side by side on wide screens, stacked on phones. */
 export function DiffView({
 	diff,
 	expected,
 	got,
-	labels = ["Expected", "Your result"],
+	labels = ["Expected loot", "Your loot"],
 }: {
 	diff: TableDiff;
 	expected?: ResultTable;
@@ -306,17 +284,13 @@ export function DiffView({
 	labels?: [string, string];
 }) {
 	return (
-		<div className="space-y-2">
-			<div className="flex flex-wrap gap-2 text-xs">
+		<div className="flex flex-col gap-2">
+			<div className="flex flex-wrap gap-2">
 				{diff.missingCount ? (
-					<span className="rounded-full bg-destructive px-2 py-0.5 font-bold text-destructive-foreground">
-						{diff.missingCount} missing
-					</span>
+					<Badge variant="danger">− {diff.missingCount} missing</Badge>
 				) : null}
 				{diff.extraCount ? (
-					<span className="rounded-full bg-reward px-2 py-0.5 font-bold text-reward-foreground">
-						{diff.extraCount} extra
-					</span>
+					<Badge variant="warning">+ {diff.extraCount} extra</Badge>
 				) : null}
 			</div>
 			<div className="grid gap-3 xl:grid-cols-2">

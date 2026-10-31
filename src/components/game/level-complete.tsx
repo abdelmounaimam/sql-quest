@@ -1,17 +1,28 @@
-import { motion } from "motion/react";
-import { useEffect } from "react";
-import { Button } from "#/components/ui/button";
+import { useEffect, useState } from "react";
 import type { Chapter } from "#/content/types";
-import { ACHIEVEMENTS, xpForAttempt } from "#/engine/adaptive";
+import { xpForAttempt } from "#/engine/adaptive";
 import type { ChapterStatus } from "#/engine/adaptive/types";
-import { type Progress, useGame } from "#/game/progress";
-import { sfx } from "#/game/sound";
-import { conceptName } from "#/lib/content";
-import { burst } from "./fx";
-import { MasteryBar } from "./level-hub";
-import { CountUp } from "./solved-overlay";
-import { StarBurst, StarRow } from "./stars";
+import type { Progress } from "#/game/progress";
+import { haptic, sfx } from "#/game/sound";
+import { conceptName, worldOfChapter } from "#/lib/content";
+import { cn } from "#/lib/utils";
+import { Button } from "../ui/button";
+import {
+	Dialog,
+	DialogContent,
+	DialogDescription,
+	DialogTitle,
+} from "../ui/dialog";
+import { burst, prefersReducedMotion } from "./fx";
+import { GameIcon, StarGlyph, Wick } from "./icons";
+import { CountUp } from "./verdict";
 
+function formatTime(ms: number) {
+	const s = Math.round(ms / 1000);
+	return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+}
+
+/** Level complete: the one "big" moment. Stars land one by one, stats count up. */
 export function LevelComplete({
 	chapter,
 	status,
@@ -25,124 +36,124 @@ export function LevelComplete({
 	onMap: () => void;
 	onNextLevel?: () => void;
 }) {
-	const achievements = useGame((s) => s.achievements);
+	const [skipped, setSkipped] = useState(false);
+	const world = worldOfChapter(chapter.id);
 	const values: number[] = chapter.exercises.map(
 		(e) => status.stars[e.id] ?? 0,
 	);
-	const avg = values.reduce((a, b) => a + b, 0) / Math.max(1, values.length);
-	const overall = Math.round(avg);
-	const chapterAttempts = progress.attempts.filter(
-		(a) => a.chapterId === chapter.id,
+	const stars = Math.round(
+		values.reduce((a, b) => a + b, 0) / Math.max(1, values.length),
 	);
-	const xp = chapterAttempts.reduce((s, a) => s + xpForAttempt(a, 1).total, 0);
-	const since = Math.min(
-		...chapterAttempts.map((a) => a.startedAt),
-		Date.now(),
+	const attempts = progress.attempts.filter(
+		(a) => a.chapterId === chapter.id && a.kind !== "lesson-try",
 	);
-	const recent = ACHIEVEMENTS.filter((a) => (achievements[a.id] ?? 0) >= since);
+	const xp = attempts.reduce((s, a) => s + xpForAttempt(a, 1).total, 0);
+	const solved = attempts.filter((a) => a.solved && !a.revealed).length;
+	const fails = attempts.reduce((s, a) => s + a.failedSubmissions, 0);
+	const accuracy = Math.round((solved / Math.max(1, solved + fails)) * 100);
+	const time = attempts.reduce((s, a) => s + a.timeToSolveMs, 0);
 
 	useEffect(() => {
-		burst("boss");
 		sfx("levelup");
-	}, []);
+		haptic("levelComplete");
+		burst("big");
+		if (prefersReducedMotion()) return;
+		const timers = [0, 1, 2]
+			.filter((i) => i < stars)
+			.map((i) =>
+				window.setTimeout(
+					() => {
+						sfx("star", i);
+						haptic("star");
+					},
+					300 + i * 220,
+				),
+			);
+		return () => {
+			for (const t of timers) window.clearTimeout(t);
+		};
+	}, [stars]);
 
 	return (
-		<div className="mx-auto w-full max-w-xl px-4 pt-8 pb-16 text-center">
-			<motion.div
-				initial={{ scale: 0.6, opacity: 0 }}
-				animate={{ scale: 1, opacity: 1 }}
-				transition={{ type: "spring", stiffness: 200, damping: 14 }}
-			>
-				<div className="text-[11px] font-bold tracking-[0.3em] text-success uppercase">
-					Level complete
-				</div>
-				<h1 className="mt-1 font-display text-4xl text-foreground">
-					{chapter.title}
-				</h1>
-			</motion.div>
-			<div className="my-8">
-				<StarBurst stars={overall} onStar={() => sfx("star")} />
-			</div>
-			<div className="panel space-y-5 p-5 text-left">
-				<div className="flex items-center justify-between">
-					<span className="text-sm font-bold text-muted-foreground uppercase">
-						XP earned
-					</span>
-					<span className="font-display text-3xl text-reward">
-						+<CountUp to={xp} />
-					</span>
-				</div>
-				<ul className="space-y-1.5">
-					{chapter.exercises.map((e, i) => (
-						<motion.li
-							key={e.id}
-							initial={{ opacity: 0, x: -10 }}
-							animate={{ opacity: 1, x: 0 }}
-							transition={{ delay: 0.8 + i * 0.1 }}
-							className="flex items-center justify-between gap-2 text-sm"
-						>
-							<span className="truncate text-foreground">
-								{e.boss ? "👑 " : ""}
-								{e.title}
-							</span>
-							<StarRow stars={status.stars[e.id] ?? 0} />
-						</motion.li>
-					))}
-				</ul>
-				<div className="space-y-2.5">
-					<div className="text-sm font-bold text-muted-foreground uppercase">
-						Mastery
+		<div className="lc-overlay relative grid min-h-dvh place-items-center overflow-hidden px-4 pt-36 pb-10">
+			<Dialog open modal={false}>
+				<DialogContent
+					showCloseButton={false}
+					onInteractOutside={(e) => e.preventDefault()}
+					onPointerDown={() => setSkipped(true)}
+					className="!fixed !top-[56%] max-w-[440px] gap-0 overflow-visible px-6 pt-16 pb-6 text-center"
+					data-world={world}
+				>
+					<div
+						className={cn("big-stars", skipped && "[&_.lit]:![animation:none]")}
+						role="img"
+						aria-label={`${stars} of 3 stars`}
+					>
+						{[0, 1, 2].map((i) => (
+							<StarGlyph
+								key={i}
+								filled={i < stars}
+								className={cn(i === 1 && "s2", i < stars && "lit")}
+							/>
+						))}
 					</div>
-					{chapter.concepts.map((c) => (
-						<div key={c}>
-							<div className="mb-1 flex justify-between text-xs">
-								<span className="font-semibold text-foreground">
-									{conceptName(c)}
-								</span>
-								<span className="font-mono text-muted-foreground">
-									{Math.round((progress.mastery[c]?.effective ?? 0) * 100)}%
-								</span>
+					<div className="lc-ribbon">
+						<span>Chapter cleared</span>
+					</div>
+					<DialogTitle className="mt-2 text-center text-[34px]">
+						{chapter.title}
+					</DialogTitle>
+					<DialogDescription className="mt-1.5 text-center text-[15px]">
+						{chapter.subtitle}
+					</DialogDescription>
+					<div className="lc-stats my-5">
+						<div className="lc-stat xp">
+							<div className="h">Aether</div>
+							<div className="v">
+								<GameIcon name="zap" />
+								<CountUp to={xp} delay={skipped ? 0 : 1.05} />
 							</div>
-							<MasteryBar value={progress.mastery[c]?.effective ?? 0} />
 						</div>
-					))}
-				</div>
-				{recent.length ? (
-					<div className="flex flex-wrap gap-2">
-						{recent.map((a) => (
+						<div className="lc-stat acc">
+							<div className="h">Accuracy</div>
+							<div className="v">
+								<GameIcon name="target" />
+								<CountUp to={accuracy} delay={skipped ? 0 : 1.05} />%
+							</div>
+						</div>
+						<div className="lc-stat time">
+							<div className="h">Time</div>
+							<div className="v">
+								<GameIcon name="clock" />
+								{formatTime(time)}
+							</div>
+						</div>
+					</div>
+					<div className="mb-4 flex flex-wrap justify-center gap-1.5">
+						{chapter.concepts.map((c) => (
 							<span
-								key={a.id}
-								className="rounded-full border border-reward/50 px-3 py-1 text-sm text-foreground"
-								title={a.description}
+								key={c}
+								className="rounded-sm bg-success-soft px-2 py-0.5 text-xs font-extrabold text-success-soft-foreground"
 							>
-								{a.emoji} {a.name}
+								{conceptName(c)}{" "}
+								{Math.round((progress.mastery[c]?.effective ?? 0) * 100)}%
 							</span>
 						))}
 					</div>
-				) : null}
-			</div>
-			<div className="mt-6 flex flex-col gap-3 sm:flex-row">
-				<Button
-					type="button"
-					onClick={onMap}
-					variant="outline"
-					size="lg"
-					className="flex-1"
-				>
-					World map
-				</Button>
-				{onNextLevel ? (
-					<Button
-						type="button"
-						onClick={onNextLevel}
-						variant="success"
-						size="lg"
-						className="flex-1"
-					>
-						Next level →
-					</Button>
-				) : null}
-			</div>
+					<div className="flex flex-col gap-1.5">
+						<Button size="xl" onClick={onNextLevel ?? onMap} autoFocus>
+							{onNextLevel ? "Next level" : "Continue"}
+						</Button>
+						<Button variant="ghost" onClick={onMap}>
+							<GameIcon name="rewind" data-icon="inline-start" />
+							{stars < 3
+								? "Back to the map, replay for 3 stars"
+								: "Back to the map"}
+						</Button>
+					</div>
+					<Wick mood="cheering" className="wick-cheer" />
+				</DialogContent>
+			</Dialog>
 		</div>
 	);
 }

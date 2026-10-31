@@ -1,10 +1,17 @@
-import { motion } from "motion/react";
-import { useEffect } from "react";
-import { Button } from "#/components/ui/button";
+import { motion, useReducedMotion } from "motion/react";
+import { useEffect, useLayoutEffect, useRef } from "react";
 import type { Chapter, Exercise } from "#/content/types";
 import { useGame } from "#/game/progress";
-import { sfx } from "#/game/sound";
+import { haptic, sfx } from "#/game/sound";
+import { worldOfChapter } from "#/lib/content";
+import { Button } from "../ui/button";
+import { GameIcon } from "./icons";
 
+/**
+ * Boss intro (§7.3): ink overlay with the world motif, guardian banner slams
+ * in, container shakes once, name letters stagger, hearts pop. Tap to skip;
+ * continues on its own after the beat.
+ */
 export function BossIntro({
 	chapter,
 	boss,
@@ -17,91 +24,138 @@ export function BossIntro({
 	onRetreat: () => void;
 }) {
 	const timer = useGame((s) => s.settings.bossTimer);
+	const reduce = useReducedMotion();
+	const world = worldOfChapter(chapter.id);
+	const name = boss.title.replace(/^boss:\s*/i, "");
+
+	const fightRef = useRef(onFight);
+	useLayoutEffect(() => {
+		fightRef.current = onFight;
+	});
 	useEffect(() => {
-		const t = window.setTimeout(() => sfx("boss"), 250);
-		return () => window.clearTimeout(t);
+		const t = window.setTimeout(() => {
+			sfx("boss");
+			haptic("boss");
+		}, 250);
+		const auto = window.setTimeout(() => fightRef.current(), 3200);
+		return () => {
+			window.clearTimeout(t);
+			window.clearTimeout(auto);
+		};
 	}, []);
+
 	return (
-		<div className="relative flex flex-1 items-center justify-center overflow-hidden px-4 py-16">
-			<motion.div
+		<div
+			className="relative flex min-h-dvh flex-1 items-center justify-center overflow-hidden bg-[#0A0F1C] px-4 py-16"
+			data-world={world}
+			onPointerDown={(e) => {
+				if ((e.target as HTMLElement).closest("button")) return;
+				onFight();
+			}}
+		>
+			<div
+				className="world-motif pointer-events-none absolute inset-0 opacity-20"
+				data-world={world}
+			/>
+			<div
 				className="pointer-events-none absolute inset-0"
-				initial={{ opacity: 0 }}
-				animate={{ opacity: 1 }}
-				transition={{ duration: 0.8 }}
 				style={{
 					background:
-						"radial-gradient(60% 50% at 50% 45%, color-mix(in oklab, var(--destructive) 30%, transparent), transparent 70%), repeating-linear-gradient(135deg, transparent 0 22px, color-mix(in oklab, var(--destructive) 6%, transparent) 22px 24px)",
+						"radial-gradient(50% 45% at 50% 42%, color-mix(in oklab, var(--destructive) 34%, transparent), transparent 72%)",
 				}}
 			/>
-			<div className="relative max-w-xl text-center">
+			<motion.div
+				className="relative flex max-w-xl flex-col items-center text-center text-[#F4ECDC]"
+				initial={false}
+				animate={reduce ? {} : { x: [0, -6, 6, -3, 3, 0] }}
+				transition={{ delay: 0.5, duration: 0.3 }}
+			>
+				<div className="kicker text-(--syn-keyword)">
+					Guardian of {chapter.title}
+				</div>
 				<motion.div
-					initial={{ y: -20, opacity: 0, letterSpacing: "1em" }}
-					animate={{ y: 0, opacity: 1, letterSpacing: "0.35em" }}
-					transition={{ duration: 0.9 }}
-					className="text-xs font-bold text-destructive uppercase"
+					initial={reduce ? { opacity: 0 } : { scale: 1.15, opacity: 0 }}
+					animate={{ scale: 1, opacity: 1 }}
+					transition={{ delay: 0.25, duration: 0.26, ease: [0.23, 1, 0.32, 1] }}
+					className="my-6 grid size-28 place-items-center rounded-full bg-destructive text-destructive-foreground gloss"
+					style={{ filter: "drop-shadow(0 8px 0 var(--destructive-edge))" }}
 				>
-					Boss fight · {chapter.title}
+					<GameIcon name="skull" solid={false} className="size-16" />
 				</motion.div>
-				<motion.div
-					initial={{ scale: 3, opacity: 0, rotate: -8 }}
-					animate={{ scale: 1, opacity: 1, rotate: 0, x: [0, -6, 6, -3, 3, 0] }}
-					transition={{
-						delay: 0.3,
-						duration: 0.7,
-						x: { delay: 0.95, duration: 0.4 },
-					}}
-					className="my-6 text-8xl drop-shadow-[0_0_30px_var(--destructive-glow)]"
-					aria-hidden="true"
-				>
-					{chapter.emoji}
-				</motion.div>
-				<motion.h1
-					initial={{ y: 30, opacity: 0 }}
-					animate={{ y: 0, opacity: 1 }}
-					transition={{ delay: 0.9, type: "spring" }}
-					className="font-display text-4xl leading-none text-foreground sm:text-5xl"
-				>
-					{boss.title}
-				</motion.h1>
+				<h1 className="font-display text-hero" aria-label={name}>
+					{name.split(" ").map((word, wi, words) => {
+						const offset = words.slice(0, wi).join(" ").length + (wi ? 1 : 0);
+						return (
+							<span
+								key={`${offset}-${word}`}
+								className="inline-block whitespace-nowrap"
+								aria-hidden="true"
+							>
+								{word.split("").map((ch, ci) => (
+									<motion.span
+										// biome-ignore lint/suspicious/noArrayIndexKey: letters of a fixed word
+										key={ci}
+										className="inline-block"
+										initial={reduce ? { opacity: 0 } : { opacity: 0, y: 12 }}
+										animate={{ opacity: 1, y: 0 }}
+										transition={{
+											delay: 0.6 + (offset + ci) * 0.025,
+											duration: 0.22,
+											ease: [0.23, 1, 0.32, 1],
+										}}
+									>
+										{ch}
+									</motion.span>
+								))}
+								{wi < words.length - 1 ? "\u00a0" : null}
+							</span>
+						);
+					})}
+				</h1>
 				{boss.story ? (
-					<motion.p
-						initial={{ opacity: 0 }}
-						animate={{ opacity: 1 }}
-						transition={{ delay: 1.3 }}
-						className="mt-4 text-muted-foreground italic"
-					>
-						{boss.story}
-					</motion.p>
+					<p className="mt-3 max-w-[46ch] text-[#A6AEC4]">{boss.story}</p>
 				) : null}
-				<motion.div
-					initial={{ opacity: 0, y: 10 }}
-					animate={{ opacity: 1, y: 0 }}
-					transition={{ delay: 1.6 }}
-					className="mt-8 flex flex-col items-center gap-3"
-				>
-					<div className="text-sm text-muted-foreground">
-						3 lives{timer ? ` · ${2 + boss.difficulty} minute timer` : ""} ·
-						bonus XP for the win
-					</div>
+				<div className="mt-6 flex items-center gap-2">
+					{[0, 1, 2].map((i) => (
+						<motion.span
+							key={i}
+							initial={reduce ? { opacity: 0 } : { opacity: 0, scale: 0.6 }}
+							animate={{ opacity: 1, scale: 1 }}
+							transition={{
+								delay: 1.1 + i * 0.12,
+								type: "spring",
+								duration: 0.35,
+								bounce: 0.2,
+							}}
+							className="text-heart"
+						>
+							<GameIcon name="heart" className="size-9" />
+						</motion.span>
+					))}
+				</div>
+				<p className="mt-2 text-sm font-bold text-[#A6AEC4]">
+					3 hearts{timer ? ` · ${2 + boss.difficulty} minute clock` : ""} ·
+					bonus aether
+				</p>
+				<div className="mt-8 flex flex-col items-center gap-2">
 					<Button
-						type="button"
-						onClick={onFight}
-						variant="destructive"
+						variant="danger"
 						size="lg"
-						className="px-10 text-xl"
+						className="min-w-56"
+						onClick={onFight}
 						autoFocus
 					>
-						FIGHT
+						<GameIcon name="wand" data-icon="inline-start" /> Fight
 					</Button>
-					<button
-						type="button"
+					<Button
+						variant="ghost"
+						className="text-[#A6AEC4] hover:text-[#F4ECDC]"
 						onClick={onRetreat}
-						className="text-sm font-semibold text-muted-foreground hover:text-foreground"
 					>
 						Not yet, retreat
-					</button>
-				</motion.div>
-			</div>
+					</Button>
+				</div>
+			</motion.div>
 		</div>
 	);
 }

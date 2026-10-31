@@ -143,9 +143,36 @@ export function tryStepAsExercise(
 	};
 }
 
-/** Theme token per world (cycled). Colors live in styles.css (--world-N). */
-const WORLD_TOKENS = 6;
+/** World tokens are 1-based (--world-1 … --world-11), one per world. */
+export const WORLD_TOKEN_COUNT = 11;
+
+/** 1-based world number for data-world="N" (wraps past 11 worlds). */
+export function worldNumber(index: number): number {
+	return (index % WORLD_TOKEN_COUNT) + 1;
+}
+
 export function worldTheme(index: number) {
-	const v = `var(--world-${index % WORLD_TOKENS})`;
-	return { glow: v, sky: v, ground: v };
+	const v = `var(--world-${worldNumber(index)})`;
+	return { glow: v, sky: v, ground: v, n: worldNumber(index) };
+}
+
+/** World glyph per world number (icons.tsx WorldGlyph names). */
+export const WORLD_GLYPHS = [
+	"mug",
+	"coin",
+	"bridge",
+	"arch",
+	"scope",
+	"anvil",
+	"tower",
+	"flask",
+	"book",
+	"gear",
+	"spire",
+] as const;
+
+/** 1-based world number of a chapter (for data-world). */
+export function worldOfChapter(chapterId: string): number {
+	const w = worlds.find((x) => x.chapters.some((c) => c.id === chapterId));
+	return worldNumber(w?.index ?? 0);
 }

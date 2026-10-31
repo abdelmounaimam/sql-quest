@@ -1,56 +1,64 @@
 import { Link, useNavigate } from "@tanstack/react-router";
-import {
-	Clock,
-	Crown,
-	Lock,
-	Play,
-	RotateCcw,
-	Sparkles,
-	Swords,
-} from "lucide-react";
-import { motion } from "motion/react";
-import { useMemo } from "react";
+import { motion, useReducedMotion } from "motion/react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { Button } from "#/components/ui/button";
 import type { Chapter } from "#/content/types";
 import type { ChapterStatus, NextActivity } from "#/engine/adaptive/types";
 import type { Progress } from "#/game/progress";
-import { useGame } from "#/game/progress";
 import { sfx } from "#/game/sound";
+import { useMediaQuery } from "#/hooks/use-media";
 import {
 	chapterById,
 	conceptName,
+	WORLD_GLYPHS,
 	type World,
+	worldNumber,
 	worlds,
-	worldTheme,
 } from "#/lib/content";
 import { cn } from "#/lib/utils";
-import { StarRow } from "./stars";
+import { Button } from "../ui/button";
+import {
+	GameIcon,
+	type GameIconName,
+	StarGlyph,
+	Wick,
+	WorldGlyph,
+} from "./icons";
 
-const STEP_Y = 150;
-const TOP_PAD = 110;
+/** Path geometry (design-direction §9.1): 320px column, rows every 104px. */
+const COLUMN = 320;
+const CENTER = COLUMN / 2;
+const X_OFFSETS = [0, 60, 76, 60, 0, -60, -76, -60];
+const ROW = 104;
+const BOSS_ROW = 116;
+const TOP = 128;
+const BOTTOM = 96;
 
-function nodeX(globalIndex: number): number {
-	// Gentle winding path between 22% and 78%.
-	return 50 + 28 * Math.sin(globalIndex * 1.15);
-}
+const MOTIF_NAMES = [
+	"Hearth",
+	"Coin",
+	"River",
+	"Moss",
+	"Night sky",
+	"Molten",
+	"Blueprint",
+	"Potion",
+	"Vellum",
+	"Gunmetal",
+	"Aurora",
+];
 
-/** Smooth path through points (Catmull-Rom to cubic Bezier), in a 100 x H box. */
-function smoothPath(points: { x: number; y: number }[]): string {
-	if (points.length === 0) return "";
-	let d = `M ${points[0].x} ${points[0].y}`;
-	for (let i = 0; i < points.length - 1; i++) {
-		const p0 = points[i - 1] ?? points[i];
-		const p1 = points[i];
-		const p2 = points[i + 1];
-		const p3 = points[i + 2] ?? p2;
-		const c1x = p1.x + (p2.x - p0.x) / 6;
-		const c1y = p1.y + (p2.y - p0.y) / 6;
-		const c2x = p2.x - (p3.x - p1.x) / 6;
-		const c2y = p2.y - (p3.y - p1.y) / 6;
-		d += ` C ${c1x} ${c1y}, ${c2x} ${c2y}, ${p2.x} ${p2.y}`;
-	}
-	return d;
+type NodeState = "locked" | "available" | "current" | "completed" | "perfect";
+type NodeKind = "normal" | "boss" | "review";
+
+interface PlacedNode {
+	chapter: Chapter;
+	status: ChapterStatus | undefined;
+	x: number;
+	y: number;
+	state: NodeState;
+	kind: NodeKind;
+	stars: number;
 }
 
 export function activityChapter(next: NextActivity): string | null {
@@ -88,24 +96,55 @@ export function activityLink(next: NextActivity) {
 	}
 }
 
+function averageStars(chapter: Chapter, status: ChapterStatus | undefined) {
+	if (!status) return 0;
+	const vals: number[] = chapter.exercises.map((e) => status.stars[e.id] ?? 0);
+	return Math.round(vals.reduce((a, b) => a + b, 0) / Math.max(1, vals.length));
+}
+
+/** Smooth path through points (Catmull-Rom to cubic Bezier). */
+function smoothPath(points: { x: number; y: number }[]): string {
+	if (points.length < 2) return "";
+	let d = `M ${points[0].x} ${points[0].y}`;
+	for (let i = 0; i < points.length - 1; i++) {
+		const p0 = points[i - 1] ?? points[i];
+		const p1 = points[i];
+		const p2 = points[i + 1];
+		const p3 = points[i + 2] ?? p2;
+		d += ` C ${p1.x + (p2.x - p0.x) / 6} ${p1.y + (p2.y - p0.y) / 6}, ${p2.x - (p3.x - p1.x) / 6} ${p2.y - (p3.y - p1.y) / 6}, ${p2.x} ${p2.y}`;
+	}
+	return d;
+}
+
 export function WorldMap({ progress }: { progress: Progress }) {
 	const { statuses, next, reviews } = progress;
-	const avatar = useGame((s) => s.profile?.avatar ?? "🦊");
 	const current = activityChapter(next);
+	const currentRef = useRef<HTMLDivElement | null>(null);
+	const [offscreen, setOffscreen] = useState(false);
 
 	const reviewByChapter = useMemo(() => {
-		const m = new Map<string, typeof reviews>();
-		for (const r of reviews) {
-			const list = m.get(r.chapterId) ?? [];
-			list.push(r);
-			m.set(r.chapterId, list);
-		}
+		const m = new Map<string, Progress["reviews"]>();
+		for (const r of reviews)
+			m.set(r.chapterId, [...(m.get(r.chapterId) ?? []), r]);
 		return m;
 	}, [reviews]);
 
+	useEffect(() => {
+		const el = currentRef.current;
+		if (!el) return;
+		const io = new IntersectionObserver(
+			([e]) => setOffscreen(!e.isIntersecting),
+			{
+				rootMargin: "-80px 0px -80px 0px",
+			},
+		);
+		io.observe(el);
+		return () => io.disconnect();
+	});
+
 	let offset = 0;
 	return (
-		<div className="flex flex-col gap-6 pb-24">
+		<div className="relative flex flex-col gap-8">
 			{worlds.map((w) => {
 				const start = offset;
 				offset += w.chapters.length;
@@ -116,11 +155,27 @@ export function WorldMap({ progress }: { progress: Progress }) {
 						startIndex={start}
 						statuses={statuses}
 						current={current}
-						avatar={avatar}
 						reviewByChapter={reviewByChapter}
+						currentRef={currentRef}
 					/>
 				);
 			})}
+			{offscreen && current ? (
+				<Button
+					variant="secondary"
+					size="icon"
+					className="fixed right-4 bottom-[calc(80px+env(safe-area-inset-bottom))] z-30 rounded-full md:bottom-8"
+					aria-label="Back to my level"
+					onClick={() =>
+						currentRef.current?.scrollIntoView({
+							behavior: "smooth",
+							block: "center",
+						})
+					}
+				>
+					<Wick className="h-7 w-6" />
+				</Button>
+			) : null}
 		</div>
 	);
 }
@@ -130,174 +185,225 @@ function WorldSection({
 	startIndex,
 	statuses,
 	current,
-	avatar,
 	reviewByChapter,
+	currentRef,
 }: {
 	world: World;
 	startIndex: number;
 	statuses: Record<string, ChapterStatus>;
 	current: string | null;
-	avatar: string;
 	reviewByChapter: Map<string, Progress["reviews"]>;
+	currentRef: React.RefObject<HTMLDivElement | null>;
 }) {
-	const theme = worldTheme(world.index);
-	const height = TOP_PAD + world.chapters.length * STEP_Y + 10;
-	const points = world.chapters.map((_, i) => ({
-		x: nodeX(startIndex + i),
-		y: TOP_PAD + i * STEP_Y + 40,
-	}));
-	const completeCount = world.chapters.filter(
-		(c) => statuses[c.id]?.state === "complete",
+	const n = worldNumber(world.index);
+	// Phones: a tighter wiggle so side labels fit in 390px.
+	const wide = useMediaQuery("(min-width: 640px)", true);
+	const sway = wide ? 1 : 0.45;
+	const nodes: PlacedNode[] = [];
+	let y = TOP;
+	world.chapters.forEach((ch, i) => {
+		const st = statuses[ch.id];
+		const stars = averageStars(ch, st);
+		const state: NodeState =
+			!st || st.state === "locked"
+				? "locked"
+				: st.state === "complete"
+					? stars >= 3
+						? "perfect"
+						: "completed"
+					: current === ch.id
+						? "current"
+						: "available";
+		const kind: NodeKind =
+			st?.state === "boss-ready"
+				? "boss"
+				: st?.state === "gauntlet"
+					? "review"
+					: "normal";
+		if (i > 0) y += kind === "boss" ? BOSS_ROW : ROW;
+		nodes.push({
+			chapter: ch,
+			status: st,
+			x: CENTER + X_OFFSETS[(startIndex + i) % X_OFFSETS.length] * sway,
+			y,
+			state,
+			kind,
+			stars,
+		});
+	});
+	const height = y + BOTTOM;
+	const traveledUntil = (() => {
+		const idx = nodes.findIndex((p) => p.state === "current");
+		if (idx >= 0) return idx;
+		let last = -1;
+		nodes.forEach((p, i) => {
+			if (p.state === "completed" || p.state === "perfect") last = i;
+		});
+		return last;
+	})();
+	const pts = nodes.map((p) => ({ x: p.x, y: p.y }));
+	const traveled =
+		traveledUntil > 0 ? smoothPath(pts.slice(0, traveledUntil + 1)) : "";
+	const ahead = smoothPath(pts.slice(Math.max(0, traveledUntil)));
+	const done = nodes.filter(
+		(p) => p.state === "completed" || p.state === "perfect",
 	).length;
-	const donePoints = points.slice(
-		0,
-		Math.min(points.length, completeCount + 1),
-	);
-	const worldLocked = world.chapters.every(
-		(c) => statuses[c.id]?.state === "locked",
-	);
+	const locked = nodes.every((p) => p.state === "locked");
 
 	return (
 		<section
+			data-world={n}
 			aria-labelledby={`world-${world.index}`}
-			className="relative overflow-hidden rounded-[2rem] border border-border"
+			className="map-frame overflow-clip"
 			style={{
-				// Lazy rendering for long maps: off-screen worlds skip layout and paint.
 				contentVisibility: "auto",
-				containIntrinsicSize: `auto ${height}px`,
-				background: `color-mix(in oklab, ${theme.glow} 10%, var(--card))`,
+				containIntrinsicSize: `auto ${height + 90}px`,
 			}}
 		>
-			<div className="relative flex items-center justify-between gap-3 px-5 pt-5">
-				<div>
-					<div
-						className="text-[11px] font-bold tracking-[0.2em] uppercase"
-						style={{ color: theme.glow }}
-					>
-						World {world.index + 1}
+			<div className="unit-banner world-motif" data-world={n}>
+				<div className="min-w-0">
+					<div className="wn">
+						World {world.index + 1} ·{" "}
+						{MOTIF_NAMES[(n - 1) % MOTIF_NAMES.length]}
 					</div>
-					<h2
-						id={`world-${world.index}`}
-						className="font-display text-xl text-foreground sm:text-2xl"
-					>
+					<h2 id={`world-${world.index}`} className="wt">
 						{world.name}
 					</h2>
 				</div>
-				<div className="rounded-full bg-background/70 px-3 py-1 font-mono text-xs text-muted-foreground">
-					{worldLocked ? (
-						<span className="flex items-center gap-1">
-							<Lock className="size-3" /> locked
-						</span>
-					) : (
-						`${completeCount}/${world.chapters.length}`
-					)}
-				</div>
+				<span className="ml-auto flex items-center gap-2">
+					<span className="rounded-full bg-[color-mix(in_oklab,var(--w-ink)_14%,transparent)] px-2.5 py-1 text-xs font-extrabold tabular">
+						{locked ? "Locked" : `${done}/${nodes.length}`}
+					</span>
+					<WorldGlyph
+						name={WORLD_GLYPHS[n - 1]}
+						className="size-10 opacity-90"
+					/>
+				</span>
 			</div>
-
-			<div className="relative mx-auto max-w-xl" style={{ height }}>
+			<div className="map-body" style={{ height }}>
 				<svg
-					className="absolute inset-0 h-full w-full"
-					viewBox={`0 0 100 ${height}`}
-					preserveAspectRatio="none"
+					className="layer-far"
+					viewBox={`0 0 420 ${height}`}
+					preserveAspectRatio="xMidYMid slice"
 					aria-hidden="true"
 				>
-					<path
-						d={smoothPath(points)}
+					<g
 						fill="none"
-						stroke="var(--border)"
-						strokeWidth="10"
+						stroke="var(--w)"
+						strokeOpacity=".28"
+						strokeWidth="3"
 						strokeLinecap="round"
-						vectorEffect="non-scaling-stroke"
-					/>
-					<path
-						d={smoothPath(points)}
-						fill="none"
-						stroke="var(--muted-foreground)"
-						strokeWidth="2.5"
-						strokeDasharray="2 12"
-						strokeLinecap="round"
-						vectorEffect="non-scaling-stroke"
-						className="path-march"
-					/>
-					{donePoints.length > 1 ? (
-						<motion.path
-							d={smoothPath(donePoints)}
-							fill="none"
-							stroke={theme.glow}
-							strokeWidth="6"
-							strokeLinecap="round"
-							vectorEffect="non-scaling-stroke"
-							initial={{ pathLength: 0 }}
-							whileInView={{ pathLength: 1 }}
-							viewport={{ once: true }}
-							transition={{ duration: 1.2, ease: "easeInOut" }}
-						/>
-					) : null}
+					>
+						<path d="M-10 160 q30 -14 60 0 t60 0 t60 0" />
+						<path d={`M300 ${height * 0.4} q30 -14 60 0 t60 0`} />
+						<path d={`M-20 ${height * 0.75} q30 -14 60 0 t60 0 t60 0`} />
+					</g>
+					<g fill="var(--w)" fillOpacity=".22">
+						<path d={`M330 ${height * 0.62} a40 40 0 0 1 80 0 v60 h-80z`} />
+						<path d={`M10 ${height * 0.5} a30 30 0 0 1 60 0 v50 h-60z`} />
+					</g>
 				</svg>
-				{world.chapters.map((ch, i) => (
-					<LevelNode
-						key={ch.id}
-						chapter={ch}
-						status={statuses[ch.id]}
-						x={points[i].x}
-						y={points[i].y}
-						glow={theme.glow}
-						isCurrent={current === ch.id}
-						avatar={avatar}
-						reviews={reviewByChapter.get(ch.id) ?? []}
-						side={points[i].x > 50 ? "left" : "right"}
-					/>
-				))}
+				<div className="map-canvas" style={{ height }}>
+					<svg
+						className="trail"
+						width={COLUMN}
+						height={height}
+						viewBox={`0 0 ${COLUMN} ${height}`}
+						aria-hidden="true"
+					>
+						{ahead ? (
+							<path
+								d={ahead}
+								fill="none"
+								stroke="color-mix(in oklab, var(--w) 45%, transparent)"
+								strokeWidth="9"
+								strokeLinecap="round"
+								strokeDasharray="0 18"
+							/>
+						) : null}
+						{traveled ? (
+							<>
+								<path
+									d={traveled}
+									fill="none"
+									stroke="var(--w-deep)"
+									strokeWidth="14"
+									strokeLinecap="round"
+									transform="translate(0 4)"
+								/>
+								<RoadFace d={traveled} />
+							</>
+						) : null}
+					</svg>
+					{nodes.map((p) => (
+						<LevelNode
+							key={p.chapter.id}
+							node={p}
+							reviews={reviewByChapter.get(p.chapter.id) ?? []}
+							nodeRef={p.state === "current" ? currentRef : undefined}
+						/>
+					))}
+				</div>
 			</div>
 		</section>
 	);
 }
 
+/** Traveled road: drawn once when it comes into view (one path, acceptable paint). */
+function RoadFace({ d }: { d: string }) {
+	const reduce = useReducedMotion();
+	return (
+		<motion.path
+			d={d}
+			fill="none"
+			stroke="var(--w)"
+			strokeWidth="14"
+			strokeLinecap="round"
+			initial={reduce ? false : { pathLength: 0 }}
+			whileInView={{ pathLength: 1 }}
+			viewport={{ once: true }}
+			transition={{ duration: 0.7, ease: [0.77, 0, 0.175, 1] }}
+		/>
+	);
+}
+
+function nodeIcon(p: PlacedNode): GameIconName {
+	if (p.state === "locked") return "lock";
+	if (p.kind === "boss") return "skull";
+	if (p.kind === "review") return "dumbbell";
+	if (p.state === "perfect") return "crown";
+	if (p.state === "completed") return "check";
+	return "play";
+}
+
 function LevelNode({
-	chapter,
-	status,
-	x,
-	y,
-	glow,
-	isCurrent,
-	avatar,
+	node: p,
 	reviews,
-	side,
+	nodeRef,
 }: {
-	chapter: Chapter;
-	status: ChapterStatus | undefined;
-	x: number;
-	y: number;
-	glow: string;
-	isCurrent: boolean;
-	avatar: string;
+	node: PlacedNode;
 	reviews: Progress["reviews"];
-	side: "left" | "right";
+	nodeRef?: React.RefObject<HTMLDivElement | null>;
 }) {
 	const navigate = useNavigate();
-	const state = status?.state ?? "locked";
-	const locked = state === "locked";
-	const totalStars = status
-		? Math.round(
-				Object.values(status.stars).reduce<number>((a, b) => a + b, 0) /
-					Math.max(1, chapter.exercises.length),
-			)
-		: 0;
-	const progressFrac = status
-		? status.solvedMain / Math.max(1, status.totalMain)
-		: 0;
+	const reduce = useReducedMotion();
+	const { chapter, status } = p;
+	const locked = p.state === "locked";
 
 	const onClick = () => {
 		if (locked) {
 			sfx("fail");
-			const reason = status?.reasons[0]?.message;
 			const pre = chapter.prerequisites
-				.map((p) => chapterById.get(p)?.title)
+				.map((id) => chapterById.get(id)?.title)
 				.filter(Boolean)
 				.join(", ");
-			toast(reason ?? `Finish ${pre || "the previous level"} first`, {
-				icon: "🔒",
-			});
+			toast(
+				status?.reasons[0]?.message ??
+					`Finish ${pre || "the previous level"} first`,
+				{
+					icon: <GameIcon name="lock" className="text-muted-foreground" />,
+				},
+			);
 			return;
 		}
 		sfx("tap");
@@ -308,128 +414,130 @@ function LevelNode({
 		});
 	};
 
+	// Label sits away from the edge the node leans to; Wick and reviews take the other side.
+	const labelSide = p.x > CENTER ? -1 : 1;
+	const side = -labelSide;
+	const reviewStyle =
+		p.kind === "review"
+			? ({
+					"--w": "var(--info)",
+					"--w-deep": "var(--info-edge)",
+					"--w-ink": "var(--info-foreground)",
+				} as React.CSSProperties)
+			: undefined;
+
 	return (
 		<div
-			className="absolute -translate-x-1/2 -translate-y-1/2"
-			style={{ left: `${x}%`, top: y }}
+			ref={nodeRef}
+			className={cn("mn", p.state === "current" && "z-10")}
+			style={{ left: p.x, top: p.y }}
 		>
+			{p.state === "current" ? (
+				<div className="start-bubble">
+					<span className="speech-bubble">
+						<span className="display">START</span>
+					</span>
+				</div>
+			) : null}
+			{p.kind === "boss" && !locked ? (
+				<span className="boss-tag">BOSS</span>
+			) : null}
 			<motion.button
 				type="button"
 				onClick={onClick}
-				initial={{ scale: 0.4, opacity: 0 }}
-				whileInView={{ scale: 1, opacity: 1 }}
+				className="map-node"
+				data-state={p.state}
+				data-kind={p.kind === "boss" ? "boss" : undefined}
+				style={reviewStyle}
+				initial={reduce ? false : { opacity: 0, scale: 0.92 }}
+				whileInView={{ opacity: 1, scale: 1 }}
 				viewport={{ once: true, margin: "-40px" }}
-				whileHover={locked ? { x: [0, -3, 3, 0] } : { scale: 1.08, y: -3 }}
-				whileTap={{ scale: 0.94 }}
-				transition={{ type: "spring", stiffness: 300, damping: 18 }}
-				className={cn(
-					"relative grid size-[76px] place-items-center rounded-full border-4 text-3xl",
-					locked
-						? "cursor-not-allowed border-border bg-muted text-muted-foreground grayscale"
-						: "border-foreground/70 bg-card",
-				)}
+				transition={{ type: "spring", duration: 0.35, bounce: 0.2 }}
+				aria-label={`${chapter.title}: ${locked ? "locked" : (status?.state ?? "available").replace("-", " ")}`}
+			>
+				<GameIcon
+					name={nodeIcon(p)}
+					solid={["play", "crown", "skull"].includes(nodeIcon(p))}
+				/>
+			</motion.button>
+			{locked ? (
+				<span className="lockbadge" aria-hidden="true">
+					<GameIcon name="lock" />
+				</span>
+			) : null}
+			{p.state === "completed" || p.state === "perfect" ? (
+				<div className="stars3" role="img" aria-label={`${p.stars} of 3 stars`}>
+					{[0, 1, 2].map((i) => (
+						<StarGlyph key={i} filled={i < p.stars} />
+					))}
+				</div>
+			) : null}
+			<span
+				className="label"
 				style={
-					locked
-						? undefined
+					labelSide > 0
+						? {
+								top: "50%",
+								left: "calc(100% + 16px)",
+								transform: "translateY(-50%)",
+								textAlign: "left",
+							}
 						: {
-								boxShadow: `0 0 0 4px color-mix(in oklab, ${glow} 35%, transparent)`,
+								top: "50%",
+								right: "calc(100% + 16px)",
+								transform: "translateY(-50%)",
+								textAlign: "right",
 							}
 				}
-				aria-label={`${chapter.title}: ${state.replace("-", " ")}`}
 			>
-				{!locked && state !== "complete" ? (
-					<svg
-						className="absolute -inset-[7px] -rotate-90"
-						viewBox="0 0 100 100"
-						aria-hidden="true"
-					>
-						<circle
-							cx="50"
-							cy="50"
-							r="46"
-							fill="none"
-							stroke={glow}
-							strokeWidth="5"
-							strokeDasharray={`${progressFrac * 289} 289`}
-							strokeLinecap="round"
-						/>
-					</svg>
-				) : null}
-				{isCurrent ? (
-					<span
-						className="pulse-ring absolute inset-0 rounded-full border-4"
-						style={{ borderColor: glow }}
-					/>
-				) : null}
-				<span aria-hidden="true">
-					{locked ? <Lock className="size-7" /> : chapter.emoji}
-				</span>
-				{state === "gauntlet" ? (
-					<span className="absolute -top-2 -right-2 grid size-8 place-items-center rounded-full bg-destructive text-destructive-foreground shadow-lg">
-						<Swords className="size-4" />
-					</span>
-				) : null}
-				{state === "boss-ready" ? (
-					<span className="absolute -top-2 -right-2 grid size-8 place-items-center rounded-full bg-reward text-reward-foreground shadow-lg">
-						<Crown className="size-4" />
-					</span>
-				) : null}
-			</motion.button>
-
-			{isCurrent ? (
+				<small>{chapter.tier}</small>
+				{chapter.title}
+			</span>
+			{p.state === "current" ? (
 				<motion.div
-					layoutId="map-avatar"
-					className="absolute -top-14 left-1/2 -translate-x-1/2"
-					transition={{ type: "spring", stiffness: 160, damping: 18 }}
+					layoutId="wick-walker"
+					className="pointer-events-none absolute top-1/2"
+					style={{
+						left: side > 0 ? "calc(100% + 18px)" : undefined,
+						right: side < 0 ? "calc(100% + 18px)" : undefined,
+					}}
+					transition={{ duration: 0.7, ease: [0.77, 0, 0.175, 1] }}
 				>
-					<motion.div
-						animate={{ y: [0, -6, 0] }}
-						transition={{ repeat: Number.POSITIVE_INFINITY, duration: 1.6 }}
-						className="grid size-11 place-items-center rounded-2xl border-2 border-background bg-reward text-2xl shadow-md"
-					>
-						{avatar}
-					</motion.div>
+					<Wick className="h-[58px] w-12 -translate-y-1/2" />
 				</motion.div>
 			) : null}
-
-			<div
-				className={cn(
-					"absolute top-1/2 w-36 -translate-y-1/2 sm:w-44",
-					side === "right"
-						? "left-[92px] text-left"
-						: "right-[92px] text-right",
-				)}
-			>
-				<div className="text-[10px] font-bold tracking-widest text-muted-foreground uppercase">
-					{chapter.tier} · {chapter.track}
-				</div>
-				<div
-					className={cn(
-						"font-display text-sm leading-tight sm:text-base",
-						locked ? "text-muted-foreground" : "text-foreground",
-					)}
+			{reviews.length && !locked ? (
+				<Link
+					to="/play/$chapterId"
+					params={{ chapterId: chapter.id }}
+					search={{ phase: "mission", ex: reviews[0].exerciseId, review: true }}
+					className="absolute top-1/2 flex -translate-y-1/2 flex-col items-center gap-1 no-underline"
+					style={
+						side > 0
+							? { right: "calc(100% + 22px)" }
+							: { left: "calc(100% + 22px)" }
+					}
+					onClick={() => sfx("tap")}
 				>
-					{chapter.title}
-				</div>
-				{state === "complete" || totalStars > 0 ? (
-					<StarRow stars={totalStars} className="mt-1 text-foreground" />
-				) : null}
-				{reviews.length ? (
-					<Link
-						to="/play/$chapterId"
-						params={{ chapterId: chapter.id }}
-						search={{
-							phase: "mission",
-							ex: reviews[0].exerciseId,
-							review: true,
-						}}
-						className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-info px-2 py-0.5 text-[11px] font-bold text-info-foreground no-underline shadow"
+					<span
+						className="map-node"
+						data-kind="side"
+						data-state="available"
+						style={
+							{
+								"--w": "var(--info)",
+								"--w-deep": "var(--info-edge)",
+								"--w-ink": "var(--info-foreground)",
+							} as React.CSSProperties
+						}
 					>
-						<Clock className="size-3" />
+						<GameIcon name="dumbbell" className="size-6" />
+					</span>
+					<span className="max-w-24 text-center text-[11px] leading-tight font-extrabold text-(--w-tint-fg)">
 						Review {conceptName(reviews[0].conceptId)}
-					</Link>
-				) : null}
-			</div>
+					</span>
+				</Link>
+			) : null}
 		</div>
 	);
 }
@@ -437,40 +545,38 @@ function LevelNode({
 export function NextUpCard({ progress }: { progress: Progress }) {
 	const { next } = progress;
 	const link = activityLink(next);
-	const icon =
-		next.kind === "boss" ? (
-			<Crown className="size-5" />
-		) : next.kind === "gauntlet" ? (
-			<Swords className="size-5" />
-		) : next.kind === "review" ? (
-			<RotateCcw className="size-5" />
-		) : next.kind === "lesson" ? (
-			<Sparkles className="size-5" />
-		) : (
-			<Play className="size-5" />
-		);
 	const chapter = next.kind === "done" ? null : chapterById.get(next.chapterId);
+	const cta =
+		next.kind === "lesson"
+			? "Start lesson"
+			: next.kind === "boss"
+				? "Face the guardian"
+				: next.kind === "gauntlet"
+					? "Train"
+					: next.kind === "review"
+						? "Review"
+						: "Play";
 	return (
-		<motion.div
-			initial={{ y: 16, opacity: 0 }}
-			animate={{ y: 0, opacity: 1 }}
-			className="panel flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:p-5"
+		<section
+			className="panel relative flex flex-col gap-4 overflow-hidden p-5"
+			style={{
+				background:
+					"radial-gradient(60% 90% at 90% 20%, color-mix(in oklab, var(--lantern) 26%, transparent), transparent 70%), var(--card)",
+			}}
+			aria-label="Next up"
 		>
-			<div className="flex min-w-0 flex-1 items-center gap-3">
-				<div className="grid size-12 shrink-0 place-items-center rounded-2xl bg-secondary text-2xl">
-					{chapter?.emoji ?? "🏆"}
-				</div>
+			<div className="flex items-start gap-3">
+				<Wick
+					className="h-[58px] w-12 shrink-0"
+					mood={next.kind === "done" ? "cheering" : "idle"}
+				/>
 				<div className="min-w-0">
-					<div className="text-[11px] font-bold tracking-[0.18em] text-reward uppercase">
-						Next up
-					</div>
-					<div className="truncate font-display text-base text-foreground sm:text-lg">
+					<div className="kicker text-(--syn-keyword)">Next up</div>
+					<div className="font-display text-2xl leading-tight">
 						{next.label}
 					</div>
 					{chapter ? (
-						<div className="truncate text-sm text-muted-foreground">
-							{chapter.subtitle}
-						</div>
+						<p className="text-sm text-muted-foreground">{chapter.subtitle}</p>
 					) : null}
 				</div>
 			</div>
@@ -478,24 +584,30 @@ export function NextUpCard({ progress }: { progress: Progress }) {
 				<Button
 					asChild
 					size="lg"
+					className="w-full"
 					variant={
 						next.kind === "boss" || next.kind === "gauntlet"
-							? "destructive"
+							? "danger"
 							: next.kind === "review"
-								? "secondary"
+								? "info"
 								: "default"
 					}
 				>
 					<Link {...link} onClick={() => sfx("tap")}>
-						{icon}
-						{next.kind === "lesson"
-							? "Start lesson"
-							: next.kind === "boss"
-								? "Face the boss"
-								: "Play"}
+						<GameIcon
+							name={
+								next.kind === "boss"
+									? "skull"
+									: next.kind === "review"
+										? "dumbbell"
+										: "play"
+							}
+							data-icon="inline-start"
+						/>
+						{cta}
 					</Link>
 				</Button>
 			) : null}
-		</motion.div>
+		</section>
 	);
 }

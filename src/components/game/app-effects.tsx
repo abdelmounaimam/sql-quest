@@ -13,9 +13,8 @@ export function AppEffects() {
 			const t = theme === "system" ? (mq.matches ? "light" : "dark") : theme;
 			root.classList.toggle("dark", t === "dark");
 			root.style.colorScheme = t;
-			document
-				.querySelector('meta[name="theme-color"]')
-				?.setAttribute("content", t === "dark" ? "#09090b" : "#ffffff");
+			for (const m of document.querySelectorAll('meta[name="theme-color"]'))
+				m.setAttribute("content", t === "dark" ? "#0E1424" : "#FBF5E9");
 		};
 		apply();
 		mq.addEventListener("change", apply);

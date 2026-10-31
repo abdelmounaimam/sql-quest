@@ -1,14 +1,31 @@
+import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "cn";
 import type * as React from "react";
 
-function Card({ className, ...props }: React.ComponentProps<"div">) {
+/** Paper slips with a solid ledge (Lantern Atlas §5). */
+const cardVariants = cva("flex flex-col text-card-foreground", {
+	variants: {
+		variant: {
+			paper: "panel gap-6 py-6",
+			mission: "panel gap-0 overflow-hidden",
+			chest: "panel chest gap-0 glow-lantern",
+			lit: "panel gap-6 py-6 glow-lantern",
+			inset: "inset-well gap-4 p-4",
+		},
+	},
+	defaultVariants: { variant: "paper" },
+});
+
+function Card({
+	className,
+	variant,
+	...props
+}: React.ComponentProps<"div"> & VariantProps<typeof cardVariants>) {
 	return (
 		<div
 			data-slot="card"
-			className={cn(
-				"flex flex-col gap-6 rounded-xl border bg-card py-6 text-card-foreground shadow-sm",
-				className,
-			)}
+			data-variant={variant ?? "paper"}
+			className={cn(cardVariants({ variant }), className)}
 			{...props}
 		/>
 	);
@@ -31,7 +48,7 @@ function CardTitle({ className, ...props }: React.ComponentProps<"div">) {
 	return (
 		<div
 			data-slot="card-title"
-			className={cn("leading-none font-semibold", className)}
+			className={cn("text-lg leading-tight font-extrabold", className)}
 			{...props}
 		/>
 	);
@@ -81,6 +98,7 @@ function CardFooter({ className, ...props }: React.ComponentProps<"div">) {
 }
 
 export {
+	cardVariants,
 	Card,
 	CardHeader,
 	CardFooter,

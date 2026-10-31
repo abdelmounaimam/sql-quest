@@ -1,4 +1,5 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
+import { Link } from "@tanstack/react-router";
 import {
 	Check,
 	ChevronLeft,
@@ -69,27 +70,31 @@ export function LessonPlayer({
 	const markDone = () =>
 		setStates((s) => s.map((x, i) => (i === index ? { done: true } : x)));
 
+	// Release dismisses past 30% of the width or with a flick (> 0.11 px/ms).
 	const onDragEnd = (_: unknown, info: PanInfo) => {
-		if (info.offset.x < -80 && canNext) next();
-		else if (info.offset.x > 80) go(index - 1);
+		const w =
+			typeof window === "undefined" ? 400 : Math.min(window.innerWidth, 768);
+		const flick = Math.abs(info.velocity.x) > 110;
+		if ((info.offset.x < -w * 0.3 || (flick && info.offset.x < 0)) && canNext)
+			next();
+		else if (info.offset.x > w * 0.3 || (flick && info.offset.x > 0))
+			go(index - 1);
 	};
 
 	return (
 		<div className="mx-auto flex w-full max-w-3xl flex-1 flex-col px-4 pt-5 pb-28 sm:pb-10">
-			<div className="mb-4 flex items-center justify-between gap-3">
-				<div className="min-w-0">
-					<div className="text-[11px] font-bold tracking-[0.2em] text-reward uppercase">
-						Learn · {chapter.emoji} {chapter.title}
-					</div>
-					<div className="text-sm text-muted-foreground">
-						Step {index + 1} of {steps.length}
-					</div>
-				</div>
-				<div
-					className="flex items-center gap-1.5"
-					role="tablist"
-					aria-label="Lesson steps"
+			<div className="hud-bar mb-4">
+				<Button
+					asChild
+					variant="ghost"
+					size="icon-sm"
+					aria-label="Leave the lesson"
 				>
+					<Link to="/">
+						<X />
+					</Link>
+				</Button>
+				<div className="seg" role="tablist" aria-label="Lesson steps">
 					{steps.map((s, i) => (
 						<button
 							// biome-ignore lint/suspicious/noArrayIndexKey: steps are a fixed, ordered list
@@ -102,27 +107,30 @@ export function LessonPlayer({
 								i <= index || states[i - 1]?.done ? go(i) : undefined
 							}
 							className={cn(
-								"h-2.5 rounded-full transition-all",
-								i === index
-									? "w-7 bg-reward"
-									: states[i]?.done && i < index
-										? "w-2.5 bg-success"
-										: "w-2.5 bg-secondary",
+								"h-3.5 flex-1 rounded-full bg-muted shadow-[inset_0_2px_0_var(--ink-shadow)] transition-[background-color] duration-(--duration-fast)",
+								i < index || (i === index && states[i]?.done)
+									? "gloss bg-success shadow-none"
+									: i === index && "bg-success/55 shadow-none",
 							)}
 						/>
 					))}
 				</div>
+				<span className="text-sm font-extrabold text-muted-foreground tabular">
+					{index + 1}/{steps.length}
+				</span>
 			</div>
-
+			<div className="kicker mb-3 text-(--syn-keyword)">
+				Learn · {chapter.title}
+			</div>
 			<div className="relative flex-1">
 				<AnimatePresence mode="wait" custom={dir} initial={false}>
 					<motion.div
 						key={index}
 						custom={dir}
-						initial={{ x: dir * 80, opacity: 0, rotate: dir * 1.5 }}
-						animate={{ x: 0, opacity: 1, rotate: 0 }}
-						exit={{ x: dir * -80, opacity: 0, rotate: dir * -1.5 }}
-						transition={{ type: "spring", stiffness: 260, damping: 26 }}
+						initial={{ scale: 0.96, opacity: 0 }}
+						animate={{ x: 0, scale: 1, opacity: 1, rotate: 0 }}
+						exit={{ x: `${dir * -110}%`, opacity: 0, rotate: dir * -6 }}
+						transition={{ type: "spring", duration: 0.45, bounce: 0.15 }}
 						drag="x"
 						dragConstraints={{ left: 0, right: 0 }}
 						dragElastic={0.25}
@@ -196,7 +204,7 @@ function StepView({
 		case "explain":
 			return (
 				<div>
-					<StepKind label="Concept" color="text-info" />
+					<StepKind label="Concept" color="text-info-soft-foreground" />
 					<h2 className="mb-3 font-display text-2xl leading-tight text-foreground">
 						{step.title}
 					</h2>
@@ -248,7 +256,7 @@ function ExampleStep({
 	const out: RunOutcome | undefined = runMut.data;
 	return (
 		<div>
-			<StepKind label="Worked example" color="text-reward" />
+			<StepKind label="Worked example" color="text-(--syn-keyword)" />
 			<h2 className="mb-2 font-display text-2xl leading-tight text-foreground">
 				{step.title}
 			</h2>
@@ -312,7 +320,7 @@ function QuizStep({
 	const correct = picked === step.answerIndex;
 	return (
 		<div>
-			<StepKind label="Quick quiz" color="text-special" />
+			<StepKind label="Quick quiz" color="text-special-soft-foreground" />
 			<Markdown className="mb-4 text-lg font-semibold text-foreground">
 				{step.question}
 			</Markdown>
@@ -336,21 +344,14 @@ function QuizStep({
 									setWrong((w) => [...w, i]);
 								}
 							}}
-							animate={isWrong ? { x: [0, -8, 8, -5, 5, 0] } : {}}
-							transition={{ duration: 0.4 }}
-							className={cn(
-								"flex items-center gap-3 rounded-xl border-2 px-4 py-3 text-left text-sm transition",
-								isRight &&
-									"border-success bg-[color-mix(in_oklab,var(--success)_12%,transparent)]",
-								isWrong && "border-destructive/60 opacity-60",
-								!isRight &&
-									!isWrong &&
-									"border-border bg-muted hover:border-reward",
-							)}
+							animate={isWrong ? { x: [0, -6, 6, -3, 3, 0] } : {}}
+							transition={{ duration: 0.42 }}
+							data-state={isRight ? "right" : isWrong ? "wrong" : undefined}
+							className="juicy juicy-paper quiz-tile flex items-center gap-3 px-4 py-3 text-left text-sm font-bold disabled:cursor-default"
 						>
 							<span
 								className={cn(
-									"grid size-7 shrink-0 place-items-center rounded-lg font-display text-xs",
+									"grid size-8 shrink-0 place-items-center rounded-md font-display text-sm",
 									isRight
 										? "bg-success text-success-foreground"
 										: isWrong
@@ -465,7 +466,7 @@ function TryStep({
 
 	return (
 		<div>
-			<StepKind label="Your turn" color="text-success" />
+			<StepKind label="Your turn" color="text-success-soft-foreground" />
 			<h2 className="mb-2 font-display text-2xl leading-tight text-foreground">
 				{step.title}
 			</h2>
@@ -509,7 +510,7 @@ function TryStep({
 							setHints((h) => h + 1);
 							sfx("hint");
 						}}
-						className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-semibold text-reward hover:bg-secondary"
+						className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-semibold text-(--syn-keyword) hover:bg-secondary"
 					>
 						<Lightbulb className="size-4" /> Hint
 					</button>
@@ -530,11 +531,11 @@ function TryStep({
 			{step.hints.slice(0, hints).map((h, i) => (
 				<div
 					key={h}
-					className="mt-2 flex gap-2 rounded-lg bg-[color-mix(in_oklab,var(--reward)_10%,var(--muted))] p-2.5 text-sm"
+					className="mt-2 flex gap-2 rounded-lg bg-info-soft text-info-soft-foreground p-2.5 text-sm"
 				>
-					<Lightbulb className="mt-0.5 size-4 shrink-0 text-reward" />
+					<Lightbulb className="mt-0.5 size-4 shrink-0 text-(--syn-keyword)" />
 					<span>
-						<b className="text-reward">Hint {i + 1}:</b>{" "}
+						<b className="text-(--syn-keyword)">Hint {i + 1}:</b>{" "}
 						<Markdown className="inline text-foreground">{h}</Markdown>
 					</span>
 				</div>
@@ -546,11 +547,11 @@ function TryStep({
 							className={cn(
 								"rounded-lg p-2.5 text-sm",
 								v.pass
-									? "bg-[color-mix(in_oklab,var(--success)_14%,transparent)] text-success"
-									: "bg-[color-mix(in_oklab,var(--destructive)_14%,transparent)] text-destructive",
+									? "bg-success-soft text-success-soft-foreground"
+									: "bg-destructive-soft text-destructive-soft-foreground",
 							)}
 						>
-							<b>{v.title}.</b>{" "}
+							<b>{v.title.replace(/[.!]$/, "")}.</b>{" "}
 							<span className="text-foreground">{v.message}</span>
 						</div>
 						{v.learnerLast ? (

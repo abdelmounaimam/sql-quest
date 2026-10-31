@@ -50,7 +50,7 @@ function SettingsPage() {
 
 	return (
 		<div className="mx-auto w-full max-w-2xl space-y-6 px-4 pt-6 pb-16">
-			<h1 className="font-display text-3xl text-foreground">Settings</h1>
+			<h1 className="font-display text-title">Settings</h1>
 			<motion.form
 				initial={{ opacity: 0, y: 10 }}
 				animate={{ opacity: 1, y: 0 }}
@@ -94,6 +94,12 @@ function SettingsPage() {
 						gameActions.updateSettings({ sound: v });
 						if (v) sfx("success");
 					}}
+				/>
+				<Toggle
+					label="Haptics"
+					description="Short vibrations on wins, misses and stars (Android)."
+					checked={settings.haptics}
+					onChange={(v) => gameActions.updateSettings({ haptics: v })}
 				/>
 				<Toggle
 					label="Boss timer"

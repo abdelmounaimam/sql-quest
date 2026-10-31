@@ -1,3 +1,5 @@
+import lilitaUrl from "@fontsource/lilita-one/files/lilita-one-latin-400-normal.woff2?url";
+import atkinsonUrl from "@fontsource-variable/atkinson-hyperlegible-next/files/atkinson-hyperlegible-next-latin-wght-normal.woff2?url";
 import type { QueryClient } from "@tanstack/react-query";
 import {
 	createRootRouteWithContext,
@@ -34,7 +36,16 @@ export const Route = createRootRouteWithContext<RouterContext>()({
 				content:
 					"A game that teaches SQL and PostgreSQL level by level, right in your browser.",
 			},
-			{ name: "theme-color", content: "#09090b" },
+			{
+				name: "theme-color",
+				content: "#FBF5E9",
+				media: "(prefers-color-scheme: light)",
+			},
+			{
+				name: "theme-color",
+				content: "#0E1424",
+				media: "(prefers-color-scheme: dark)",
+			},
 			{ name: "apple-mobile-web-app-capable", content: "yes" },
 			{ name: "mobile-web-app-capable", content: "yes" },
 			{
@@ -43,6 +54,20 @@ export const Route = createRootRouteWithContext<RouterContext>()({
 			},
 		],
 		links: [
+			{
+				rel: "preload",
+				href: lilitaUrl,
+				as: "font",
+				type: "font/woff2",
+				crossOrigin: "anonymous",
+			},
+			{
+				rel: "preload",
+				href: atkinsonUrl,
+				as: "font",
+				type: "font/woff2",
+				crossOrigin: "anonymous",
+			},
 			{ rel: "stylesheet", href: appCss },
 			{ rel: "manifest", href: "/manifest.webmanifest" },
 			{ rel: "icon", href: "/icons/icon.svg", type: "image/svg+xml" },

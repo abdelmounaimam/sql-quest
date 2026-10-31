@@ -1,47 +1,53 @@
 import { useDebouncedCallback, useDebouncedValue } from "@tanstack/react-pacer";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import {
-	BookOpen,
-	Code2,
-	Eye,
-	Heart,
-	Lightbulb,
-	Play,
-	Send,
-	Table2,
-	Target,
-	Timer,
-} from "lucide-react";
+import { ChevronDown, Eye, Play, X } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Button } from "#/components/ui/button";
 import type { Chapter, Exercise } from "#/content/types";
 import { feedbackPolicy, HINT_XP_COST } from "#/engine/adaptive";
 import type { AttemptKind } from "#/engine/adaptive/types";
 import type { ErrorType, RunOutcome, Verdict } from "#/engine/checker/types";
 import { sqlClient } from "#/engine/sql/client";
-import { type Reward, recordAttempt, useGame } from "#/game/progress";
-import { sfx } from "#/game/sound";
+import { recordAttempt, useGame } from "#/game/progress";
+import { haptic, sfx } from "#/game/sound";
 import {
 	functionsQuery,
 	referencedTables,
 	useCatalog,
 } from "#/game/sql-queries";
 import { useIsDesktop } from "#/hooks/use-media";
-import { conceptById, conceptName } from "#/lib/content";
+import { conceptById, conceptName, datasetById } from "#/lib/content";
 import { cn } from "#/lib/utils";
+import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
+import { Badge } from "../ui/badge";
+import { Button } from "../ui/button";
+import { Card } from "../ui/card";
+import {
+	Collapsible,
+	CollapsibleContent,
+	CollapsibleTrigger,
+} from "../ui/collapsible";
+import {
+	Dialog,
+	DialogContent,
+	DialogDescription,
+	DialogTitle,
+} from "../ui/dialog";
+import { Drawer, DrawerContent, DrawerTitle } from "../ui/drawer";
 import {
 	ResizableHandle,
 	ResizablePanel,
 	ResizablePanelGroup,
 } from "../ui/resizable";
-import { burst } from "./fx";
+import { Spinner } from "../ui/spinner";
+import { AetherStat, ComboChip, StreakStat } from "./hud";
+import { GameIcon, Wick, type WickMood } from "./icons";
 import { Markdown } from "./markdown";
 import { DiffView, ResultGrid } from "./result-grid";
 import { SchemaExplorer } from "./schema-explorer";
-import { SolvedOverlay } from "./solved-overlay";
 import { QuickKeys, SqlEditor, type SqlEditorHandle } from "./sql-editor";
+import { type SolvedResult, VerdictSheet } from "./verdict";
 
 export type MissionMode = "exercise" | "practice" | "boss" | "review";
 
@@ -56,23 +62,112 @@ function loadDraft(ex: Exercise): string {
 	}
 }
 
-export interface MissionResult {
-	reward: Reward;
-	solved: boolean;
-	revealed: boolean;
+export interface Segment {
+	id: string;
+	done: boolean;
+}
+
+/** Level HUD: quit, segmented progress, combo, hearth, aether (+ hearts and clock for bosses). */
+export function LevelHud({
+	chapter,
+	segments,
+	currentId,
+	lives,
+	timeLeft,
+}: {
+	chapter: Chapter;
+	segments: Segment[];
+	currentId?: string;
+	lives?: number;
+	timeLeft?: number;
+}) {
+	return (
+		<div className="safe-top px-3 pt-2 lg:px-4 lg:pt-3">
+			<div className="hud-bar">
+				<Button
+					asChild
+					variant="ghost"
+					size="icon-sm"
+					aria-label="Quit the level"
+				>
+					<Link
+						to="/play/$chapterId"
+						params={{ chapterId: chapter.id }}
+						search={{ phase: "hub" }}
+					>
+						<X />
+					</Link>
+				</Button>
+				<div
+					className="seg"
+					role="progressbar"
+					aria-valuemin={0}
+					aria-valuemax={segments.length}
+					aria-valuenow={segments.filter((s) => s.done).length}
+					aria-label="Level progress"
+				>
+					{segments.map((s) => (
+						<i
+							key={s.id}
+							className={cn(
+								s.done && "on",
+								!s.done && s.id === currentId && "now",
+							)}
+						/>
+					))}
+				</div>
+				{lives !== undefined ? (
+					<span
+						className="stat heart"
+						role="img"
+						aria-label={`${lives} hearts left`}
+					>
+						{(["heart-1", "heart-2", "heart-3"] as const).map((id, i) => (
+							<GameIcon
+								key={id}
+								name="heart"
+								className={cn(i >= lives && "opacity-25")}
+							/>
+						))}
+					</span>
+				) : null}
+				{timeLeft !== undefined ? (
+					<span
+						className={cn(
+							"stat",
+							timeLeft < 30
+								? "text-destructive-soft-foreground"
+								: "text-muted-foreground",
+						)}
+					>
+						<GameIcon name="clock" />
+						{Math.floor(Math.max(0, timeLeft) / 60)}:
+						{String(Math.max(0, timeLeft) % 60).padStart(2, "0")}
+					</span>
+				) : null}
+				<ComboChip />
+				<StreakStat className="hidden sm:inline-flex" />
+				<AetherStat />
+			</div>
+		</div>
+	);
 }
 
 export function MissionScreen({
 	chapter,
 	exercise,
 	mode,
+	world,
+	segments,
 	onNext,
 	onBossDefeat,
-	nextLabel = "Next mission",
+	nextLabel = "Continue",
 }: {
 	chapter: Chapter;
 	exercise: Exercise;
 	mode: MissionMode;
+	world: number;
+	segments: Segment[];
 	onNext: () => void;
 	onBossDefeat?: () => void;
 	nextLabel?: string;
@@ -92,12 +187,13 @@ export function MissionScreen({
 	const [revealed, setRevealed] = useState(false);
 	const [lastRun, setLastRun] = useState<RunOutcome | null>(null);
 	const [verdict, setVerdict] = useState<Verdict | null>(null);
-	const [result, setResult] = useState<MissionResult | null>(null);
+	const [sheetOpen, setSheetOpen] = useState(false);
+	const [result, setResult] = useState<SolvedResult | null>(null);
 	const [bossLost, setBossLost] = useState(false);
 	const [shakeKey, setShakeKey] = useState(0);
-	const [tab, setTab] = useState<"mission" | "schema" | "code" | "result">(
-		"mission",
-	);
+	const [drawer, setDrawer] = useState<null | "schema" | "results">(null);
+	const [snap, setSnap] = useState<number | string | null>(0.45);
+	const [mood, setMood] = useState<WickMood>("idle");
 
 	const shownHints = Math.max(chargedHints, freeHints);
 	const policy = feedbackPolicy({
@@ -134,7 +230,7 @@ export function MissionScreen({
 			catalog.data.tables.map((t) => [t.name, t.columns.map((c) => c.name)]),
 		);
 	}, [catalog.data]);
-	const [debouncedSql] = useDebouncedValue(sql, { wait: 250 });
+	const [debouncedSql] = useDebouncedValue(sql, { wait: 150 });
 	const activeTables = useMemo(
 		() => referencedTables(debouncedSql, Object.keys(schema ?? {})),
 		[debouncedSql, schema],
@@ -147,11 +243,16 @@ export function MissionScreen({
 				setupSql: exercise.setupSql,
 				sql: text,
 			}),
+		onMutate: () => setMood("thinking"),
 		onSuccess: (out) => {
 			setLastRun(out);
 			setVerdict(null);
-			if (!isDesktop) setTab("result");
-			sfx(out.ok ? "run" : "fail");
+			setSheetOpen(false);
+			setMood(out.ok ? "idle" : "sad");
+			if (!isDesktop) {
+				setSnap(0.45);
+				setDrawer("results");
+			}
 		},
 	});
 
@@ -201,15 +302,22 @@ export function MissionScreen({
 				check: exercise.check,
 				learnerSql: text,
 			}),
+		onMutate: () => {
+			sfx("run");
+			setMood("thinking");
+		},
 		onSuccess: (v) => {
 			setVerdict(v);
 			setLastRun(null);
-			if (!isDesktop) setTab("result");
+			setDrawer(null);
+			setSheetOpen(true);
 			if (v.pass) {
 				const reward = finish(true, false);
-				setResult({ reward, solved: true, revealed: false });
+				setResult({ reward, revealed: false });
+				setMood("happy");
 				sfx("success");
-				burst(mode === "boss" ? "boss" : "small");
+				if (reward.combo >= 2)
+					window.setTimeout(() => sfx("combo", reward.combo), 220);
 				return;
 			}
 			const f = failures + 1;
@@ -217,22 +325,25 @@ export function MissionScreen({
 			setFailures(f);
 			setErrorTypes(errs);
 			setShakeKey((k) => k + 1);
+			setMood("sad");
 			sfx("fail");
 			if (mode === "boss" && f >= BOSS_LIVES) {
 				finish(false, false, { failures: f, errors: errs });
+				setSheetOpen(false);
 				setBossLost(true);
 			}
 		},
 	});
 
 	const busy = runMut.isPending || judgeMut.isPending;
+	const locked = busy || !!result || bossLost;
 	const run = () => {
-		if (busy || result || bossLost) return;
+		if (locked) return;
 		setRuns((r) => r + 1);
 		runMut.mutate(sql);
 	};
-	const submit = () => {
-		if (busy || result || bossLost) return;
+	const cast = () => {
+		if (locked) return;
 		judgeMut.mutate(sql);
 	};
 	const revealHint = () => {
@@ -244,7 +355,8 @@ export function MissionScreen({
 		setSql(exercise.solutionSql);
 		setRevealed(true);
 		const reward = finish(true, true);
-		setResult({ reward, solved: true, revealed: true });
+		setResult({ reward, revealed: true });
+		setSheetOpen(true);
 	};
 
 	// Optional boss timer.
@@ -266,63 +378,96 @@ export function MissionScreen({
 	}, [timeLeft, timerActive]);
 
 	const errorLine = verdict?.sqlError?.line ?? lastRun?.error?.line;
+	const dataset = datasetById.get(chapter.datasetId);
+	const tableNames = Object.keys(schema ?? {});
 
 	const missionCard = (
 		<MissionCard
 			chapter={chapter}
 			exercise={exercise}
 			mode={mode}
+			world={world}
+			datasetName={dataset?.name}
 			failures={failures}
 			shownHints={shownHints}
 			freeHints={freeHints}
 			onHint={revealHint}
 			showRefresher={policy.showRefresher}
-			offerSolution={policy.offerSolution && !revealed}
+			offerSolution={policy.offerSolution && !revealed && !result}
 			onReveal={revealSolution}
-			lives={mode === "boss" ? BOSS_LIVES - failures : undefined}
-			timeLeft={timerActive ? timeLeft : undefined}
+			collapsible={!isDesktop}
 		/>
 	);
 
-	const editor = (
-		<div className="flex h-full min-h-0 flex-col">
-			<div className="flex items-center justify-between gap-2 px-1 pb-2">
-				<div className="flex items-center gap-2 text-xs text-muted-foreground">
-					<Code2 className="size-4 text-reward" />
-					<span className="hidden sm:inline">
-						<kbd className="rounded bg-secondary px-1 font-mono">Ctrl</kbd>+
-						<kbd className="rounded bg-secondary px-1 font-mono">Enter</kbd> run
-						· <kbd className="rounded bg-secondary px-1 font-mono">Shift</kbd>{" "}
-						to submit
-					</span>
-					<span className="sm:hidden">
-						{runs} run{runs === 1 ? "" : "s"}
-					</span>
-				</div>
-				<div className="flex gap-2">
-					<Button
-						type="button"
-						onClick={run}
-						disabled={busy || !!result || bossLost}
-						variant="secondary"
-						size="sm"
-					>
-						<Play data-icon="inline-start" /> Run
-					</Button>
-					<Button
-						onClick={submit}
-						disabled={busy || !!result || bossLost}
-						size="sm"
-						variant={mode === "boss" ? "destructive" : "success"}
-					>
-						<Send data-icon="inline-start" /> Submit
-					</Button>
-				</div>
-			</div>
-			<motion.div
-				key={shakeKey}
-				className={cn("min-h-0 flex-1", shakeKey > 0 && "shake")}
+	const castLabel = mode === "boss" ? "Strike" : "Cast";
+	const castButton = (
+		<Button
+			onClick={cast}
+			disabled={locked && !busy}
+			data-pressed={judgeMut.isPending ? "true" : undefined}
+			variant={mode === "boss" ? "danger" : "default"}
+			size={isDesktop ? "lg" : "xl"}
+			className={cn(isDesktop ? "min-w-[180px]" : "flex-1")}
+			aria-keyshortcuts="Control+Shift+Enter"
+		>
+			{judgeMut.isPending ? (
+				<Spinner data-icon="inline-start" />
+			) : (
+				<GameIcon name="wand" data-icon="inline-start" />
+			)}
+			{judgeMut.isPending ? "Casting" : castLabel}
+		</Button>
+	);
+
+	const lanternButton =
+		shownHints < exercise.hints.length && !result ? (
+			<Button
+				variant="ghost-glow"
+				onClick={revealHint}
+				aria-label={`Lantern: reveal hint, costs ${HINT_XP_COST} aether`}
 			>
+				<GameIcon name="bulb" data-icon="inline-start" />
+				<span className={cn(!isDesktop && "sr-only")}>Lantern</span>
+				<Badge variant="xp">−{HINT_XP_COST}</Badge>
+			</Button>
+		) : null;
+
+	const spellbook = (
+		<motion.div
+			key={shakeKey}
+			className={cn(
+				"spell-frame",
+				isDesktop ? "h-full min-h-0" : "min-h-[22rem] flex-1",
+				shakeKey > 0 && "shake",
+			)}
+			data-casting={busy}
+		>
+			<span className="rune-sweep" aria-hidden="true" />
+			<div className="spell-top">
+				<Wick mood={mood} className="h-8 w-7" />
+				<span className="font-extrabold">Spellbook</span>
+				<span className="hidden text-xs text-muted-foreground xl:inline">
+					<kbd className="keycap">Ctrl</kbd> +{" "}
+					<kbd className="keycap">Enter</kbd> test ·{" "}
+					<kbd className="keycap">Shift</kbd> casts
+				</span>
+				<span className="ml-auto" />
+				<Button
+					variant="secondary"
+					size="sm"
+					onClick={run}
+					disabled={locked}
+					aria-keyshortcuts="Control+Enter"
+				>
+					{runMut.isPending ? (
+						<Spinner data-icon="inline-start" />
+					) : (
+						<Play data-icon="inline-start" />
+					)}
+					Test
+				</Button>
+			</div>
+			<div className="min-h-0 flex-1">
 				<SqlEditor
 					ref={editorRef}
 					value={sql}
@@ -331,22 +476,30 @@ export function MissionScreen({
 						saveDraft(v);
 					}}
 					onRun={run}
-					onSubmit={submit}
+					onSubmit={cast}
 					schema={schema}
 					functions={functions.data}
 					autocomplete={autocomplete}
 					errorLine={errorLine}
+					bare
 					className="h-full"
-					minHeight={isDesktop ? "100%" : "180px"}
+					minHeight={isDesktop ? "100%" : "28dvh"}
 				/>
-			</motion.div>
+			</div>
 			{!isDesktop ? (
 				<QuickKeys
-					className="-mx-3 mt-2"
+					tables={tableNames}
 					onKey={(k) => editorRef.current?.insert(k)}
 				/>
 			) : null}
-		</div>
+			{isDesktop ? (
+				<div className="spell-bottom">
+					{lanternButton}
+					<span className="flex-1" />
+					{castButton}
+				</div>
+			) : null}
+		</motion.div>
 	);
 
 	const results = (
@@ -354,37 +507,50 @@ export function MissionScreen({
 	);
 
 	return (
-		<div className="relative flex min-h-0 flex-1 flex-col">
+		<div className="relative flex min-h-dvh flex-col" data-world={world}>
+			<LevelHud
+				chapter={chapter}
+				segments={segments}
+				currentId={exercise.id}
+				lives={mode === "boss" ? BOSS_LIVES - failures : undefined}
+				timeLeft={timerActive ? timeLeft : undefined}
+			/>
 			{isDesktop ? (
-				<div className="h-[calc(100dvh-3.5rem)] shrink-0 p-3">
-					<ResizablePanelGroup orientation="horizontal" className="gap-0">
-						<ResizablePanel defaultSize="36%" minSize="22%">
+				<div className="h-[calc(100dvh-4.75rem)] p-3 lg:px-4">
+					<ResizablePanelGroup orientation="horizontal">
+						<ResizablePanel defaultSize="32%" minSize="22%">
 							<ResizablePanelGroup orientation="vertical">
-								<ResizablePanel defaultSize="52%" minSize="20%">
-									<div className="panel h-full overflow-auto p-4">
+								<ResizablePanel defaultSize="50%" minSize="20%">
+									<div className="h-full overflow-y-auto overscroll-contain pr-1 pb-2">
 										{missionCard}
 									</div>
 								</ResizablePanel>
-								<ResizableHandle className="my-1 bg-transparent" withHandle />
-								<ResizablePanel defaultSize="48%" minSize="15%">
+								<ResizableHandle withHandle className="my-1" />
+								<ResizablePanel defaultSize="50%" minSize="15%">
 									<div className="panel h-full overflow-hidden">
 										<SchemaExplorer
 											datasetId={chapter.datasetId}
 											activeTables={activeTables}
+											sql={debouncedSql}
 										/>
 									</div>
 								</ResizablePanel>
 							</ResizablePanelGroup>
 						</ResizablePanel>
-						<ResizableHandle className="mx-1 bg-transparent" withHandle />
-						<ResizablePanel defaultSize="64%" minSize="35%">
+						<ResizableHandle withHandle className="mx-1" />
+						<ResizablePanel defaultSize="68%" minSize="35%">
 							<ResizablePanelGroup orientation="vertical">
-								<ResizablePanel defaultSize="46%" minSize="20%">
-									<div className="panel h-full p-3">{editor}</div>
+								<ResizablePanel defaultSize="55%" minSize="25%">
+									<div className="h-full pb-1">{spellbook}</div>
 								</ResizablePanel>
-								<ResizableHandle className="my-1 bg-transparent" withHandle />
-								<ResizablePanel defaultSize="54%" minSize="15%">
-									<div className="panel h-full overflow-auto p-3">
+								<ResizableHandle withHandle className="my-1" />
+								<ResizablePanel defaultSize="45%" minSize="15%">
+									<div
+										className={cn(
+											"h-full overflow-y-auto overscroll-contain",
+											sheetOpen && "pb-56",
+										)}
+									>
 										{results}
 									</div>
 								</ResizablePanel>
@@ -394,106 +560,98 @@ export function MissionScreen({
 				</div>
 			) : (
 				<>
-					<div className="min-h-0 flex-1 overflow-y-auto px-3 pt-3 pb-24">
-						{tab === "mission" ? missionCard : null}
-						{tab === "schema" ? (
-							<div className="panel h-[calc(100dvh-12rem)] overflow-hidden">
-								<SchemaExplorer
-									datasetId={chapter.datasetId}
-									activeTables={activeTables}
-									defaultView="cards"
-								/>
-							</div>
-						) : null}
-						{tab === "code" ? editor : null}
-						{tab === "result" ? results : null}
+					<div className="flex min-h-0 flex-1 flex-col gap-3 px-3 pt-3 pb-[calc(6.5rem+env(safe-area-inset-bottom))]">
+						{missionCard}
+						{spellbook}
 					</div>
-					<MobileTabs
-						tab={tab}
-						setTab={setTab}
-						hasResult={!!(lastRun || verdict)}
-						failed={!!verdict && !verdict.pass}
-					/>
+					<div className="safe-bottom fixed inset-x-0 bottom-0 z-30 border-t-2 border-border bg-card px-3 pt-2">
+						<div className="flex items-center gap-2 pb-2">
+							{lanternButton}
+							<Button
+								variant="secondary"
+								size="icon"
+								aria-label="Chests (schema)"
+								onClick={() => setDrawer("schema")}
+							>
+								<GameIcon name="chest" />
+							</Button>
+							<Button
+								variant="secondary"
+								size="icon"
+								aria-label="Loot (results)"
+								onClick={() => {
+									setSnap(0.45);
+									setDrawer("results");
+								}}
+							>
+								<GameIcon name="table" />
+							</Button>
+							{castButton}
+						</div>
+					</div>
+					<Drawer
+						open={drawer !== null}
+						onOpenChange={(o) => !o && setDrawer(null)}
+						snapPoints={[0.45, 0.92]}
+						activeSnapPoint={snap}
+						setActiveSnapPoint={setSnap}
+					>
+						<DrawerContent
+							className="h-[96dvh] overscroll-contain"
+							data-world={world}
+						>
+							<DrawerTitle className="px-4 pt-2 font-display text-xl">
+								{drawer === "schema" ? "Treasure chests" : "Loot ledger"}
+							</DrawerTitle>
+							<div className="min-h-0 flex-1 overflow-y-auto px-1 pb-4">
+								{drawer === "schema" ? (
+									<SchemaExplorer
+										datasetId={chapter.datasetId}
+										activeTables={activeTables}
+										sql={debouncedSql}
+										showTabs={false}
+									/>
+								) : (
+									<div className="px-2">{results}</div>
+								)}
+							</div>
+						</DrawerContent>
+					</Drawer>
 				</>
 			)}
 
 			<AnimatePresence>
-				{result ? (
-					<SolvedOverlay
-						key="solved"
+				{sheetOpen && !bossLost ? (
+					<VerdictSheet
+						key={result ? "ok" : `bad-${shakeKey}`}
 						exercise={exercise}
-						result={result}
+						verdict={verdict}
+						solved={result}
 						isBoss={mode === "boss"}
-						onNext={onNext}
-						nextLabel={nextLabel}
-					/>
-				) : null}
-				{bossLost ? (
-					<BossDefeat
-						key="defeat"
-						chapter={chapter}
-						onContinue={onBossDefeat ?? onNext}
+						onContinue={onNext}
+						onRetry={() => {
+							setSheetOpen(false);
+							setMood("idle");
+							editorRef.current?.focus();
+						}}
+						onHint={
+							shownHints < exercise.hints.length
+								? () => {
+										revealHint();
+										setSheetOpen(false);
+									}
+								: undefined
+						}
+						continueLabel={nextLabel}
 					/>
 				) : null}
 			</AnimatePresence>
+			<BossDefeat
+				open={bossLost}
+				chapter={chapter}
+				onContinue={onBossDefeat ?? onNext}
+			/>
 		</div>
-	);
-}
-
-function MobileTabs({
-	tab,
-	setTab,
-	hasResult,
-	failed,
-}: {
-	tab: string;
-	setTab: (t: "mission" | "schema" | "code" | "result") => void;
-	hasResult: boolean;
-	failed: boolean;
-}) {
-	const items = [
-		["mission", Target, "Mission"],
-		["schema", BookOpen, "Schema"],
-		["code", Code2, "Code"],
-		["result", Table2, "Result"],
-	] as const;
-	return (
-		<nav
-			className="safe-bottom fixed inset-x-0 bottom-0 z-30 border-t border-border bg-[color-mix(in_oklab,var(--muted)_92%,transparent)] backdrop-blur"
-			aria-label="Mission panels"
-		>
-			<div className="grid grid-cols-4">
-				{items.map(([id, Icon, label]) => (
-					<button
-						key={id}
-						type="button"
-						onClick={() => setTab(id)}
-						aria-current={tab === id}
-						className={cn(
-							"relative flex flex-col items-center gap-0.5 py-2.5 text-[11px] font-bold",
-							tab === id ? "text-reward" : "text-muted-foreground",
-						)}
-					>
-						{tab === id ? (
-							<motion.span
-								layoutId="mobile-tab"
-								className="absolute inset-x-4 top-0 h-0.5 rounded-full bg-reward"
-							/>
-						) : null}
-						<Icon className="size-5" />
-						{label}
-						{id === "result" && hasResult ? (
-							<span
-								className={cn(
-									"absolute top-2 right-[30%] size-2 rounded-full",
-									failed ? "bg-destructive" : "bg-success",
-								)}
-							/>
-						) : null}
-					</button>
-				))}
-			</div>
-		</nav>
 	);
 }
 
@@ -501,6 +659,8 @@ function MissionCard({
 	chapter,
 	exercise,
 	mode,
+	world,
+	datasetName,
 	failures,
 	shownHints,
 	freeHints,
@@ -508,12 +668,13 @@ function MissionCard({
 	showRefresher,
 	offerSolution,
 	onReveal,
-	lives,
-	timeLeft,
+	collapsible,
 }: {
 	chapter: Chapter;
 	exercise: Exercise;
 	mode: MissionMode;
+	world: number;
+	datasetName?: string;
 	failures: number;
 	shownHints: number;
 	freeHints: number;
@@ -521,160 +682,112 @@ function MissionCard({
 	showRefresher: boolean;
 	offerSolution: boolean;
 	onReveal: () => void;
-	lives?: number;
-	timeLeft?: number;
+	collapsible: boolean;
 }) {
-	const badge =
+	// Phones: collapsed by default (ribbon + goal stay visible), the spellbook gets the room.
+	const [open, setOpen] = useState(!collapsible);
+	const kicker =
 		mode === "boss"
-			? {
-					label: "Boss fight",
-					cls: "bg-destructive text-destructive-foreground",
-				}
+			? "Guardian"
 			: mode === "practice"
-				? { label: "Practice drill", cls: "bg-info text-info-foreground" }
+				? "Practice drill"
 				: mode === "review"
-					? { label: "Review", cls: "bg-special text-special-foreground" }
-					: { label: "Mission", cls: "bg-reward text-reward-foreground" };
-	return (
-		<div className="space-y-4">
-			<div className="flex flex-wrap items-center gap-2">
-				<span
-					className={cn(
-						"rounded-full px-2.5 py-0.5 font-display text-[11px]",
-						badge.cls,
-					)}
-				>
-					{badge.label}
-				</span>
-				<span className="text-xs text-muted-foreground">
-					{"◆".repeat(exercise.difficulty)}
-					<span className="opacity-30">
-						{"◆".repeat(5 - exercise.difficulty)}
-					</span>
-				</span>
-				<span className="rounded-full bg-secondary px-2 py-0.5 text-[11px] font-semibold text-muted-foreground">
-					{exercise.kind}
-				</span>
-				{lives !== undefined ? (
-					<span
-						className="ml-auto flex items-center gap-0.5"
-						role="img"
-						aria-label={`${lives} lives left`}
-					>
-						{(["life-1", "life-2", "life-3"] as const).map((id, i) => (
-							<motion.span
-								key={id}
-								animate={
-									i >= lives ? { scale: [1, 1.4, 0.8], opacity: 0.25 } : {}
-								}
-							>
-								<Heart
-									className="size-5 text-destructive"
-									fill={i < lives ? "currentColor" : "none"}
-								/>
-							</motion.span>
-						))}
-					</span>
-				) : null}
-				{timeLeft !== undefined ? (
-					<span
-						className={cn(
-							"flex items-center gap-1 rounded-full bg-secondary px-2 py-0.5 font-mono text-xs font-bold tabular-nums",
-							timeLeft < 30
-								? "animate-pulse text-destructive"
-								: "text-foreground",
-						)}
-						aria-live="off"
-					>
-						<Timer className="size-3.5" />
-						{Math.floor(Math.max(0, timeLeft) / 60)}:
-						{String(Math.max(0, timeLeft) % 60).padStart(2, "0")}
-					</span>
-				) : null}
-			</div>
-			<div>
-				<h2 className="font-display text-xl leading-tight text-foreground">
-					{exercise.title}
-				</h2>
-				{exercise.story ? (
-					<p className="mt-2 border-l-2 border-reward/60 pl-3 text-sm text-muted-foreground italic">
-						{exercise.story}
-					</p>
-				) : null}
-			</div>
-			<div className="rounded-xl border border-border bg-muted p-3">
-				<Markdown className="text-foreground">{exercise.prompt}</Markdown>
-			</div>
-			<div className="flex flex-wrap gap-1.5">
-				{exercise.concepts.map((c) => (
-					<span
-						key={c}
-						className="rounded-md bg-secondary px-2 py-0.5 text-[11px] font-semibold text-muted-foreground"
-					>
-						{conceptName(c)}
-					</span>
-				))}
-			</div>
+					? "Review"
+					: "Mission";
 
-			<div className="space-y-2">
-				<AnimatePresence initial={false}>
-					{exercise.hints.slice(0, shownHints).map((h, i) => (
-						<motion.div
-							key={h}
-							initial={{ opacity: 0, y: -6, height: 0 }}
-							animate={{ opacity: 1, y: 0, height: "auto" }}
-							className="flex gap-2 rounded-xl border border-reward/40 bg-[color-mix(in_oklab,var(--reward)_10%,var(--card))] p-3 text-sm"
-						>
-							<Lightbulb className="mt-0.5 size-4 shrink-0 text-reward" />
-							<div>
-								<div className="text-[10px] font-bold tracking-widest text-reward uppercase">
-									Hint {i + 1}
-									{i < freeHints ? " · free" : ""}
-								</div>
-								<Markdown className="text-foreground">{h}</Markdown>
-							</div>
-						</motion.div>
-					))}
-				</AnimatePresence>
-				{shownHints < exercise.hints.length ? (
+	const ribbon = (
+		<div className="mission-ribbon world-motif" data-world={world}>
+			<div className="min-w-0 flex-1">
+				<div className="k">
+					{kicker}
+					{datasetName ? ` · ${datasetName}` : ""} ·{" "}
+					{"◆".repeat(exercise.difficulty)}
+				</div>
+				<h2 className="t">{exercise.title}</h2>
+			</div>
+			{collapsible ? (
+				<CollapsibleTrigger asChild>
 					<button
 						type="button"
-						onClick={onHint}
-						className="flex w-full items-center justify-between rounded-xl border border-dashed border-reward/50 px-3 py-2 text-sm font-semibold text-reward hover:bg-[color-mix(in_oklab,var(--reward)_8%,transparent)]"
+						className="grid size-9 place-items-center rounded-md"
+						aria-label={open ? "Collapse mission" : "Expand mission"}
 					>
-						<span className="flex items-center gap-2">
-							<Lightbulb className="size-4" /> Reveal hint {shownHints + 1}/
-							{exercise.hints.length}
-						</span>
-						<span className="font-mono text-xs">−{HINT_XP_COST} XP</span>
+						<ChevronDown
+							className={cn(
+								"size-5 transition-transform duration-200 ease-out",
+								open && "rotate-180",
+							)}
+						/>
 					</button>
-				) : null}
-			</div>
+				</CollapsibleTrigger>
+			) : null}
+		</div>
+	);
 
-			<AnimatePresence>
-				{showRefresher ? (
+	const goal = (
+		<div className="goal-box">
+			<GameIcon name="target" className="size-5" />
+			<Markdown className="min-w-0 text-foreground">{exercise.prompt}</Markdown>
+		</div>
+	);
+
+	const details = (
+		<div className="flex flex-col gap-3">
+			<div className="flex flex-wrap gap-1.5">
+				{exercise.concepts.map((c) => (
+					<Badge key={c} variant="success">
+						{conceptName(c)}
+					</Badge>
+				))}
+				<Badge variant="outline">{exercise.kind}</Badge>
+			</div>
+			<AnimatePresence initial={false}>
+				{exercise.hints.slice(0, shownHints).map((h, i) => (
 					<motion.div
-						initial={{ opacity: 0, scale: 0.96 }}
-						animate={{ opacity: 1, scale: 1 }}
-						className="rounded-xl border border-info/50 bg-[color-mix(in_oklab,var(--info)_8%,var(--card))] p-3"
+						key={h}
+						initial={{ opacity: 0, y: -6 }}
+						animate={{ opacity: 1, y: 0 }}
+						transition={{ duration: 0.22, ease: [0.23, 1, 0.32, 1] }}
 					>
-						<div className="mb-1 flex items-center gap-2 text-xs font-bold tracking-widest text-info uppercase">
-							<BookOpen className="size-4" /> Quick refresher
-						</div>
-						<p className="mb-2 text-xs text-muted-foreground">
-							{failures} tries so far. Here is the idea again:
+						<Alert variant="info">
+							<GameIcon name="bulb" />
+							<AlertTitle>
+								Lantern {i + 1}
+								{i < freeHints ? " · free" : ""}
+							</AlertTitle>
+							<AlertDescription>
+								<Markdown className="text-info-soft-foreground">{h}</Markdown>
+							</AlertDescription>
+						</Alert>
+					</motion.div>
+				))}
+			</AnimatePresence>
+			{shownHints < exercise.hints.length ? (
+				<Button
+					variant="ghost-glow"
+					size="sm"
+					className="self-start"
+					onClick={onHint}
+				>
+					<GameIcon name="bulb" data-icon="inline-start" /> Light the lantern{" "}
+					{shownHints + 1}/{exercise.hints.length}
+					<Badge variant="xp">−{HINT_XP_COST}</Badge>
+				</Button>
+			) : null}
+			{showRefresher ? (
+				<Alert variant="lore">
+					<GameIcon name="scroll" />
+					<AlertTitle>Quick refresher</AlertTitle>
+					<AlertDescription>
+						<p className="mb-1 text-sm">
+							{failures} casts so far. Here is the idea again:
 						</p>
-						<ul className="space-y-1.5">
+						<ul className="flex flex-col gap-1">
 							{exercise.concepts.map((c) => (
 								<li key={c} className="text-sm">
-									<span className="font-bold text-foreground">
-										{conceptName(c)}
-									</span>
+									<b>{conceptName(c)}</b>
 									{conceptById.get(c)?.summary ? (
-										<span className="text-muted-foreground">
-											{" "}
-											· {conceptById.get(c)?.summary}
-										</span>
+										<span> · {conceptById.get(c)?.summary}</span>
 									) : null}
 								</li>
 							))}
@@ -683,24 +796,53 @@ function MissionCard({
 							to="/play/$chapterId"
 							params={{ chapterId: chapter.id }}
 							search={{ phase: "learn" }}
-							className="mt-2 inline-block text-xs font-bold text-info"
+							className="mt-1 inline-block text-sm font-extrabold underline underline-offset-4"
 						>
-							Replay the lesson →
+							Replay the lesson
 						</Link>
-					</motion.div>
-				) : null}
-			</AnimatePresence>
-
+					</AlertDescription>
+				</Alert>
+			) : null}
 			{offerSolution ? (
-				<button
-					type="button"
+				<Button
+					variant="outline"
+					size="sm"
+					className="self-start text-destructive-soft-foreground"
 					onClick={onReveal}
-					className="flex w-full items-center justify-center gap-2 rounded-xl border border-destructive/50 px-3 py-2 text-sm font-semibold text-destructive hover:bg-[color-mix(in_oklab,var(--destructive)_8%,transparent)]"
 				>
-					<Eye className="size-4" /> Show the solution (0 stars)
-				</button>
+					<Eye data-icon="inline-start" /> Show the spell (0 stars)
+				</Button>
 			) : null}
 		</div>
+	);
+
+	if (collapsible)
+		return (
+			<Collapsible open={open} onOpenChange={setOpen} asChild>
+				<Card variant="mission" data-world={world}>
+					{ribbon}
+					<div className="flex flex-col gap-3 p-4">
+						{exercise.story && open ? (
+							<p className="text-sm text-muted-foreground">{exercise.story}</p>
+						) : null}
+						{goal}
+						<CollapsibleContent>{details}</CollapsibleContent>
+					</div>
+				</Card>
+			</Collapsible>
+		);
+
+	return (
+		<Card variant="mission" data-world={world}>
+			{ribbon}
+			<div className="flex flex-col gap-3 p-4">
+				{exercise.story ? (
+					<p className="text-muted-foreground">{exercise.story}</p>
+				) : null}
+				{goal}
+				{details}
+			</div>
+		</Card>
 	);
 }
 
@@ -715,51 +857,63 @@ function ResultsPanel({
 }) {
 	if (busy)
 		return (
-			<div className="grid h-full min-h-40 place-items-center">
-				<div className="flex items-center gap-3 text-sm text-muted-foreground">
-					<span className="size-6 animate-spin rounded-full border-4 border-secondary border-t-info" />
-					Postgres is thinking…
+			<div className="panel grid h-full min-h-40 place-items-center p-6">
+				<div className="flex items-center gap-3 text-sm font-bold text-muted-foreground">
+					<Spinner className="size-6 text-lantern" />
+					The spell is working…
 				</div>
 			</div>
 		);
 	if (!lastRun && !verdict)
 		return (
-			<div className="grid h-full min-h-40 place-items-center text-center text-sm text-muted-foreground">
-				<div>
-					<Table2 className="mx-auto mb-2 size-8 opacity-50" />
-					Run your query to see the result here.
-					<br />
-					Submit when you think it is right.
+			<div className="panel grid h-full min-h-40 place-items-center p-6 text-center">
+				<div className="flex flex-col items-center gap-2 text-sm text-muted-foreground">
+					<Wick mood="sleeping" className="h-14 w-12" />
+					<span className="font-bold">Your loot appears here.</span>
+					<span>
+						Test the spell to peek at the result, cast it when you are sure.
+					</span>
 				</div>
 			</div>
 		);
 
 	if (lastRun) {
 		return (
-			<div className="space-y-3">
-				{lastRun.ok ? (
-					<div className="text-xs text-muted-foreground">
-						Ran in {lastRun.durationMs} ms · {lastRun.results.length} statement
-						{lastRun.results.length === 1 ? "" : "s"}. Not judged yet: press
-						Submit.
-					</div>
-				) : (
-					<ErrorBanner
-						title={lastRun.errorType === "timeout" ? "Timeout" : "Error"}
-						message={lastRun.error?.message ?? "Query failed"}
-						code={lastRun.error?.code}
-						where={
-							lastRun.error?.line
-								? `line ${lastRun.error.line}, col ${lastRun.error.column}`
-								: undefined
-						}
-						hint={lastRun.error?.hint}
-					/>
+			<div className="flex flex-col gap-3">
+				{lastRun.ok ? null : (
+					<Alert variant="destructive">
+						<GameIcon name="x" />
+						<AlertTitle>
+							{lastRun.errorType === "timeout"
+								? "The spell ran wild"
+								: "Fizzled"}
+							{lastRun.error?.code ? (
+								<span className="rune ml-2">{lastRun.error.code}</span>
+							) : null}
+						</AlertTitle>
+						<AlertDescription>
+							<p className="font-mono text-xs">
+								{lastRun.error?.message ?? "Query failed"}
+							</p>
+							{lastRun.error?.line ? (
+								<p className="text-xs">
+									line {lastRun.error.line}, column {lastRun.error.column}
+								</p>
+							) : null}
+							{lastRun.error?.hint ? (
+								<p className="text-xs">Hint: {lastRun.error.hint}</p>
+							) : null}
+						</AlertDescription>
+					</Alert>
 				)}
 				{lastRun.ok ? (
 					<ResultGrid
 						table={lastRun.last ?? lastRun.results.at(-1)}
-						caption="Your result"
+						meta={
+							<Badge variant="info" className="tabular">
+								test · {lastRun.durationMs} ms
+							</Badge>
+						}
 					/>
 				) : null}
 			</div>
@@ -768,148 +922,85 @@ function ResultsPanel({
 
 	const v = verdict as Verdict;
 	return (
-		<div className="space-y-3">
-			<motion.div
-				initial={{ y: -8, opacity: 0 }}
-				animate={{ y: 0, opacity: 1 }}
-				className={cn(
-					"rounded-xl border-2 p-3",
-					v.pass
-						? "border-success bg-[color-mix(in_oklab,var(--success)_10%,var(--card))]"
-						: "border-destructive bg-[color-mix(in_oklab,var(--destructive)_10%,var(--card))]",
-				)}
-				role="status"
-			>
-				<div
-					className={cn(
-						"font-display text-base",
-						v.pass ? "text-success" : "text-destructive",
-					)}
-				>
-					{v.pass ? "✓ " : "✗ "}
-					{v.title}
-				</div>
-				<p className="mt-1 text-sm text-foreground">{v.message}</p>
-				{v.sqlError?.code ? (
-					<div className="mt-1 font-mono text-[11px] text-muted-foreground">
-						SQLSTATE {v.sqlError.code}
-						{v.sqlError.line
-							? ` · line ${v.sqlError.line}, col ${v.sqlError.column}`
-							: ""}
-					</div>
-				) : null}
-			</motion.div>
+		<div className="flex flex-col gap-3">
+			{!v.pass && !v.learnerLast && !v.learnerResults.length ? (
+				<Alert variant="destructive">
+					<GameIcon name="x" />
+					<AlertTitle>
+						{v.title}
+						{v.sqlError?.code ? (
+							<span className="rune ml-2">{v.sqlError.code}</span>
+						) : null}
+					</AlertTitle>
+					<AlertDescription>
+						<p>{v.message}</p>
+						{v.sqlError?.message ? (
+							<p className="font-mono text-xs">{v.sqlError.message}</p>
+						) : null}
+					</AlertDescription>
+				</Alert>
+			) : null}
 			{v.learnerLast || v.learnerResults.length ? (
 				<ResultGrid
 					table={v.learnerLast ?? v.learnerResults.at(-1)}
-					caption="Your result"
+					meta={
+						<Badge variant={v.pass ? "success" : "danger"}>
+							{v.pass ? "✓ matches" : `✗ ${v.title.toLowerCase()}`}
+						</Badge>
+					}
 				/>
 			) : null}
 			{v.diff && !v.pass ? (
-				<div>
-					<div className="mb-1.5 text-xs font-bold tracking-widest text-muted-foreground uppercase">
-						Expected vs yours
-					</div>
-					<DiffView diff={v.diff} expected={v.expected} got={v.learnerLast} />
-				</div>
+				<DiffView diff={v.diff} expected={v.expected} got={v.learnerLast} />
 			) : null}
 			{v.stateDiff && !v.pass ? (
-				<div>
-					<div className="mb-1.5 text-xs font-bold tracking-widest text-muted-foreground uppercase">
-						Final state of the database
-					</div>
-					<DiffView
-						diff={v.stateDiff}
-						expected={v.stateExpected}
-						got={v.stateGot}
-						labels={["Expected state", "Your state"]}
-					/>
-				</div>
-			) : null}
-		</div>
-	);
-}
-
-function ErrorBanner({
-	title,
-	message,
-	code,
-	where,
-	hint,
-}: {
-	title: string;
-	message: string;
-	code?: string;
-	where?: string;
-	hint?: string;
-}) {
-	return (
-		<div
-			className="rounded-xl border-2 border-destructive bg-[color-mix(in_oklab,var(--destructive)_10%,var(--card))] p-3"
-			role="alert"
-		>
-			<div className="font-display text-sm text-destructive">{title}</div>
-			<p className="mt-1 font-mono text-xs text-foreground">{message}</p>
-			{code || where ? (
-				<div className="mt-1 font-mono text-[11px] text-muted-foreground">
-					{code ? `SQLSTATE ${code}` : ""}
-					{where ? ` · ${where}` : ""}
-				</div>
-			) : null}
-			{hint ? (
-				<p className="mt-1 text-xs text-muted-foreground">Hint: {hint}</p>
+				<DiffView
+					diff={v.stateDiff}
+					expected={v.stateExpected}
+					got={v.stateGot}
+					labels={["Expected world state", "Your world state"]}
+				/>
 			) : null}
 		</div>
 	);
 }
 
 function BossDefeat({
+	open,
 	chapter,
 	onContinue,
 }: {
+	open: boolean;
 	chapter: Chapter;
 	onContinue: () => void;
 }) {
 	useEffect(() => {
+		if (!open) return;
 		sfx("boss");
-	}, []);
+		haptic("wrong");
+	}, [open]);
 	return (
-		<motion.div
-			initial={{ opacity: 0 }}
-			animate={{ opacity: 1 }}
-			exit={{ opacity: 0 }}
-			className="fixed inset-0 z-50 grid place-items-center bg-background/80 p-4 backdrop-blur"
-			role="dialog"
-			aria-labelledby="defeat-title"
-		>
-			<motion.div
-				initial={{ scale: 0.8, y: 30 }}
-				animate={{ scale: 1, y: 0 }}
-				transition={{ type: "spring", stiffness: 200, damping: 16 }}
-				className="panel max-w-md p-6 text-center"
+		<Dialog open={open}>
+			<DialogContent
+				showCloseButton={false}
+				className="max-w-md text-center"
+				onEscapeKeyDown={(e) => e.preventDefault()}
 			>
-				<div className="text-6xl">💀</div>
-				<h2
-					id="defeat-title"
-					className="mt-2 font-display text-2xl text-destructive"
-				>
-					The boss won this round
-				</h2>
-				<p className="mt-2 text-sm text-muted-foreground">
-					No shame in it. A short training gauntlet targeted at the concepts of{" "}
+				<div className="mx-auto grid size-20 place-items-center rounded-full bg-destructive text-destructive-foreground shadow-[0_6px_0_var(--destructive-edge)]">
+					<GameIcon name="skull" className="size-11" />
+				</div>
+				<DialogTitle className="text-center text-3xl">
+					The guardian held
+				</DialogTitle>
+				<DialogDescription className="text-center">
+					No shame in it. A short training gauntlet aimed at the runes of{" "}
 					<b className="text-foreground">{chapter.title}</b> is now open. Clear
-					it and the boss gate opens again.
-				</p>
-				<Button
-					type="button"
-					onClick={onContinue}
-					variant="destructive"
-					size="lg"
-					className="mt-5"
-				>
+					it and the gate opens again.
+				</DialogDescription>
+				<Button variant="danger" size="lg" onClick={onContinue} autoFocus>
 					To the training grounds
 				</Button>
-			</motion.div>
-		</motion.div>
+			</DialogContent>
+		</Dialog>
 	);
 }

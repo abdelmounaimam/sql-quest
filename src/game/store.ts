@@ -13,6 +13,7 @@ export type MotionPref = "system" | "reduce" | "full";
 export interface Settings {
 	autocomplete: boolean;
 	sound: boolean;
+	haptics: boolean;
 	reducedMotion: MotionPref;
 	theme: ThemePref;
 	bossTimer: boolean;
@@ -42,6 +43,7 @@ export interface GameState {
 export const DEFAULT_SETTINGS: Settings = {
 	autocomplete: true,
 	sound: true,
+	haptics: true,
 	reducedMotion: "system",
 	theme: "dark",
 	bossTimer: true,
