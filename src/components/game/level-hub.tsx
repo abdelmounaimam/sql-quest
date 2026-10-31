@@ -1,0 +1,320 @@
+import { Link } from "@tanstack/react-router";
+import {
+	BookOpen,
+	Check,
+	ChevronLeft,
+	Crown,
+	Lock,
+	Play,
+	Swords,
+} from "lucide-react";
+import { motion } from "motion/react";
+import type { Chapter } from "#/content/types";
+import { MASTERY_THRESHOLD } from "#/engine/adaptive";
+import type { ChapterStatus } from "#/engine/adaptive/types";
+import type { Progress } from "#/game/progress";
+import { sfx } from "#/game/sound";
+import { bossOf, conceptName, datasetById, findExercise } from "#/lib/content";
+import { cn } from "#/lib/utils";
+import { StarRow } from "./stars";
+
+export function MasteryBar({
+	value,
+	className,
+}: {
+	value: number;
+	className?: string;
+}) {
+	return (
+		<div
+			className={cn(
+				"relative h-2 overflow-hidden rounded-full bg-secondary",
+				className,
+			)}
+		>
+			<motion.div
+				className={cn(
+					"absolute inset-y-0 left-0 rounded-full",
+					value >= MASTERY_THRESHOLD ? "bg-success" : "bg-reward",
+				)}
+				initial={{ width: 0 }}
+				animate={{ width: `${Math.round(value * 100)}%` }}
+				transition={{ duration: 0.8, ease: "easeOut" }}
+			/>
+			<div
+				className="absolute inset-y-0 w-0.5 bg-foreground/50"
+				style={{ left: `${MASTERY_THRESHOLD * 100}%` }}
+				title="Gate threshold"
+			/>
+		</div>
+	);
+}
+
+export function LevelHub({
+	chapter,
+	status,
+	progress,
+	onLearn,
+	onMission,
+	onGate,
+}: {
+	chapter: Chapter;
+	status: ChapterStatus;
+	progress: Progress;
+	onLearn: () => void;
+	onMission: (id: string) => void;
+	onGate: () => void;
+}) {
+	const dataset = datasetById.get(chapter.datasetId);
+	const boss = bossOf(chapter);
+	const mains = chapter.exercises.filter((e) => !e.boss);
+	const solved = new Set(
+		progress.attempts.filter((a) => a.solved).map((a) => a.exerciseId),
+	);
+	const gauntlet =
+		status.gauntlet && !status.gauntlet.cleared ? status.gauntlet : null;
+
+	return (
+		<div className="mx-auto w-full max-w-4xl px-4 pt-5 pb-16 sm:px-6">
+			<Link
+				to="/"
+				className="mb-4 inline-flex items-center gap-1 text-sm font-semibold text-muted-foreground no-underline hover:text-foreground"
+			>
+				<ChevronLeft className="size-4" /> World map
+			</Link>
+			<motion.header
+				initial={{ opacity: 0, y: 12 }}
+				animate={{ opacity: 1, y: 0 }}
+				className="panel relative mb-6 overflow-hidden p-5 sm:p-6"
+			>
+				<div
+					className="pointer-events-none absolute -top-20 -right-20 size-64 rounded-full opacity-30 blur-3xl"
+					style={{ background: dataset?.accent ?? "var(--reward)" }}
+				/>
+				<div className="relative flex items-start gap-4">
+					<div className="grid size-16 shrink-0 place-items-center rounded-2xl bg-secondary text-4xl">
+						{chapter.emoji}
+					</div>
+					<div className="min-w-0">
+						<div className="text-[11px] font-bold tracking-[0.2em] text-reward uppercase">
+							{chapter.world} · {chapter.tier}
+						</div>
+						<h1 className="font-display text-2xl leading-tight text-foreground sm:text-3xl">
+							{chapter.title}
+						</h1>
+						<p className="text-sm text-muted-foreground">{chapter.subtitle}</p>
+						<p className="mt-1 text-xs text-muted-foreground">
+							Dataset: {dataset?.emoji} {dataset?.name}
+						</p>
+					</div>
+				</div>
+				<div className="relative mt-5 grid gap-3 sm:grid-cols-2">
+					{chapter.concepts.map((c) => (
+						<div key={c}>
+							<div className="mb-1 flex justify-between text-xs">
+								<span className="font-semibold text-foreground">
+									{conceptName(c)}
+								</span>
+								<span className="font-mono text-muted-foreground">
+									{Math.round((progress.mastery[c]?.effective ?? 0) * 100)}%
+								</span>
+							</div>
+							<MasteryBar value={progress.mastery[c]?.effective ?? 0} />
+						</div>
+					))}
+				</div>
+			</motion.header>
+
+			<ol className="relative space-y-3 before:absolute before:top-4 before:bottom-4 before:left-[27px] before:w-1 before:rounded-full before:bg-secondary">
+				<HubStep
+					index={0}
+					icon={<BookOpen className="size-5" />}
+					title="Learn"
+					subtitle={`${chapter.lesson.length} cards: concepts, examples, a quiz, a guided try`}
+					state={status.lessonDone ? "done" : "open"}
+					action={status.lessonDone ? "Replay" : "Start"}
+					onClick={onLearn}
+				/>
+				{mains.map((e, i) => {
+					const isSolved = solved.has(e.id);
+					const open =
+						status.lessonDone &&
+						(i === 0 || solved.has(mains[i - 1].id) || isSolved);
+					return (
+						<HubStep
+							key={e.id}
+							index={i + 1}
+							icon={<span className="font-display text-sm">{i + 1}</span>}
+							title={e.title}
+							subtitle={`${"◆".repeat(e.difficulty)} · ${e.concepts.map(conceptName).join(", ")}`}
+							state={isSolved ? "done" : open ? "open" : "locked"}
+							stars={isSolved ? (status.stars[e.id] ?? 0) : undefined}
+							action={isSolved ? "Replay" : "Play"}
+							onClick={() => onMission(e.id)}
+						/>
+					);
+				})}
+				{gauntlet ? (
+					<motion.li
+						initial={{ scale: 0.95, opacity: 0 }}
+						animate={{ scale: 1, opacity: 1 }}
+						className="relative ml-14 rounded-2xl border-2 border-destructive bg-[color-mix(in_oklab,var(--destructive)_8%,var(--card))] p-4"
+					>
+						<div className="flex items-center gap-2 font-display text-destructive">
+							<Swords className="size-5" /> Practice gauntlet
+						</div>
+						<ul className="mt-1 space-y-0.5 text-sm text-foreground">
+							{status.reasons.map((r) => (
+								<li key={r.message}>· {r.message}</li>
+							))}
+						</ul>
+						<div className="mt-3 grid gap-2 sm:grid-cols-3">
+							{gauntlet.exerciseIds.map((id) => {
+								const ex = findExercise(id)?.exercise;
+								const cleared = gauntlet.clearedIds.includes(id);
+								return (
+									<button
+										key={id}
+										type="button"
+										disabled={cleared}
+										onClick={() => {
+											sfx("tap");
+											onMission(id);
+										}}
+										className={cn(
+											"rounded-xl border p-3 text-left text-sm",
+											cleared
+												? "border-success/50 bg-muted opacity-70"
+												: "border-border bg-muted hover:border-destructive",
+										)}
+									>
+										<div className="flex items-center justify-between gap-2">
+											<span className="font-bold text-foreground">
+												{ex?.title ?? id}
+											</span>
+											{cleared ? (
+												<Check className="size-4 text-success" />
+											) : (
+												<Play className="size-4 text-destructive" />
+											)}
+										</div>
+										<div className="mt-0.5 text-xs text-muted-foreground">
+											{ex?.concepts.map(conceptName).join(", ")}
+										</div>
+									</button>
+								);
+							})}
+						</div>
+					</motion.li>
+				) : null}
+				{boss ? (
+					<HubStep
+						index={mains.length + 1}
+						icon={<Crown className="size-5" />}
+						title={
+							/^boss\b/i.test(boss.title) ? boss.title : `Boss: ${boss.title}`
+						}
+						subtitle={
+							status.bossCleared
+								? "Defeated"
+								: status.bossUnlocked
+									? "The gate is open"
+									: (status.reasons[0]?.message ??
+										"Clear the missions to open the gate")
+						}
+						state={
+							status.bossCleared
+								? "done"
+								: status.bossUnlocked
+									? "boss"
+									: "locked"
+						}
+						stars={
+							status.bossCleared ? (status.stars[boss.id] ?? 0) : undefined
+						}
+						action={status.bossCleared ? "Rematch" : "Gate check"}
+						onClick={onGate}
+						forceClickable={status.lessonDone}
+					/>
+				) : null}
+			</ol>
+		</div>
+	);
+}
+
+function HubStep({
+	index,
+	icon,
+	title,
+	subtitle,
+	state,
+	stars,
+	action,
+	onClick,
+	forceClickable,
+}: {
+	index: number;
+	icon: React.ReactNode;
+	title: string;
+	subtitle: string;
+	state: "done" | "open" | "locked" | "boss";
+	stars?: number;
+	action: string;
+	onClick: () => void;
+	forceClickable?: boolean;
+}) {
+	const clickable = state !== "locked" || forceClickable;
+	return (
+		<motion.li
+			initial={{ x: -16, opacity: 0 }}
+			animate={{ x: 0, opacity: 1 }}
+			transition={{ delay: index * 0.05 }}
+			className="relative flex items-center gap-3"
+		>
+			<div
+				className={cn(
+					"relative z-10 grid size-14 shrink-0 place-items-center rounded-2xl border-4 border-background",
+					state === "done" && "bg-success text-success-foreground",
+					state === "open" && "bg-reward text-reward-foreground",
+					state === "boss" && "bg-destructive text-destructive-foreground",
+					state === "locked" && "bg-secondary text-muted-foreground",
+				)}
+			>
+				{state === "done" ? (
+					<Check className="size-6" />
+				) : state === "locked" ? (
+					<Lock className="size-5" />
+				) : (
+					icon
+				)}
+			</div>
+			<button
+				type="button"
+				disabled={!clickable}
+				onClick={() => {
+					sfx("tap");
+					onClick();
+				}}
+				className={cn(
+					"panel flex min-w-0 flex-1 items-center gap-3 p-3.5 text-left transition",
+					clickable
+						? "hover:-translate-y-0.5 hover:border-reward/60"
+						: "cursor-not-allowed opacity-60",
+				)}
+			>
+				<div className="min-w-0 flex-1">
+					<div className="truncate font-bold text-foreground">{title}</div>
+					<div className="truncate text-xs text-muted-foreground">
+						{subtitle}
+					</div>
+				</div>
+				{stars !== undefined ? <StarRow stars={stars} /> : null}
+				{clickable ? (
+					<span className="hidden rounded-lg bg-secondary px-2.5 py-1 text-xs font-bold text-foreground sm:inline">
+						{action}
+					</span>
+				) : null}
+			</button>
+		</motion.li>
+	);
+}

@@ -9,51 +9,143 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as IndexRouteImport } from './routes/index'
+import { Route as GameRouteImport } from './routes/_game'
+import { Route as GameIndexRouteImport } from './routes/_game/index'
+import { Route as GameProfileRouteImport } from './routes/_game/profile'
+import { Route as GameSettingsRouteImport } from './routes/_game/settings'
+import { Route as GamePlayChapterIdRouteImport } from './routes/_game/play/$chapterId'
 
-const IndexRoute = IndexRouteImport.update({
+const GameRoute = GameRouteImport.update({
+  id: '/_game',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const GameIndexRoute = GameIndexRouteImport.update({
   id: '/',
   path: '/',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => GameRoute,
+} as any)
+const GameProfileRoute = GameProfileRouteImport.update({
+  id: '/profile',
+  path: '/profile',
+  getParentRoute: () => GameRoute,
+} as any)
+const GameSettingsRoute = GameSettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => GameRoute,
+} as any)
+const GamePlayChapterIdRoute = GamePlayChapterIdRouteImport.update({
+  id: '/play/$chapterId',
+  path: '/play/$chapterId',
+  getParentRoute: () => GameRoute,
 } as any)
 
 export interface FileRoutesByFullPath {
-  '/': typeof IndexRoute
+  '/': typeof GameIndexRoute
+  '/profile': typeof GameProfileRoute
+  '/settings': typeof GameSettingsRoute
+  '/play/$chapterId': typeof GamePlayChapterIdRoute
 }
 export interface FileRoutesByTo {
-  '/': typeof IndexRoute
+  '/profile': typeof GameProfileRoute
+  '/settings': typeof GameSettingsRoute
+  '/': typeof GameIndexRoute
+  '/play/$chapterId': typeof GamePlayChapterIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
-  '/': typeof IndexRoute
+  '/_game': typeof GameRouteWithChildren
+  '/_game/profile': typeof GameProfileRoute
+  '/_game/settings': typeof GameSettingsRoute
+  '/_game/': typeof GameIndexRoute
+  '/_game/play/$chapterId': typeof GamePlayChapterIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths: '/' | '/profile' | '/settings' | '/play/$chapterId'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to: '/profile' | '/settings' | '/' | '/play/$chapterId'
+  id:
+    | '__root__'
+    | '/_game'
+    | '/_game/profile'
+    | '/_game/settings'
+    | '/_game/'
+    | '/_game/play/$chapterId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
-  IndexRoute: typeof IndexRoute
+  GameRoute: typeof GameRouteWithChildren
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/': {
-      id: '/'
+    '/_game': {
+      id: '/_game'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof GameRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_game/': {
+      id: '/_game/'
       path: '/'
       fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
-      parentRoute: typeof rootRouteImport
+      preLoaderRoute: typeof GameIndexRouteImport
+      parentRoute: typeof GameRoute
+    }
+    '/_game/profile': {
+      id: '/_game/profile'
+      path: '/profile'
+      fullPath: '/profile'
+      preLoaderRoute: typeof GameProfileRouteImport
+      parentRoute: typeof GameRoute
+    }
+    '/_game/settings': {
+      id: '/_game/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof GameSettingsRouteImport
+      parentRoute: typeof GameRoute
+    }
+    '/_game/play/$chapterId': {
+      id: '/_game/play/$chapterId'
+      path: '/play/$chapterId'
+      fullPath: '/play/$chapterId'
+      preLoaderRoute: typeof GamePlayChapterIdRouteImport
+      parentRoute: typeof GameRoute
     }
   }
 }
 
+interface GameRouteChildren {
+  GameProfileRoute: typeof GameProfileRoute
+  GameSettingsRoute: typeof GameSettingsRoute
+  GameIndexRoute: typeof GameIndexRoute
+  GamePlayChapterIdRoute: typeof GamePlayChapterIdRoute
+}
+
+const GameRouteChildren: GameRouteChildren = {
+  GameProfileRoute: GameProfileRoute,
+  GameSettingsRoute: GameSettingsRoute,
+  GameIndexRoute: GameIndexRoute,
+  GamePlayChapterIdRoute: GamePlayChapterIdRoute,
+}
+
+const GameRouteWithChildren = GameRoute._addFileChildren(GameRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
-  IndexRoute: IndexRoute,
+  GameRoute: GameRouteWithChildren,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { createStart } from '@tanstack/react-start'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+  }
+}
