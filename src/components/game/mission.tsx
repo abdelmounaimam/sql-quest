@@ -410,7 +410,11 @@ export function MissionScreen({
 			data-pressed={judgeMut.isPending ? "true" : undefined}
 			variant={mode === "boss" ? "danger" : "default"}
 			size={isDesktop ? "lg" : "xl"}
-			className={cn(isDesktop ? "min-w-[180px]" : "flex-1")}
+			className={cn(
+				isDesktop
+					? "min-w-[180px]"
+					: "min-w-0 flex-1 max-[374px]:gap-0 max-[374px]:px-2 max-[374px]:text-lg max-[374px]:[&_svg]:hidden",
+			)}
 			aria-keyshortcuts="Control+Shift+Enter"
 		>
 			{judgeMut.isPending ? (
@@ -593,6 +597,7 @@ export function MissionScreen({
 							<Button
 								variant="secondary"
 								size="icon"
+								className="max-[374px]:size-11"
 								aria-label="Schema"
 								onClick={() => {
 									// Full height: the chest list is long and the diagram needs the room.
@@ -605,6 +610,7 @@ export function MissionScreen({
 							<Button
 								variant="secondary"
 								size="icon"
+								className="max-[374px]:size-11"
 								aria-label="Results"
 								onClick={() => {
 									setSnap(0.45);
@@ -1028,7 +1034,7 @@ function BossDefeat({
 					The guardian held
 				</DialogTitle>
 				<DialogDescription className="text-center">
-					No shame in it. A short training gauntlet aimed at the concepts of{" "}
+					No shame in it. A few short practice drills aimed at the concepts of{" "}
 					<b className="text-foreground">{chapter.title}</b> is now open. Clear
 					it and the gate opens again.
 				</DialogDescription>

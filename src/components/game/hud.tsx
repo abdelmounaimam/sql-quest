@@ -99,7 +99,7 @@ export function ComboChip() {
 					animate={{ opacity: 1, scale: 1 }}
 					exit={{ opacity: 0, scale: 0.9 }}
 					transition={{ type: "spring", duration: 0.35, bounce: 0.2 }}
-					className="combo-chip bumped"
+					className="combo-chip bumped shrink-0"
 					title="Consecutive first-try answers"
 				>
 					<GameIcon name="flame" className="size-4" />
@@ -197,7 +197,7 @@ export function Hud() {
 						<Brand compact />
 					</span>
 				</Link>
-				<XpBar className="w-32 shrink-0 sm:w-44 md:w-36 xl:w-44" />
+				<XpBar className="w-32 min-w-14 shrink sm:w-44 sm:shrink-0 md:w-36 xl:w-44" />
 				<StreakStat />
 				<ComboChip />
 				<AetherStat className="hidden sm:inline-flex" />

@@ -138,6 +138,7 @@ function SettingsPage() {
 					type="button"
 					variant="destructive"
 					size="lg"
+					className="h-auto min-h-14 max-w-full py-3 whitespace-normal"
 					onClick={() => {
 						if (!window.confirm("Erase all local progress?")) return;
 						for (const k of Object.keys(localStorage))

@@ -48,7 +48,7 @@ export function GateCheck({
 	if (status.gauntlet)
 		rows.push({
 			ok: status.gauntlet.cleared,
-			label: `Practice gauntlet ${status.gauntlet.clearedIds.length}/${status.gauntlet.exerciseIds.length}`,
+			label: `Practice drills ${status.gauntlet.clearedIds.length}/${status.gauntlet.exerciseIds.length}`,
 		});
 	const open = status.bossUnlocked;
 	const delayEnd = 0.4 + rows.length * 0.45;
@@ -117,7 +117,7 @@ export function GateCheck({
 					>
 						<span
 							className={cn(
-								"grid size-7 place-items-center rounded-full",
+								"grid size-7 shrink-0 place-items-center rounded-full",
 								r.ok
 									? "bg-success text-success-foreground"
 									: "bg-destructive text-destructive-foreground",
@@ -129,7 +129,9 @@ export function GateCheck({
 								<GameIcon name="x" className="size-4" />
 							)}
 						</span>
-						<span className="text-sm font-extrabold">{r.label}</span>
+						<span className="min-w-0 text-sm font-extrabold text-pretty">
+							{r.label}
+						</span>
 					</motion.li>
 				))}
 			</ul>
@@ -147,8 +149,7 @@ export function GateCheck({
 						size="lg"
 						className="w-full text-lg"
 					>
-						<GameIcon name="skull" data-icon="inline-start" /> Enter the boss
-						arena
+						<GameIcon name="skull" data-icon="inline-start" /> Face the boss
 					</Button>
 				) : (
 					<>
@@ -163,10 +164,17 @@ export function GateCheck({
 								onClick={() => onDrill(status.pendingDrillIds[0])}
 								variant="info"
 								size="lg"
-								className="w-full"
+								className="h-auto min-h-14 w-full py-2.5 whitespace-normal"
 							>
-								<GameIcon name="dumbbell" data-icon="inline-start" /> Start
-								drill: {findExercise(status.pendingDrillIds[0])?.exercise.title}
+								<GameIcon name="dumbbell" className="size-6" />
+								<span className="flex min-w-0 flex-col items-start text-left leading-tight">
+									<span className="text-xs tracking-wider opacity-80">
+										Start drill
+									</span>
+									<span className="text-pretty">
+										{findExercise(status.pendingDrillIds[0])?.exercise.title}
+									</span>
+								</span>
 							</Button>
 						) : status.nextExerciseId ? (
 							<Button
