@@ -1,13 +1,15 @@
 import { useEffect } from "react";
 import { useGame } from "#/game/progress";
+import { useUpdateCheck } from "#/hooks/use-update-check";
 import { useVisualViewportInsets } from "#/hooks/use-visual-viewport";
 
 /**
  * Applies theme + reduced motion classes, tracks the on-screen keyboard
- * (--kb-inset) and registers the service worker.
+ * (--kb-inset), registers the service worker and offers a reload after a deploy.
  */
 export function AppEffects() {
 	useVisualViewportInsets();
+	useUpdateCheck();
 	const theme = useGame((s) => s.settings.theme);
 	const motion = useGame((s) => s.settings.reducedMotion);
 

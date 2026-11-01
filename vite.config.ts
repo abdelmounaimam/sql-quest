@@ -1,3 +1,4 @@
+import { execSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
 	createReadStream,
@@ -88,8 +89,32 @@ function pwaServiceWorker(): Plugin {
 	};
 }
 
+/**
+ * One id per build, shared by the client bundle and the server: the open app
+ * compares its own id with /api/version to spot a new deploy. Railway uploads
+ * (`railway up`) carry no git metadata, so the build time leads.
+ */
+const BUILD_ID = (() => {
+	let sha = process.env.RAILWAY_GIT_COMMIT_SHA?.slice(0, 7) ?? "";
+	if (!sha)
+		try {
+			sha = execSync("git rev-parse --short HEAD", {
+				stdio: ["ignore", "pipe", "ignore"],
+			})
+				.toString()
+				.trim();
+		} catch {
+			sha = "nogit";
+		}
+	return `${new Date()
+		.toISOString()
+		.replace(/[-:]|\.\d+Z$/g, "")
+		.replace("T", "-")}-${sha}`;
+})();
+
 const config = defineConfig({
 	resolve: { tsconfigPaths: true },
+	define: { __BUILD_ID__: JSON.stringify(BUILD_ID) },
 	// PGlite ships its own WASM + data bundles; pre-bundling breaks their URLs.
 	optimizeDeps: {
 		exclude: ["@electric-sql/pglite", "@electric-sql/pglite-pgvector"],

@@ -14,6 +14,7 @@ import { Route as GameIndexRouteImport } from './routes/_game/index'
 import { Route as GameProfileRouteImport } from './routes/_game/profile'
 import { Route as GameSettingsRouteImport } from './routes/_game/settings'
 import { Route as ApiHealthRouteImport } from './routes/api/health'
+import { Route as ApiVersionRouteImport } from './routes/api/version'
 import { Route as GamePlayChapterIdRouteImport } from './routes/_game/play/$chapterId'
 
 const GameRoute = GameRouteImport.update({
@@ -40,6 +41,11 @@ const ApiHealthRoute = ApiHealthRouteImport.update({
   path: '/api/health',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiVersionRoute = ApiVersionRouteImport.update({
+  id: '/api/version',
+  path: '/api/version',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const GamePlayChapterIdRoute = GamePlayChapterIdRouteImport.update({
   id: '/play/$chapterId',
   path: '/play/$chapterId',
@@ -51,12 +57,14 @@ export interface FileRoutesByFullPath {
   '/profile': typeof GameProfileRoute
   '/settings': typeof GameSettingsRoute
   '/api/health': typeof ApiHealthRoute
+  '/api/version': typeof ApiVersionRoute
   '/play/$chapterId': typeof GamePlayChapterIdRoute
 }
 export interface FileRoutesByTo {
   '/profile': typeof GameProfileRoute
   '/settings': typeof GameSettingsRoute
   '/api/health': typeof ApiHealthRoute
+  '/api/version': typeof ApiVersionRoute
   '/': typeof GameIndexRoute
   '/play/$chapterId': typeof GamePlayChapterIdRoute
 }
@@ -66,20 +74,34 @@ export interface FileRoutesById {
   '/_game/profile': typeof GameProfileRoute
   '/_game/settings': typeof GameSettingsRoute
   '/api/health': typeof ApiHealthRoute
+  '/api/version': typeof ApiVersionRoute
   '/_game/': typeof GameIndexRoute
   '/_game/play/$chapterId': typeof GamePlayChapterIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/profile' | '/settings' | '/api/health' | '/play/$chapterId'
+  fullPaths:
+    | '/'
+    | '/profile'
+    | '/settings'
+    | '/api/health'
+    | '/api/version'
+    | '/play/$chapterId'
   fileRoutesByTo: FileRoutesByTo
-  to: '/profile' | '/settings' | '/api/health' | '/' | '/play/$chapterId'
+  to:
+    | '/profile'
+    | '/settings'
+    | '/api/health'
+    | '/api/version'
+    | '/'
+    | '/play/$chapterId'
   id:
     | '__root__'
     | '/_game'
     | '/_game/profile'
     | '/_game/settings'
     | '/api/health'
+    | '/api/version'
     | '/_game/'
     | '/_game/play/$chapterId'
   fileRoutesById: FileRoutesById
@@ -87,6 +109,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   GameRoute: typeof GameRouteWithChildren
   ApiHealthRoute: typeof ApiHealthRoute
+  ApiVersionRoute: typeof ApiVersionRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -126,6 +149,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiHealthRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/version': {
+      id: '/api/version'
+      path: '/api/version'
+      fullPath: '/api/version'
+      preLoaderRoute: typeof ApiVersionRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_game/play/$chapterId': {
       id: '/_game/play/$chapterId'
       path: '/play/$chapterId'
@@ -155,6 +185,7 @@ const GameRouteWithChildren = GameRoute._addFileChildren(GameRouteChildren)
 const rootRouteChildren: RootRouteChildren = {
   GameRoute: GameRouteWithChildren,
   ApiHealthRoute: ApiHealthRoute,
+  ApiVersionRoute: ApiVersionRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
