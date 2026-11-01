@@ -1293,6 +1293,7 @@ body[data-scroll-locked] {
 	.wb-answer { list-style: none; margin: 0; min-height: 104px; display: flex; flex-wrap: wrap; align-content: flex-start; align-items: center; gap: 6px 5px; padding: 10px; border-radius: 14px; background: var(--editor); border: 2px solid var(--border); box-shadow: inset 0 2px 0 rgb(0 0 0 / .2); }
 	.wb-answer:has(.wb-empty) { border-style: dashed; }
 	.wb-break { flex-basis: 100%; height: 0; margin: -3px 0; }
+	.wb-ref { margin: 0 0 4px; padding: 10px 12px; border-radius: 12px; border: 2px dashed color-mix(in oklab, var(--destructive) 55%, var(--border)); background: var(--surface-sunken); font-family: var(--font-mono); font-size: 14px; line-height: 1.5; color: var(--muted-foreground); white-space: pre-wrap; overflow-wrap: anywhere; }
 	.wb-empty { align-self: center; margin: auto; padding: 8px; font-size: 14px; font-weight: 700; color: var(--muted-foreground); text-align: center; }
 	/* Options: raised tiles to tap. */
 	.wb-bank { list-style: none; margin: 0; display: flex; flex-wrap: wrap; justify-content: center; gap: 10px 8px; padding: 4px 0 6px; }

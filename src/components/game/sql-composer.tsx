@@ -99,7 +99,10 @@ function WordBank({
 	onChange,
 	readOnly,
 	groupId,
+	reference,
 }: {
+	/** Starting SQL to look at while rebuilding it (fix-the-query exercises). */
+	reference?: string;
 	bank: Tile[];
 	placed: string[];
 	onChange: (ids: string[]) => void;
@@ -115,6 +118,12 @@ function WordBank({
 	return (
 		<LayoutGroup id={groupId}>
 			<div className="wordbank">
+				{reference ? (
+					<>
+						<div className="wb-label">Query to fix</div>
+						<pre className="wb-ref">{reference.trim()}</pre>
+					</>
+				) : null}
 				<div className="wb-label" aria-hidden="true">
 					Your query
 				</div>
@@ -337,6 +346,8 @@ export function SqlComposer({
 	// switching back to the keyboard gives it back.
 	const [placed, setPlaced] = useState<string[]>([]);
 	const [stash, setStash] = useState<string | null>(null);
+	// Pre-filled SQL that tiles cannot extend (a query to fix): shown read-only.
+	const [droppedStarter, setDroppedStarter] = useState(false);
 	const synced = useRef<string | null>(null);
 	useEffect(() => {
 		if (mode !== "tiles" || !bank) return;
@@ -352,6 +363,7 @@ export function SqlComposer({
 		) {
 			setPlaced([]);
 			setStash(null);
+			setDroppedStarter(true);
 			synced.current = "";
 			if (value) onChange("");
 			return;
@@ -435,6 +447,7 @@ export function SqlComposer({
 					onChange={setTiles}
 					readOnly={readOnly}
 					groupId={`wb-${seed}`}
+					reference={droppedStarter ? starterSql : undefined}
 				/>
 				<div className="composer-foot">
 					{toggle}
