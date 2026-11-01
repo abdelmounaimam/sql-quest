@@ -68,7 +68,7 @@ function GameLayout() {
 							className={
 								inLevel
 									? "flex min-h-0 flex-1 flex-col"
-									: "flex min-h-0 min-w-0 flex-1 flex-col pb-[calc(64px+var(--safe-bottom))] md:pb-0"
+									: "flex min-h-0 min-w-0 flex-1 flex-col pb-[calc(64px+var(--safe-bottom))] phone-land:pb-safe md:pb-0"
 							}
 						>
 							<Outlet />

@@ -12,11 +12,15 @@ import { useGame } from "#/game/progress";
 import { sfx } from "#/game/sound";
 import {
 	buildBank,
-	lineStarts,
+	firstGap,
+	glued,
+	layout,
+	needsFix,
 	render,
 	type Suggestions,
 	suggest,
 	type Tile,
+	taskHints,
 	tokenize,
 	toTiles,
 } from "#/game/sql-tokens";
@@ -51,27 +55,43 @@ function sampleValues(catalog: Catalog): Record<string, string[]> {
 	return out;
 }
 
-const sameSql = (a: string, b: string) =>
-	tokenize(a).join(" ") === tokenize(b).join(" ");
-/** True when the solution can be reached by appending tiles to `start`. */
-function isPrefix(start: string, solution: string): boolean {
-	const a = tokenize(start).map((t) => t.toUpperCase());
-	const b = tokenize(solution).map((t) => t.toUpperCase());
-	return a.length <= b.length && a.every((t, i) => t === b[i]);
+/** Skeleton placeholders ("...", "…") are gaps to fill, not SQL. */
+function stripPlaceholders(sql: string | undefined): string | undefined {
+	return sql?.replace(/\.{3}|…/g, " ");
 }
 
+const sameSql = (a: string, b: string) =>
+	tokenize(stripPlaceholders(a) ?? "")
+		.join(" ")
+		.toUpperCase() ===
+	tokenize(stripPlaceholders(b) ?? "")
+		.join(" ")
+		.toUpperCase();
+
+const sameIds = (a: string[], b: string[] | null) =>
+	!!b && a.length === b.length && a.every((x, i) => x === b[i]);
+
 // ───────────────────────────── word bank
+
+/** What a tile shows: a string of spaces gets visible ␣ marks. */
+const label = (t: Tile) =>
+	t.kind === "string" && /^'\s+'$/.test(t.text)
+		? t.text.replace(/\s/g, "␣")
+		: t.text;
 
 function TileButton({
 	tile,
 	onClick,
 	placed,
 	disabled,
+	count,
 }: {
 	tile: Tile;
 	onClick: () => void;
 	placed?: boolean;
 	disabled?: boolean;
+	/** Identical tiles left in this stack (badge when more than one). */
+	count?: number;
 }) {
 	return (
 		<motion.button
@@ -84,94 +104,234 @@ function TileButton({
 			disabled={disabled}
 			transition={{ type: "spring", duration: 0.32, bounce: 0.18 }}
 		>
-			{tile.text}
+			{label(tile)}
+			{count && count > 1 ? (
+				<span className="wb-count">
+					<span className="sr-only">, </span>
+					{count}
+					<span className="sr-only"> left</span>
+				</span>
+			) : null}
 		</motion.button>
 	);
 }
 
+/** The part of a long bank being built: the first with tiles left to place. */
+function currentPage(bank: Tile[], used: Set<string>): number {
+	let last = 0;
+	let cur = Number.POSITIVE_INFINITY;
+	for (const t of bank) {
+		const p = t.page ?? 0;
+		if (p < 0) continue;
+		last = Math.max(last, p);
+		if (!t.decoy && !t.spare && !used.has(t.id)) cur = Math.min(cur, p);
+	}
+	return Number.isFinite(cur) ? cur : last;
+}
+
 /**
  * Duolingo-style word bank: tap tiles to build the query, tap a placed tile to
- * send it back. No text field, so no keyboard ever opens.
+ * send it back (new tiles then go where it was). No text field, so no
+ * keyboard ever opens.
  */
 function WordBank({
 	bank,
 	placed,
+	caret,
 	onChange,
 	readOnly,
 	groupId,
 	reference,
+	fixing,
+	preset,
 }: {
-	/** Starting SQL to look at while rebuilding it (fix-the-query exercises). */
-	reference?: string;
 	bank: Tile[];
 	placed: string[];
-	onChange: (ids: string[]) => void;
+	/** Where the next tile goes (index in `placed`), null for the end. */
+	caret: number | null;
+	onChange: (ids: string[], caret: number | null) => void;
 	readOnly?: boolean;
 	groupId: string;
+	/** Starting SQL the tiles cannot lay out, shown to read while building. */
+	reference?: string;
+	/** The answer starts from a query with mistakes to repair. */
+	fixing?: boolean;
+	/** Tiles laid out from the starter: no empty slot while they stay placed. */
+	preset?: string[] | null;
 }) {
 	const byId = useMemo(() => new Map(bank.map((t) => [t.id, t])), [bank]);
 	const used = new Set(placed);
-	const breaks = lineStarts(placed.map((id) => byId.get(id)?.text ?? ""));
-	const tap = (ids: string[]) => {
+	const texts = placed.map((id) => byId.get(id)?.text ?? "");
+	const lines = layout(texts);
+	const at = caret !== null && caret < placed.length ? caret : null;
+	const tap = (ids: string[], next: number | null) => {
 		sfx("tap");
-		onChange(ids);
+		onChange(ids, next !== null && next < ids.length ? next : null);
 	};
+	const remove = (i: number) =>
+		tap(
+			placed.filter((_, k) => k !== i),
+			i,
+		);
+	const insert = (id: string) =>
+		at === null
+			? tap([...placed, id], null)
+			: tap([...placed.slice(0, at), id, ...placed.slice(at)], at + 1);
+
+	// Long banks come in parts; identical tiles stack into one slot.
+	const pages = Math.max(0, ...bank.map((t) => t.page ?? 0)) + 1;
+	const page = currentPage(bank, used);
+	const slots = useMemo(() => {
+		const out: { text: string; ids: string[] }[] = [];
+		for (const t of bank) {
+			const p = t.page ?? 0;
+			if (p !== page && p !== -1) continue;
+			const slot = out.find((s) => s.text === t.text);
+			if (slot) slot.ids.push(t.id);
+			else out.push({ text: t.text, ids: [t.id] });
+		}
+		return out;
+	}, [bank, page]);
+
+	// Keep the cursor (or the end of the query) in view as tiles land.
+	const answerRef = useRef<HTMLUListElement>(null);
+	const caretKey = `${placed.length}:${at}`;
+	// biome-ignore lint/correctness/useExhaustiveDependencies: on each placement
+	useEffect(() => {
+		const el = answerRef.current;
+		if (!el || el.scrollHeight <= el.clientHeight) return;
+		const mark = el.querySelector<HTMLElement>(".wb-caret");
+		if (mark) mark.scrollIntoView({ block: "nearest" });
+		else el.scrollTop = el.scrollHeight;
+	}, [caretKey]);
+
+	// Tiles that sit together without a space ("count(*)", "name,") wrap as one.
+	const items: React.ReactNode[] = [];
+	let run: React.ReactNode[] = [];
+	let runKey = "";
+	const flush = () => {
+		if (run.length)
+			items.push(
+				<li key={runKey} className="wb-run">
+					{run}
+				</li>,
+			);
+		run = [];
+	};
+	const caretMark = (
+		<span key="caret" className="wb-caret" aria-hidden="true" />
+	);
+	placed.forEach((id, i) => {
+		const t = byId.get(id);
+		if (!t) return;
+		const startRun = i === 0 || lines[i].brk || !glued(texts[i - 1], texts[i]);
+		if (startRun) {
+			// A cursor before a line break shows at the end of the line above.
+			if (at === i && lines[i].brk && run.length) run.push(caretMark);
+			flush();
+			runKey = id;
+			if (lines[i].brk) {
+				items.push(
+					<li key={`br-${id}`} className="wb-break" aria-hidden="true" />,
+				);
+				if (lines[i].indent)
+					items.push(
+						<li
+							key={`in-${id}`}
+							className="wb-indent"
+							style={{ width: `${lines[i].indent * 18}px` }}
+							aria-hidden="true"
+						/>,
+					);
+			}
+		}
+		if (at === i && !(lines[i].brk && i > 0)) run.push(caretMark);
+		run.push(
+			<TileButton
+				key={id}
+				tile={t}
+				placed
+				disabled={readOnly}
+				onClick={() => remove(i)}
+			/>,
+		);
+	});
+	flush();
+
 	return (
 		<LayoutGroup id={groupId}>
 			<div className="wordbank">
 				{reference ? (
 					<>
-						<div className="wb-label">Query to fix</div>
+						<div className="wb-label">Starting query</div>
 						<pre className="wb-ref">{reference.trim()}</pre>
 					</>
 				) : null}
-				<div className="wb-label" aria-hidden="true">
-					Your query
+				<div className="wb-label">
+					<span aria-hidden="true">
+						{fixing ? "Fix this query" : "Your query"}
+					</span>
+					{at !== null && !readOnly ? (
+						<button
+							type="button"
+							className="wb-label-action"
+							onClick={() => onChange(placed, null)}
+						>
+							Add at the end
+						</button>
+					) : fixing && !readOnly && sameIds(placed, preset ?? null) ? (
+						<span className="wb-label-hint">Tap a word to remove it</span>
+					) : null}
 				</div>
+				{/* biome-ignore lint/a11y/useKeyWithClickEvents: tiles inside are the keyboard path */}
 				<ul
+					ref={answerRef}
 					className="wb-answer"
 					aria-label="Your query, tap a tile to remove it"
+					onClick={(e) => {
+						if (e.target === e.currentTarget && at !== null)
+							onChange(placed, null);
+					}}
 				>
 					{placed.length ? (
-						placed.map((id, i) => {
-							const t = byId.get(id);
-							if (!t) return null;
-							return (
-								<li key={id} className="contents">
-									{breaks[i] ? (
-										<span className="wb-break" aria-hidden="true" />
-									) : null}
-									<TileButton
-										tile={t}
-										placed
-										disabled={readOnly}
-										onClick={() => tap(placed.filter((x) => x !== id))}
-									/>
-								</li>
-							);
-						})
+						items
 					) : (
 						<li className="wb-empty">Tap the words below to build it</li>
 					)}
 				</ul>
 				<div className="wb-label" aria-hidden="true">
-					Tap to add
+					<span>Tap to add</span>
+					{pages > 1 ? (
+						<span className="wb-label-hint">
+							Part {Math.min(page + 1, pages)} of {pages}
+						</span>
+					) : null}
 				</div>
 				<ul className="wb-bank" aria-label="Word bank">
-					{bank.map((t) => (
-						<li key={t.id} className="wb-slot">
-							<span className="wb-ghost" aria-hidden="true">
-								{t.text}
-							</span>
-							{used.has(t.id) ? null : (
-								<TileButton
-									tile={t}
-									disabled={readOnly}
-									onClick={() => tap([...placed, t.id])}
-								/>
-							)}
-						</li>
-					))}
+					{slots.map((s) => {
+						const free = s.ids.filter((x) => !used.has(x));
+						const top = free[0] ? byId.get(free[0]) : undefined;
+						if (!top && s.ids.every((x) => preset?.includes(x))) return null;
+						const kind = byId.get(s.ids[0])?.kind;
+						return (
+							<li key={s.ids[0]} className="wb-slot">
+								<span className="wb-ghost" data-kind={kind} aria-hidden="true">
+									{byId.get(s.ids[0])
+										? label(byId.get(s.ids[0]) as Tile)
+										: s.text}
+								</span>
+								{top ? (
+									<TileButton
+										key={top.id}
+										tile={top}
+										count={free.length}
+										disabled={readOnly}
+										onClick={() => insert(top.id)}
+									/>
+								) : null}
+							</li>
+						);
+					})}
 				</ul>
 			</div>
 		</LayoutGroup>
@@ -291,7 +451,7 @@ export function SqlComposer({
 	fill,
 	keyboardActions,
 	prompt,
-	starterSql,
+	starterSql: starterRaw,
 	className,
 }: {
 	ref?: React.Ref<SqlComposerHandle>;
@@ -317,6 +477,8 @@ export function SqlComposer({
 	prompt?: React.ReactNode;
 	className?: string;
 }) {
+	// "..." / "…" in a starter mark a gap to fill, not tiles: drop them.
+	const starterSql = useMemo(() => stripPlaceholders(starterRaw), [starterRaw]);
 	const touch = useMediaQuery("(pointer: coarse)", false);
 	const pref = useGame((s) => s.settings.composer);
 	const editorRef = useRef<SqlEditorHandle>(null);
@@ -336,33 +498,51 @@ export function SqlComposer({
 	);
 	// Built once the schema is known, so distractors do not reshuffle later.
 	const bank = useMemo(
-		() => (schema ? buildBank(solutionSql, seed, schema) : null),
-		[solutionSql, seed, schema],
+		() =>
+			schema ? buildBank(solutionSql, seed, schema, { starterSql }) : null,
+		[solutionSql, seed, schema, starterSql],
+	);
+	const task = useMemo(
+		() => taskHints(solutionSql, starterSql, schema, seed),
+		[solutionSql, starterSql, schema, seed],
 	);
 
 	const wantTiles = pref === "tiles" || (pref === "auto" && touch);
 	const mode: "tiles" | "keyboard" = wantTiles && bank ? "tiles" : "keyboard";
 
+	// Pre-filled SQL is laid out as tiles to start from: a skeleton with the
+	// cursor in its gap, or a query to fix by swapping tiles. When the tiles
+	// cannot express it, it is shown to read above an empty answer instead.
+	const starterIds = useMemo(
+		() => (bank && starterSql?.trim() ? toTiles(starterSql, bank) : null),
+		[bank, starterSql],
+	);
+	const fixing = !!starterIds && needsFix(starterSql ?? "", solutionSql);
+	const starterCaret = useMemo(
+		() => (starterSql?.trim() ? firstGap(starterSql, solutionSql) : null),
+		[starterSql, solutionSql],
+	);
+
 	// Tiles: placed tile ids. Typed SQL the bank cannot express is stashed so
 	// switching back to the keyboard gives it back.
 	const [placed, setPlaced] = useState<string[]>([]);
+	const [caret, setCaret] = useState<number | null>(null);
 	const [stash, setStash] = useState<string | null>(null);
-	// Pre-filled SQL that tiles cannot extend (a query to fix): shown read-only.
 	const [droppedStarter, setDroppedStarter] = useState(false);
 	const synced = useRef<string | null>(null);
 	useEffect(() => {
 		if (mode !== "tiles" || !bank) return;
 		const texts = (ids: string[]) =>
 			render(ids.map((id) => bank.find((t) => t.id === id)?.text ?? ""));
-		if (synced.current !== null && value === texts(placed)) return;
-		// Tiles only append, so pre-filled SQL with a gap to fill in the middle
-		// ("SELECT … FROM pilots;") cannot be completed by tapping: start empty.
 		if (
-			starterSql?.trim() &&
-			sameSql(value, starterSql) &&
-			!isPrefix(starterSql, solutionSql)
-		) {
+			synced.current !== null &&
+			(value === synced.current || value === texts(placed))
+		)
+			return;
+		const atStarter = !!starterSql?.trim() && sameSql(value, starterSql);
+		if (atStarter && !starterIds) {
 			setPlaced([]);
+			setCaret(null);
 			setStash(null);
 			setDroppedStarter(true);
 			synced.current = "";
@@ -372,17 +552,29 @@ export function SqlComposer({
 		const ids = value.trim() ? toTiles(value, bank) : [];
 		if (ids) {
 			setPlaced(ids);
+			setCaret(atStarter ? starterCaret : null);
 			setStash(null);
 		} else {
 			setPlaced([]);
+			setCaret(null);
 			setStash(value);
 		}
 		synced.current = value;
-	}, [mode, bank, value, placed, starterSql, solutionSql, onChange]);
+	}, [
+		mode,
+		bank,
+		value,
+		placed,
+		starterSql,
+		starterIds,
+		starterCaret,
+		onChange,
+	]);
 
-	const setTiles = (ids: string[]) => {
+	const setTiles = (ids: string[], next: number | null = null) => {
 		if (!bank) return;
 		setPlaced(ids);
+		setCaret(next);
 		const sql = render(
 			ids.map((id) => bank.find((t) => t.id === id)?.text ?? ""),
 		);
@@ -402,11 +594,20 @@ export function SqlComposer({
 
 	// Keyboard mode: suggestions follow the caret while the editor has focus.
 	const [focused, setFocused] = useState(false);
-	const [before, setBefore] = useState("");
+	const [cursor, setCursor] = useState({ before: "", after: "" });
 	const showBar = mode === "keyboard" && touch && focused && !readOnly;
 	const suggestions = useMemo(
-		() => (showBar ? suggest(before, { schema, samples, functions }) : null),
-		[showBar, before, schema, samples, functions],
+		() =>
+			showBar
+				? suggest(cursor.before, {
+						schema,
+						samples,
+						functions,
+						after: cursor.after,
+						task,
+					})
+				: null,
+		[showBar, cursor, schema, samples, functions, task],
 	);
 	useEffect(() => {
 		const root = document.documentElement;
@@ -445,15 +646,26 @@ export function SqlComposer({
 				<WordBank
 					bank={bank}
 					placed={placed}
+					caret={caret}
 					onChange={setTiles}
 					readOnly={readOnly}
 					groupId={`wb-${seed}`}
-					reference={droppedStarter ? starterSql : undefined}
+					reference={droppedStarter ? starterRaw : undefined}
+					fixing={fixing}
+					preset={starterIds}
 				/>
 				<div className="composer-foot">
 					{toggle}
 					<span className="flex-1" />
-					{placed.length && !readOnly ? (
+					{readOnly ? null : starterIds && !sameIds(placed, starterIds) ? (
+						<button
+							type="button"
+							className="composer-toggle"
+							onClick={() => setTiles(starterIds, starterCaret)}
+						>
+							<GameIcon name="rewind" className="size-5" /> Start over
+						</button>
+					) : !starterIds && placed.length ? (
 						<button
 							type="button"
 							className="composer-toggle"
@@ -500,7 +712,7 @@ export function SqlComposer({
 					fill={fill || focusMode}
 					className={cn((fill || focusMode) && "h-full")}
 					minHeight={focusMode ? "100%" : minHeight}
-					onCursor={setBefore}
+					onCursor={(before, after) => setCursor({ before, after })}
 					onFocusChange={setFocused}
 				/>
 			</div>

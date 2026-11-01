@@ -118,7 +118,7 @@ export function chapterStatus(
 			reasons.push({
 				kind: "gauntlet",
 				conceptId: g.targetConcepts[0],
-				message: `${list(g.targetConcepts.map(name))} not solid yet: ${drills} to ${target}`,
+				message: `Warm up on ${list(g.targetConcepts.map(name))}: ${drills} to ${target}`,
 			});
 		}
 	}
@@ -129,7 +129,7 @@ export function chapterStatus(
 			reasons.push({
 				kind: "low-mastery",
 				conceptId: cid,
-				message: `${name(cid)} mastery ${pct(m.effective)} / ${pct(MASTERY_THRESHOLD)} needed`,
+				message: `${name(cid)} mastery ${pct(m.mastery)} / ${pct(MASTERY_THRESHOLD)} needed`,
 			});
 		}
 		if (!status.gateCriteria.starsOk && core.solvedNonBoss > 0)
@@ -182,9 +182,8 @@ function coreStatus(
 			? 3
 			: main.reduce((s, e) => s + stars[e.id], 0) / main.length;
 
-	const weakConcepts = chapter.concepts.filter(
-		(c) => masteryOf(ctx.mastery, c).effective < MASTERY_THRESHOLD,
-	);
+	const gated = gatedConcepts(chapter);
+	const weakConcepts = weakAmong(gated, main, ctx.mastery, attempts);
 	const masteryOk = weakConcepts.length === 0;
 	const starsOk = averageStars >= GATE_MIN_AVG_STARS;
 
@@ -202,19 +201,27 @@ function coreStatus(
 			allAttempts.filter((a) => a.finishedAt <= completedAt),
 			completedAt,
 		);
-		const failedAtCompletion =
-			!starsOk ||
-			chapter.concepts.some(
-				(c) => masteryOf(m, c).effective < MASTERY_THRESHOLD,
+		const weakThen = weakAmong(
+			gated,
+			main,
+			m,
+			attempts.filter((a) => a.finishedAt <= completedAt),
+		);
+		const failedAtCompletion = !starsOk || weakThen.length > 0;
+		// Waived as soon as the live gate is met (drills or replays lifted the
+		// weak concepts): the screen never says "mastery OK" and "not solid
+		// yet" at once, and nobody drills a concept they have since shown.
+		const liveGateMet = masteryOk && starsOk;
+		if (
+			failedAtCompletion &&
+			!liveGateMet &&
+			!triggers.some((t) => t.at >= completedAt)
+		) {
+			let targets = [...weakThen].sort(
+				(a, b) =>
+					masteryOf(m, a).mastery - masteryOf(m, b).mastery ||
+					a.localeCompare(b),
 			);
-		if (failedAtCompletion && !triggers.some((t) => t.at >= completedAt)) {
-			let targets = chapter.concepts
-				.filter((c) => masteryOf(m, c).effective < MASTERY_THRESHOLD)
-				.sort(
-					(a, b) =>
-						masteryOf(m, a).effective - masteryOf(m, b).effective ||
-						a.localeCompare(b),
-				);
 			if (targets.length === 0) {
 				// Mastery fine but stars low: target the concepts of the weakest missions.
 				const weakest = [...main].sort(
@@ -286,6 +293,41 @@ function coreStatus(
 			gateCriteria: { allMainSolved, masteryOk, starsOk, weakConcepts },
 		},
 	};
+}
+
+/**
+ * Concepts the gate checks: the chapter concepts that at least one non-boss
+ * mission practises. A concept only the boss uses cannot be shown before the
+ * boss, so it never blocks the door.
+ */
+export function gatedConcepts(chapter: Chapter): string[] {
+	const practised = new Set(
+		chapter.exercises.filter((e) => !e.boss).flatMap((e) => e.concepts),
+	);
+	return chapter.concepts.filter((c) => practised.has(c));
+}
+
+/**
+ * Gated concepts still weak. A concept is solid when its learned mastery
+ * (before time decay: decay schedules reviews, it never re-locks a door) is
+ * at the threshold, or when every mission that practises it was solved
+ * cleanly (first submission, no hint). The second rule is the guarantee:
+ * a flawless run always passes the gate, whatever the tagging.
+ */
+function weakAmong(
+	concepts: readonly string[],
+	main: readonly Exercise[],
+	mastery: MasteryMap,
+	attempts: readonly AttemptRecord[],
+): string[] {
+	return concepts.filter((c) => {
+		if (masteryOf(mastery, c).mastery >= MASTERY_THRESHOLD) return false;
+		const covering = main.filter((e) => e.concepts.includes(c));
+		const clean =
+			covering.length > 0 &&
+			covering.every((e) => bestStars(attempts, e.id) === 3);
+		return !clean;
+	});
 }
 
 /** Walks main-mission attempts in order; counters reset after each trigger. */

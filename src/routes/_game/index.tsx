@@ -36,7 +36,7 @@ function MapPage() {
 				<div className="flex items-end justify-between gap-3">
 					<div>
 						<p className="text-sm font-bold text-muted-foreground">
-							{name ? `Welcome back, ${name}` : "Welcome, explorer"}
+							{`${progress.attempts.length ? "Welcome back" : "Welcome"}, ${name || "explorer"}`}
 						</p>
 						<h1 className="font-display text-title">The Atlas</h1>
 					</div>

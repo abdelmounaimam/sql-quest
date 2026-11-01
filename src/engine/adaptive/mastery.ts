@@ -15,6 +15,14 @@ export const DECAY_FLOOR = 0.4;
 export const LESSON_TRY_WEIGHT = 0.35;
 /** Number of recent attempts used for the struggle score. */
 export const STRUGGLE_WINDOW = 3;
+/**
+ * How much a clean solve (first submission, no hint) cuts the guess rate.
+ * Writing a whole query right on the first try is hard to do by luck, so a
+ * clean solve is stronger evidence than the base guess rate says: with the
+ * lesson try, one clean mission lifts a concept past MASTERY_THRESHOLD,
+ * while a solve with a hint or a failed try stays under it.
+ */
+export const CLEAN_SOLVE_GUESS_CUT = 0.4;
 
 const DAY_MS = 86_400_000;
 /** Two successes must be at least this far apart to count as a spaced review. */
@@ -61,7 +69,9 @@ export function bktUpdate(
 	difficulty: number,
 	revealed = false,
 ): number {
-	const { guess, slip, learn } = bktParams(difficulty);
+	const base = bktParams(difficulty);
+	const { slip, learn } = base;
+	const guess = base.guess * (1 - CLEAN_SOLVE_GUESS_CUT * quality);
 	const pCorrect = prior * (1 - slip) + (1 - prior) * guess;
 	const postCorrect = (prior * (1 - slip)) / pCorrect;
 	const postWrong = (prior * slip) / (prior * slip + (1 - prior) * (1 - guess));

@@ -1,7 +1,12 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { AnimatePresence, motion, type PanInfo } from "motion/react";
-import { useState } from "react";
+import {
+	AnimatePresence,
+	motion,
+	type PanInfo,
+	useReducedMotion,
+} from "motion/react";
+import { useEffect, useRef, useState } from "react";
 import { GameIcon } from "#/components/game/icons";
 import { Button } from "#/components/ui/button";
 import type { Chapter, LessonStep } from "#/content/types";
@@ -20,16 +25,46 @@ import { SqlEditor } from "./sql-editor";
 
 type StepState = { done: boolean };
 
+/**
+ * Feedback (quiz explanation, "Not quite", example result, try verdict) lands
+ * under the fold on a phone, behind the fixed bottom bar. When `trigger`
+ * changes to a truthy value, bring the element into view once layout has
+ * settled (the keyboard writing view may be closing at the same moment).
+ * Pair the element with FEEDBACK_SCROLL_MARGIN so it clears the bottom bar.
+ */
+function useRevealOnChange<T extends HTMLElement>(trigger: unknown) {
+	const ref = useRef<T>(null);
+	const reduce = useReducedMotion();
+	useEffect(() => {
+		if (!trigger) return;
+		const t = window.setTimeout(() => {
+			ref.current?.scrollIntoView({
+				block: "nearest",
+				behavior: reduce ? "auto" : "smooth",
+			});
+		}, 180);
+		return () => window.clearTimeout(t);
+	}, [trigger, reduce]);
+	return ref;
+}
+
+/** Room for the fixed lesson bottom bar (button + ledge + padding + home indicator). */
+const FEEDBACK_SCROLL_MARGIN =
+	"scroll-mt-4 scroll-mb-[calc(6.5rem+var(--safe-bottom))]";
+
 export function LessonPlayer({
 	chapter,
 	initialStep = 0,
 	onFinish,
 	onStep,
+	finishLabel = "Start the missions",
 }: {
 	chapter: Chapter;
 	initialStep?: number;
 	onFinish: () => void;
 	onStep?: (i: number) => void;
+	/** Label of the last step's button, e.g. "Start the missions". */
+	finishLabel?: string;
 }) {
 	const steps = chapter.lesson;
 	const [index, setIndex] = useState(Math.min(initialStep, steps.length - 1));
@@ -169,13 +204,13 @@ export function LessonPlayer({
 						// min-w-0 + fluid size: "Answer to continue" fits a 375px phone.
 						className="min-w-0 flex-1 px-4 text-[clamp(15px,4.6vw,20px)] roomy:flex-none roomy:px-7 roomy:text-xl"
 					>
-						{last
-							? "Start the missions"
-							: canNext
-								? "Next"
-								: step.kind === "quiz"
-									? "Answer to continue"
-									: "Solve to continue"}
+						{!canNext
+							? step.kind === "quiz"
+								? "Answer to continue"
+								: "Solve to continue"
+							: last
+								? finishLabel
+								: "Next"}
 						<GameIcon
 							name="chevron-right"
 							className="size-5"
@@ -255,6 +290,9 @@ function ExampleStep({
 		onSuccess: () => sfx("run"),
 	});
 	const out: RunOutcome | undefined = runMut.data;
+	const resultRef = useRevealOnChange<HTMLDivElement>(
+		runMut.isSuccess || runMut.isError ? runMut.submittedAt : 0,
+	);
 	return (
 		<div>
 			<StepKind label="Worked example" color="text-(--syn-keyword)" />
@@ -281,7 +319,17 @@ function ExampleStep({
 				<GameIcon name="play" className="size-4" />
 				{runMut.isPending ? "Running…" : out ? "Run again" : "Run it"}
 			</Button>
-			<div className="mt-3" onPointerDownCapture={(e) => e.stopPropagation()}>
+			<div
+				ref={resultRef}
+				className={cn("mt-3", FEEDBACK_SCROLL_MARGIN)}
+				onPointerDownCapture={(e) => e.stopPropagation()}
+			>
+				{runMut.isPending ? (
+					<div
+						className="h-24 animate-pulse rounded-xl border-2 border-border bg-muted"
+						aria-hidden="true"
+					/>
+				) : null}
 				{runMut.error ? (
 					<p className="text-sm text-destructive">
 						The SQL engine failed: {(runMut.error as Error).message}
@@ -319,6 +367,9 @@ function QuizStep({
 	);
 	const [wrong, setWrong] = useState<number[]>([]);
 	const correct = picked === step.answerIndex;
+	// Counts taps: reveal the feedback after every pick, not on a revisit.
+	const [picks, setPicks] = useState(0);
+	const feedbackRef = useRevealOnChange<HTMLDivElement>(picks);
 	return (
 		<div>
 			<StepKind label="Quick quiz" color="text-special-soft-foreground" />
@@ -336,6 +387,7 @@ function QuizStep({
 							disabled={correct || isWrong}
 							onClick={() => {
 								setPicked(i);
+								setPicks((n) => n + 1);
 								if (i === step.answerIndex) {
 									sfx("success");
 									burst("small");
@@ -368,30 +420,39 @@ function QuizStep({
 									String.fromCharCode(65 + i)
 								)}
 							</span>
-							<span className="font-mono text-[13px] text-foreground">{c}</span>
+							<Markdown
+								inline
+								className="min-w-0 text-[15px] font-semibold text-foreground"
+							>
+								{c}
+							</Markdown>
 						</motion.button>
 					);
 				})}
 			</div>
-			<AnimatePresence>
-				{correct ? (
-					<motion.div
-						initial={{ opacity: 0, y: 8 }}
-						animate={{ opacity: 1, y: 0 }}
-						className="mt-4 rounded-xl border border-success/50 bg-muted p-3"
-					>
-						<Markdown className="text-foreground">{step.explanation}</Markdown>
-					</motion.div>
-				) : wrong.length ? (
-					<motion.p
-						initial={{ opacity: 0 }}
-						animate={{ opacity: 1 }}
-						className="mt-3 text-sm text-destructive"
-					>
-						Not quite. Try another answer.
-					</motion.p>
-				) : null}
-			</AnimatePresence>
+			<div ref={feedbackRef} className={FEEDBACK_SCROLL_MARGIN}>
+				<AnimatePresence>
+					{correct ? (
+						<motion.div
+							initial={{ opacity: 0, y: 8 }}
+							animate={{ opacity: 1, y: 0 }}
+							className="mt-4 rounded-xl border border-success/50 bg-muted p-3"
+						>
+							<Markdown className="text-foreground">
+								{step.explanation}
+							</Markdown>
+						</motion.div>
+					) : wrong.length ? (
+						<motion.p
+							initial={{ opacity: 0 }}
+							animate={{ opacity: 1 }}
+							className="mt-3 text-sm text-destructive"
+						>
+							Not quite. Try another answer.
+						</motion.p>
+					) : null}
+				</AnimatePresence>
+			</div>
 		</div>
 	);
 }
@@ -457,6 +518,9 @@ function TryStep({
 		},
 	});
 	const v = judgeMut.data;
+	const verdictRef = useRevealOnChange<HTMLDivElement>(
+		judgeMut.isSuccess ? judgeMut.submittedAt : 0,
+	);
 
 	return (
 		<div>
@@ -552,8 +616,10 @@ function TryStep({
 				{v ? (
 					<div className="space-y-2">
 						<div
+							ref={verdictRef}
 							className={cn(
 								"rounded-lg p-2.5 text-sm",
+								FEEDBACK_SCROLL_MARGIN,
 								v.pass
 									? "bg-success-soft text-success-soft-foreground"
 									: "bg-destructive-soft text-destructive-soft-foreground",

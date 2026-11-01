@@ -4,6 +4,7 @@ import {
 	notFound,
 	useNavigate,
 } from "@tanstack/react-router";
+import { useState } from "react";
 import { z } from "zod";
 import { BossIntro } from "#/components/game/boss-intro";
 import { DatasetGate } from "#/components/game/dataset-gate";
@@ -52,6 +53,10 @@ function PlayPage() {
 	const search = Route.useSearch();
 	const navigate = useNavigate({ from: Route.fullPath });
 	const progress = useProgress();
+	// Set when the learner taps Fight on an open door. It keeps the fight on
+	// screen after a defeat closes the gate (defeat overlay), without letting a
+	// hand-typed ?fight=true URL skip the gate.
+	const [fightChapter, setFightChapter] = useState<string | null>(null);
 	if (!progress.ready) return <Splash label="Loading your progress" />;
 
 	const status = progress.statuses[chapter.id];
@@ -69,6 +74,19 @@ function PlayPage() {
 	}));
 	const setSearch = (s: PlaySearch) => void navigate({ search: s });
 	const toHub = () => setSearch({ phase: "hub" });
+	const idx = chapters.findIndex((c) => c.id === chapter.id);
+	const nextChapter = chapters[idx + 1];
+	const nextLevel =
+		nextChapter && progress.statuses[nextChapter.id]?.state !== "locked"
+			? () =>
+					void navigate({
+						to: "/play/$chapterId",
+						params: { chapterId: nextChapter.id },
+						search: { phase: "learn" },
+					})
+			: undefined;
+	// The door is open for a first fight or for a rematch after a win.
+	const bossOpen = status.bossUnlocked || status.bossCleared;
 
 	if (search.phase === "learn")
 		return (
@@ -80,7 +98,20 @@ function PlayPage() {
 					onStep={(step) =>
 						void navigate({ search: { phase: "learn", step }, replace: true })
 					}
-					onFinish={toHub}
+					// Straight into the first unsolved mission; a replayed lesson
+					// with every mission solved goes back to the level.
+					onFinish={() =>
+						status.nextExerciseId
+							? setSearch({ phase: "mission", ex: status.nextExerciseId })
+							: toHub()
+					}
+					finishLabel={
+						!status.nextExerciseId
+							? "Back to the level"
+							: status.solvedMain > 0
+								? "Continue the missions"
+								: "Start the missions"
+					}
 				/>
 			</DatasetGate>
 		);
@@ -163,20 +194,25 @@ function PlayPage() {
 				onBoss={() => setSearch({ phase: "boss" })}
 				onDrill={(id) => setSearch({ phase: "mission", ex: id })}
 				onHub={toHub}
+				onNextLevel={nextLevel}
 			/>
 		);
 
 	if (search.phase === "boss") {
 		const boss = bossOf(chapter);
 		// While fighting, keep the screen even if the gate closes (defeat overlay).
-		if (!boss || (!status.bossUnlocked && !search.fight))
+		const fighting = search.fight && fightChapter === chapter.id;
+		if (!boss || (!bossOpen && !fighting))
 			return <Navigate to="." search={{ phase: "gate" }} replace />;
 		if (!search.fight)
 			return (
 				<BossIntro
 					chapter={chapter}
 					boss={boss}
-					onFight={() => setSearch({ phase: "boss", fight: true })}
+					onFight={() => {
+						setFightChapter(chapter.id);
+						setSearch({ phase: "boss", fight: true });
+					}}
 					onRetreat={toHub}
 				/>
 			);
@@ -190,35 +226,26 @@ function PlayPage() {
 					world={world}
 					segments={mainSegments}
 					onNext={() => setSearch({ phase: "complete" })}
-					onBossDefeat={() => setSearch({ phase: "gate" })}
+					onBossDefeat={() => {
+						setFightChapter(null);
+						setSearch({ phase: "gate" });
+					}}
 					nextLabel="Claim your rewards"
 				/>
 			</DatasetGate>
 		);
 	}
 
-	if (search.phase === "complete") {
-		const idx = chapters.findIndex((c) => c.id === chapter.id);
-		const nextChapter = chapters[idx + 1];
+	if (search.phase === "complete")
 		return (
 			<LevelComplete
 				chapter={chapter}
 				status={status}
 				progress={progress}
 				onMap={() => void navigate({ to: "/" })}
-				onNextLevel={
-					nextChapter && progress.statuses[nextChapter.id]?.state !== "locked"
-						? () =>
-								void navigate({
-									to: "/play/$chapterId",
-									params: { chapterId: nextChapter.id },
-									search: { phase: "learn" },
-								})
-						: undefined
-				}
+				onNextLevel={nextLevel}
 			/>
 		);
-	}
 
 	return (
 		<LevelHub
@@ -228,6 +255,8 @@ function PlayPage() {
 			onLearn={() => setSearch({ phase: "learn" })}
 			onMission={(id) => setSearch({ phase: "mission", ex: id })}
 			onGate={() => setSearch({ phase: "gate" })}
+			onBoss={() => setSearch({ phase: "boss" })}
+			onNextLevel={nextLevel}
 		/>
 	);
 }

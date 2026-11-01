@@ -117,3 +117,91 @@ export function nearToken(message: string): string | undefined {
 	if (/at end of input/.test(message)) return "end of input";
 	return undefined;
 }
+
+/** First double-quoted name in a Postgres message, e.g. `column "x" does not exist` -> "x". */
+function quotedName(message: string): string | undefined {
+	return /"([^"]+)"/.exec(message)?.[1];
+}
+
+/**
+ * Plain advice for a failed query, written for a learner: no SQLSTATE, no
+ * line or column (the sheet quotes the line itself). Undefined when Postgres's
+ * own message is already the best thing to show.
+ */
+export function sqlErrorAdvice(error: SqlErrorInfo): string | undefined {
+	const msg = error.message;
+	const name = quotedName(msg);
+	switch (error.code) {
+		case "42601": {
+			const token = nearToken(msg);
+			if (token === "end of input")
+				return "The query stops too early: something is missing at the end, such as a value, a closing parenthesis or a closing quote.";
+			if (token !== undefined)
+				return `Postgres could not read the query at "${token}". Check the spelling, the commas and the parentheses just before it.`;
+			return "Postgres could not read the query. Check the spelling, the commas and the parentheses.";
+		}
+		case "42702":
+			return name
+				? `More than one table in the query has a column called "${name}". Say which one you mean by putting the table name or its alias in front, like t.${name}.`
+				: "Several tables in the query have a column with this name. Put the table name or its alias in front of it.";
+		case "42P01": {
+			const missing = /missing FROM-clause entry for table "([^"]+)"/.exec(msg);
+			if (missing)
+				return `"${missing[1]}" is used in front of a column, but no table in FROM or JOIN has that name or alias. Give the table that alias (FROM table_name ${missing[1]}) or fix the name.`;
+			return name
+				? `There is no table called "${name}". Check the spelling against the schema.`
+				: "One of the tables does not exist. Check the spelling against the schema.";
+		}
+		case "42703": {
+			const col = /column "?([^"\s]+)"? does not exist/.exec(msg)?.[1] ?? name;
+			if (col?.includes("."))
+				return `There is no column "${col}". Check the column name, and that the alias in front of it belongs to the right table.`;
+			return col
+				? `None of the tables in the query has a column called "${col}". Check the spelling in the schema. If it is a text value, put it in single quotes: '${col}'.`
+				: "One of the columns does not exist. Check the spelling in the schema.";
+		}
+		case "42803":
+			return name
+				? `"${name}" is in SELECT but neither in GROUP BY nor inside an aggregate such as COUNT or SUM. Add it to GROUP BY, or aggregate it.`
+				: "Every column in SELECT must be in GROUP BY or inside an aggregate such as COUNT or SUM.";
+		case "42883":
+			return "No function matches this name with these argument types. Check the spelling, or cast the argument to the type the function expects.";
+		case "42804": {
+			const clause = /argument of ([A-Z/]+) must be type boolean/.exec(
+				msg,
+			)?.[1];
+			if (clause)
+				return `${clause.replace("JOIN/ON", "ON")} needs a condition that is true or false, such as price > 10, not a plain value.`;
+			return "A value has the wrong type here. Check what you compare or combine, and cast one side if needed.";
+		}
+		case "22P02":
+			return "A value could not be read as the type expected here, for example text where a number is expected. Check the quotes and the casts.";
+		case "22012":
+			return "A division by zero happened on at least one row. Leave those rows out, or turn the 0 into NULL before dividing.";
+		case "21000":
+			return "A subquery used as a single value returned more than one row. Make it return one row, or use IN instead of =.";
+		case "23502":
+			return name
+				? `"${name}" cannot be empty here (NOT NULL): give it a value.`
+				: "A column that cannot be empty (NOT NULL) got no value.";
+		case "23505":
+			return "A row with this value already exists, and the column must stay unique.";
+		case "23503":
+			return "This value points to a row that does not exist in the other table (foreign key), or a row still points to the one you change.";
+		case "23514":
+			return "A value breaks a CHECK rule of the table.";
+		default:
+			return undefined;
+	}
+}
+
+/** The source line an error points at, with the 1-based column inside it. */
+export function errorLineOf(
+	sql: string,
+	error: SqlErrorInfo,
+): { line: number; text: string; column: number } | undefined {
+	if (!error.line) return undefined;
+	const text = sql.split("\n")[error.line - 1];
+	if (text === undefined || !text.trim()) return undefined;
+	return { line: error.line, text, column: error.column ?? 1 };
+}

@@ -154,7 +154,7 @@ export function WorldMap({ progress }: { progress: Progress }) {
 	const { statuses, next, reviews } = progress;
 	const current = activityChapter(next);
 	const currentRef = useRef<HTMLDivElement | null>(null);
-	const [offscreen, setOffscreen] = useState(false);
+	const [offscreen, setOffscreen] = useState<false | "up" | "down">(false);
 	// Snapshot of the previous visit, read once on mount.
 	const [memory] = useState(readMemory);
 
@@ -229,16 +229,31 @@ export function WorldMap({ progress }: { progress: Progress }) {
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [fresh.size, freshWorlds.size]);
 
+	// "My level" pill: only when neither the current node nor the Next up card
+	// (whose button already leads there) is on screen, so it never sits on top
+	// of the very thing it points to.
 	useEffect(() => {
 		const el = currentRef.current;
 		if (!el) return;
+		const card = document.querySelector("[data-next-up]");
+		const seen = new Map<Element, boolean>();
 		const io = new IntersectionObserver(
-			([e]) => setOffscreen(!e.isIntersecting),
-			{
-				rootMargin: "-80px 0px -80px 0px",
+			(entries) => {
+				for (const e of entries) seen.set(e.target, e.isIntersecting);
+				const nodeVisible = seen.get(el) ?? false;
+				const cardVisible = card ? (seen.get(card) ?? false) : false;
+				setOffscreen(
+					nodeVisible || cardVisible
+						? false
+						: el.getBoundingClientRect().top < 0
+							? "up"
+							: "down",
+				);
 			},
+			{ rootMargin: "-80px 0px -80px 0px" },
 		);
 		io.observe(el);
+		if (card) io.observe(card);
 		return () => io.disconnect();
 	});
 
@@ -266,9 +281,8 @@ export function WorldMap({ progress }: { progress: Progress }) {
 			{offscreen && current ? (
 				<Button
 					variant="secondary"
-					size="icon"
-					className="fixed right-safe-4 bottom-[calc(80px+var(--safe-bottom))] z-30 rounded-full md:bottom-safe-8"
-					aria-label="Back to my level"
+					className="map-fab fixed right-safe-4 z-30 h-11 gap-1.5 rounded-full pr-4 pl-2.5"
+					title="Back to my level"
 					onClick={() =>
 						currentRef.current?.scrollIntoView({
 							behavior: "smooth",
@@ -277,6 +291,11 @@ export function WorldMap({ progress }: { progress: Progress }) {
 					}
 				>
 					<Wick className="h-7 w-6" />
+					My level
+					<GameIcon
+						name="chevron-down"
+						className={cn("size-4", offscreen === "up" && "rotate-180")}
+					/>
 				</Button>
 			) : null}
 		</div>
@@ -820,6 +839,7 @@ export function NextUpCard({ progress }: { progress: Progress }) {
 						: "Play";
 	return (
 		<section
+			data-next-up
 			className="panel relative flex flex-col gap-4 overflow-hidden p-5"
 			style={{
 				background:

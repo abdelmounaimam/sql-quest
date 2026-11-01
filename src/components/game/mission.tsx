@@ -1,11 +1,12 @@
-import { useDebouncedCallback, useDebouncedValue } from "@tanstack/react-pacer";
+import { useDebouncedValue } from "@tanstack/react-pacer";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { AnimatePresence, motion } from "motion/react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { Chapter, Exercise } from "#/content/types";
 import { feedbackPolicy, HINT_XP_COST } from "#/engine/adaptive";
 import type { AttemptKind } from "#/engine/adaptive/types";
+import { sqlErrorAdvice } from "#/engine/checker/errors";
 import type { ErrorType, RunOutcome, Verdict } from "#/engine/checker/types";
 import { sqlClient } from "#/engine/sql/client";
 import { recordAttempt, useGame } from "#/game/progress";
@@ -40,6 +41,7 @@ import {
 	ResizablePanelGroup,
 } from "../ui/resizable";
 import { Spinner } from "../ui/spinner";
+import { prefersReducedMotion } from "./fx";
 import { AetherStat, ComboChip, StreakStat } from "./hud";
 import { GameIcon, Wick, type WickMood } from "./icons";
 import { Markdown } from "./markdown";
@@ -47,7 +49,13 @@ import { DiffView, ResultGrid } from "./result-grid";
 import { SchemaExplorer } from "./schema-explorer";
 import { SqlComposer, type SqlComposerHandle } from "./sql-composer";
 import { StatementLog } from "./statement-log";
-import { type SolvedResult, VerdictSheet } from "./verdict";
+import {
+	ErrorLineQuote,
+	type SolvedResult,
+	VerdictSheet,
+	verdictAdvice,
+	verdictTitle,
+} from "./verdict";
 
 export type MissionMode = "exercise" | "practice" | "boss" | "review";
 
@@ -194,8 +202,16 @@ export function MissionScreen({
 	const [drawer, setDrawer] = useState<null | "schema" | "results">(null);
 	const [snap, setSnap] = useState<number | string | null>(0.45);
 	const [mood, setMood] = useState<WickMood>("idle");
+	const [submittedSql, setSubmittedSql] = useState("");
+	const [judgeSeq, setJudgeSeq] = useState(0);
 	// Last learner SQL replayed in a sandbox so the chests show what it created.
 	const [liveRun, setLiveRun] = useState({ sql: "", seq: 0 });
+
+	// A new mission (Continue remounts this screen) starts at the top: HUD,
+	// title and goal first, wherever the previous one was scrolled.
+	useLayoutEffect(() => {
+		window.scrollTo(0, 0);
+	}, []);
 
 	const shownHints = Math.max(chargedHints, freeHints);
 	const policy = feedbackPolicy({
@@ -213,16 +229,15 @@ export function MissionScreen({
 		}
 	}, [policy.proactiveHintIndex, shownHints]);
 
-	const saveDraft = useDebouncedCallback(
-		(v: string) => {
-			try {
-				localStorage.setItem(draftKey(exercise.id), v);
-			} catch {
-				// ignore
-			}
-		},
-		{ wait: 600 },
-	);
+	// Written on every change (localStorage is synchronous and cheap), so
+	// quitting right after the last tap or keystroke never loses the draft.
+	const saveDraft = (v: string) => {
+		try {
+			localStorage.setItem(draftKey(exercise.id), v);
+		} catch {
+			// ignore
+		}
+	};
 
 	const catalog = useCatalog(chapter.datasetId);
 	const functions = useQuery(functionsQuery(chapter.datasetId));
@@ -305,9 +320,29 @@ export function MissionScreen({
 				check: exercise.check,
 				learnerSql: text,
 			}),
-		onMutate: () => {
+		// The sheet rises the moment Submit is pressed ("Checking…") and turns
+		// into the verdict in place, so the wait never feels like a dead tap.
+		onMutate: (text) => {
 			sfx("run");
 			setMood("thinking");
+			setSubmittedSql(text);
+			setVerdict(null);
+			setDrawer(null);
+			setJudgeSeq((n) => n + 1);
+			setSheetOpen(true);
+		},
+		onError: () => {
+			// The worker failed, not the learner: same sheet as an engine hiccup.
+			setVerdict({
+				pass: false,
+				errorType: "internal",
+				title: "Engine hiccup",
+				message: "",
+				learnerResults: [],
+				statements: [],
+				durationMs: 0,
+			});
+			setMood("idle");
 		},
 		onSuccess: (v, text) => {
 			setLiveRun((r) => ({ sql: text, seq: r.seq + 1 }));
@@ -347,13 +382,14 @@ export function MissionScreen({
 
 	const busy = runMut.isPending || judgeMut.isPending;
 	const locked = busy || !!result || bossLost;
+	const empty = !sql.trim();
 	const run = () => {
-		if (locked) return;
+		if (locked || empty) return;
 		setRuns((r) => r + 1);
 		runMut.mutate(sql);
 	};
 	const cast = () => {
-		if (locked) return;
+		if (locked || empty) return;
 		judgeMut.mutate(sql);
 	};
 	const revealHint = () => {
@@ -412,7 +448,8 @@ export function MissionScreen({
 	const castButton = (
 		<Button
 			onClick={cast}
-			disabled={locked && !busy}
+			disabled={(locked && !busy) || empty}
+			title={empty ? "Build a query first" : undefined}
 			data-pressed={judgeMut.isPending ? "true" : undefined}
 			variant={mode === "boss" ? "danger" : "default"}
 			size={isDesktop ? "lg" : "xl"}
@@ -456,30 +493,36 @@ export function MissionScreen({
 			data-casting={busy}
 		>
 			<span className="rune-sweep" aria-hidden="true" />
-			<div className="spell-top">
-				<Wick mood={mood} className="h-8 w-7" />
-				<span className="font-extrabold">Query</span>
-				<span className="hidden text-xs text-muted-foreground xl:inline">
-					<kbd className="keycap">Ctrl</kbd> +{" "}
-					<kbd className="keycap">Enter</kbd> test ·{" "}
-					<kbd className="keycap">Shift</kbd> submits
-				</span>
-				<span className="ml-auto" />
-				<Button
-					variant="secondary"
-					size="sm"
-					onClick={run}
-					disabled={locked}
-					aria-keyshortcuts="Control+Enter"
-				>
-					{runMut.isPending ? (
-						<Spinner data-icon="inline-start" />
-					) : (
-						<GameIcon name="play" className="size-5" data-icon="inline-start" />
-					)}
-					Test
-				</Button>
-			</div>
+			{isDesktop ? (
+				<div className="spell-top">
+					<Wick mood={mood} className="h-8 w-7" />
+					<span className="font-extrabold">Query</span>
+					<span className="hidden text-xs text-muted-foreground xl:inline">
+						<kbd className="keycap">Ctrl</kbd> +{" "}
+						<kbd className="keycap">Enter</kbd> test ·{" "}
+						<kbd className="keycap">Shift</kbd> submits
+					</span>
+					<span className="ml-auto" />
+					<Button
+						variant="secondary"
+						size="sm"
+						onClick={run}
+						disabled={locked || empty}
+						aria-keyshortcuts="Control+Enter"
+					>
+						{runMut.isPending ? (
+							<Spinner data-icon="inline-start" />
+						) : (
+							<GameIcon
+								name="play"
+								className="size-5"
+								data-icon="inline-start"
+							/>
+						)}
+						Test
+					</Button>
+				</div>
+			) : null}
 			<div className={cn(isDesktop && "min-h-0 flex-1")}>
 				<SqlComposer
 					ref={editorRef}
@@ -499,9 +542,7 @@ export function MissionScreen({
 					errorLine={errorLine}
 					fill={isDesktop}
 					minHeight={isDesktop ? "100%" : "8.5rem"}
-					prompt={
-						<Markdown className="text-foreground">{exercise.prompt}</Markdown>
-					}
+					prompt={<FocusTask prompt={exercise.prompt} />}
 					keyboardActions={
 						<>
 							<button
@@ -509,11 +550,15 @@ export function MissionScreen({
 								className="suggest-icon"
 								aria-label="Test the query"
 								onClick={run}
-								disabled={locked}
+								disabled={locked || empty}
 							>
 								<GameIcon name="play" className="size-5" />
 							</button>
-							<Button size="sm" onClick={cast} disabled={locked && !busy}>
+							<Button
+								size="sm"
+								onClick={cast}
+								disabled={(locked && !busy) || empty}
+							>
 								{castLabel}
 							</Button>
 						</>
@@ -531,7 +576,13 @@ export function MissionScreen({
 	);
 
 	const results = (
-		<ResultsPanel busy={busy} lastRun={lastRun} verdict={verdict} />
+		<ResultsPanel
+			busy={busy}
+			lastRun={lastRun}
+			verdict={verdict}
+			sql={liveRun.sql}
+			solutionSql={exercise.solutionSql}
+		/>
 	);
 
 	return (
@@ -597,10 +648,11 @@ export function MissionScreen({
 					</div>
 					<div
 						data-bottom-bar
+						// Hidden under the verdict sheet, so its ledge never peeks out.
+						data-covered={sheetOpen && !bossLost ? "" : undefined}
 						className="bottom-bar z-30 border-t-2 border-border bg-card px-safe-3 pt-2 pb-safe"
 					>
 						<div className="flex items-center gap-2 pb-2">
-							{lanternButton}
 							<Button
 								variant="secondary"
 								size="icon"
@@ -626,6 +678,24 @@ export function MissionScreen({
 							>
 								<GameIcon name="table" />
 							</Button>
+							<Button
+								variant="secondary"
+								className="px-3.5 max-[374px]:size-11 max-[374px]:px-0 max-[374px]:[&>span]:sr-only"
+								onClick={run}
+								disabled={locked || empty}
+								aria-keyshortcuts="Control+Enter"
+							>
+								{runMut.isPending ? (
+									<Spinner data-icon="inline-start" />
+								) : (
+									<GameIcon
+										name="play"
+										className="size-5"
+										data-icon="inline-start"
+									/>
+								)}
+								<span>Test</span>
+							</Button>
 							{castButton}
 						</div>
 					</div>
@@ -640,7 +710,13 @@ export function MissionScreen({
 							className="h-[96dvh] overscroll-contain"
 							data-world={world}
 						>
-							<DrawerTitle className="px-4 pt-2 font-display text-xl">
+							{/* The results panel names itself (with the row count): no second title. */}
+							<DrawerTitle
+								className={cn(
+									"px-4 pt-2 font-display text-xl",
+									drawer !== "schema" && "sr-only",
+								)}
+							>
 								{drawer === "schema" ? "Schema" : "Results"}
 							</DrawerTitle>
 							<div className="min-h-0 flex-1 overflow-y-auto px-1 pb-4">
@@ -665,16 +741,22 @@ export function MissionScreen({
 			<AnimatePresence>
 				{sheetOpen && !bossLost ? (
 					<VerdictSheet
-						key={result ? "ok" : `bad-${shakeKey}`}
+						key={result?.revealed ? "revealed" : `judge-${judgeSeq}`}
 						exercise={exercise}
 						verdict={verdict}
 						solved={result}
+						checking={judgeMut.isPending}
+						sql={submittedSql}
 						isBoss={mode === "boss"}
 						onContinue={onNext}
 						onRetry={() => {
 							setSheetOpen(false);
 							setMood("idle");
 							editorRef.current?.focus();
+						}}
+						onDismiss={() => {
+							setSheetOpen(false);
+							setMood("idle");
 						}}
 						onHint={
 							shownHints < exercise.hints.length
@@ -693,6 +775,67 @@ export function MissionScreen({
 				chapter={chapter}
 				onContinue={onBossDefeat ?? onNext}
 			/>
+		</div>
+	);
+}
+
+/**
+ * The task, repeated above the editor while typing full screen on a phone.
+ * Two lines by default so the editor keeps the room; "More" shows it all
+ * (long boss specs scroll inside). The toggle never takes focus from the
+ * editor, so the keyboard stays up.
+ */
+export function FocusTask({ prompt }: { prompt: string }) {
+	const [open, setOpen] = useState(false);
+	const [long, setLong] = useState(false);
+	const textRef = useRef<HTMLDivElement>(null);
+	const suppressClick = useRef(0);
+	useLayoutEffect(() => {
+		const el = textRef.current;
+		if (!el) return;
+		const measure = () =>
+			setLong(open || el.scrollHeight > el.clientHeight + 2);
+		measure();
+		const ro = new ResizeObserver(measure);
+		ro.observe(el);
+		return () => ro.disconnect();
+	}, [open]);
+	const toggle = () => setOpen((o) => !o);
+	return (
+		<div className="focus-task" data-open={open ? "" : undefined}>
+			<div className="focus-task-head">
+				<span>Your task</span>
+				{long ? (
+					<button
+						type="button"
+						className="focus-task-more"
+						aria-expanded={open}
+						onPointerDown={(e) => e.preventDefault()}
+						onPointerUp={(e) => {
+							if (e.pointerType === "mouse") return;
+							suppressClick.current = Date.now() + 500;
+							toggle();
+						}}
+						onClick={() => {
+							if (Date.now() < suppressClick.current) return;
+							toggle();
+						}}
+					>
+						{open ? "Less" : "More"}
+						<GameIcon
+							name="chevron-down"
+							className={cn("size-4", open && "rotate-180")}
+						/>
+					</button>
+				) : null}
+			</div>
+			<div
+				ref={textRef}
+				className="focus-task-text"
+				data-fade={long && !open ? "" : undefined}
+			>
+				<Markdown className="text-foreground">{prompt}</Markdown>
+			</div>
 		</div>
 	);
 }
@@ -726,8 +869,43 @@ function MissionCard({
 	onReveal: () => void;
 	collapsible: boolean;
 }) {
-	// Phones: collapsed by default (ribbon + goal stay visible), the spellbook gets the room.
+	// Phones: compact by default (title + the goal in three lines), so the
+	// query and the word bank are on screen together. Help (hints, refresher,
+	// the solution offer) never hides behind the collapse.
 	const [open, setOpen] = useState(!collapsible);
+	const [clipped, setClipped] = useState(false);
+	const goalRef = useRef<HTMLDivElement>(null);
+	const compact = collapsible && !open;
+	useLayoutEffect(() => {
+		const el = goalRef.current;
+		if (!el || !compact) {
+			setClipped(false);
+			return;
+		}
+		const measure = () => setClipped(el.scrollHeight > el.clientHeight + 2);
+		measure();
+		const ro = new ResizeObserver(measure);
+		ro.observe(el);
+		return () => ro.disconnect();
+	}, [compact]);
+
+	// A new hint (paid, free, or asked from the verdict sheet) scrolls into view.
+	const helpRef = useRef<HTMLDivElement>(null);
+	const seenHints = useRef(shownHints);
+	useEffect(() => {
+		if (shownHints <= seenHints.current) return;
+		seenHints.current = shownHints;
+		const id = window.setTimeout(() => {
+			helpRef.current
+				?.querySelector<HTMLElement>(`[data-hint="${shownHints - 1}"]`)
+				?.scrollIntoView({
+					block: "nearest",
+					behavior: prefersReducedMotion() ? "auto" : "smooth",
+				});
+		}, 60);
+		return () => window.clearTimeout(id);
+	}, [shownHints]);
+
 	const kicker =
 		mode === "boss"
 			? "Guardian"
@@ -741,9 +919,24 @@ function MissionCard({
 		<div className="mission-ribbon world-motif" data-world={world}>
 			<div className="min-w-0 flex-1">
 				<div className="k">
-					{kicker}
-					{datasetName ? ` · ${datasetName}` : ""} ·{" "}
-					{"◆".repeat(exercise.difficulty)}
+					<span className="whitespace-nowrap">{kicker} · </span>
+					{datasetName ? (
+						<span
+							className={cn(
+								"whitespace-nowrap",
+								collapsible && "max-sm:hidden",
+							)}
+						>
+							{datasetName} ·{" "}
+						</span>
+					) : null}
+					<span
+						className="whitespace-nowrap"
+						role="img"
+						aria-label={`Difficulty ${exercise.difficulty} of 3`}
+					>
+						{"◆".repeat(exercise.difficulty)}
+					</span>
 				</div>
 				<h2 className="t">{exercise.title}</h2>
 			</div>
@@ -752,7 +945,7 @@ function MissionCard({
 					<button
 						type="button"
 						className="tap-target grid size-9 place-items-center rounded-md"
-						aria-label={open ? "Collapse mission" : "Expand mission"}
+						aria-label={open ? "Show less" : "Show the whole mission"}
 					>
 						<GameIcon
 							name="chevron-down"
@@ -767,27 +960,74 @@ function MissionCard({
 		</div>
 	);
 
+	const hintsLeft = shownHints < exercise.hints.length;
+	const hintButton = hintsLeft ? (
+		<Button
+			variant="ghost-glow"
+			size="sm"
+			className="self-start"
+			onClick={onHint}
+			aria-label={`Show hint ${shownHints + 1} of ${exercise.hints.length}, costs ${HINT_XP_COST} XP`}
+		>
+			<GameIcon name="bulb" data-icon="inline-start" />
+			{collapsible ? "Hint" : "Show hint"} {shownHints + 1}/
+			{exercise.hints.length}
+			<Badge variant="xp">−{HINT_XP_COST} XP</Badge>
+		</Button>
+	) : null;
+
 	const goal = (
-		<div className="goal-box">
+		<div className="goal-box" data-clamped={compact ? "" : undefined}>
 			<GameIcon name="target" className="size-5" />
-			<Markdown className="min-w-0 text-foreground">{exercise.prompt}</Markdown>
+			<div className="min-w-0 flex-1">
+				<div
+					ref={goalRef}
+					className="goal-text"
+					data-fade={clipped || undefined}
+				>
+					<Markdown className="min-w-0 text-foreground">
+						{exercise.prompt}
+					</Markdown>
+				</div>
+				{collapsible && (clipped || hintButton) ? (
+					<div className="goal-tools">
+						{clipped ? (
+							<button
+								type="button"
+								className="goal-more"
+								onClick={() => setOpen(true)}
+							>
+								Read all
+								<GameIcon name="chevron-down" className="size-4" />
+							</button>
+						) : null}
+						<span className="flex-1" />
+						{hintButton}
+					</div>
+				) : null}
+			</div>
 		</div>
 	);
 
-	const details = (
-		<div className="flex flex-col gap-3">
-			<div className="flex flex-wrap gap-1.5">
-				{exercise.concepts.map((c) => (
-					<Badge key={c} variant="success">
-						{conceptName(c)}
-					</Badge>
-				))}
-				<Badge variant="outline">{exercise.kind}</Badge>
-			</div>
+	const badges = (
+		<div className="flex flex-wrap gap-1.5">
+			{exercise.concepts.map((c) => (
+				<Badge key={c} variant="success">
+					{conceptName(c)}
+				</Badge>
+			))}
+			<Badge variant="outline">{exercise.kind}</Badge>
+		</div>
+	);
+
+	const help = (
+		<div ref={helpRef} className="flex flex-col gap-3 empty:hidden">
 			<AnimatePresence initial={false}>
 				{exercise.hints.slice(0, shownHints).map((h, i) => (
 					<motion.div
 						key={h}
+						data-hint={i}
+						className="scroll-mt-[calc(var(--safe-top)+1rem)] scroll-mb-[calc(6.5rem+var(--safe-bottom))]"
 						initial={{ opacity: 0, y: -6 }}
 						animate={{ opacity: 1, y: 0 }}
 						transition={{ duration: 0.22, ease: [0.23, 1, 0.32, 1] }}
@@ -805,18 +1045,7 @@ function MissionCard({
 					</motion.div>
 				))}
 			</AnimatePresence>
-			{shownHints < exercise.hints.length ? (
-				<Button
-					variant="ghost-glow"
-					size="sm"
-					className="self-start"
-					onClick={onHint}
-				>
-					<GameIcon name="bulb" data-icon="inline-start" /> Show hint{" "}
-					{shownHints + 1}/{exercise.hints.length}
-					<Badge variant="xp">−{HINT_XP_COST}</Badge>
-				</Button>
-			) : null}
+			{!collapsible ? hintButton : null}
 			{showRefresher ? (
 				<Alert variant="lore">
 					<GameIcon name="scroll" />
@@ -863,14 +1092,15 @@ function MissionCard({
 	if (collapsible)
 		return (
 			<Collapsible open={open} onOpenChange={setOpen} asChild>
-				<Card variant="mission" data-world={world}>
+				<Card variant="mission" data-world={world} data-compact="">
 					{ribbon}
-					<div className="flex flex-col gap-3 p-4">
+					<div className="flex flex-col gap-3 p-3">
 						{exercise.story && open ? (
 							<p className="text-sm text-muted-foreground">{exercise.story}</p>
 						) : null}
 						{goal}
-						<CollapsibleContent>{details}</CollapsibleContent>
+						{help}
+						<CollapsibleContent>{badges}</CollapsibleContent>
 					</div>
 				</Card>
 			</Collapsible>
@@ -884,7 +1114,8 @@ function MissionCard({
 					<p className="text-muted-foreground">{exercise.story}</p>
 				) : null}
 				{goal}
-				{details}
+				{badges}
+				{help}
 			</div>
 		</Card>
 	);
@@ -894,10 +1125,15 @@ function ResultsPanel({
 	busy,
 	lastRun,
 	verdict,
+	sql,
+	solutionSql,
 }: {
 	busy: boolean;
 	lastRun: RunOutcome | null;
 	verdict: Verdict | null;
+	/** The SQL that produced lastRun or verdict, to quote the failing line. */
+	sql: string;
+	solutionSql: string;
 }) {
 	if (busy)
 		return (
@@ -930,20 +1166,23 @@ function ResultsPanel({
 						<AlertTitle>
 							{lastRun.errorType === "timeout" ? "Query timed out" : "Error"}
 							{lastRun.error?.code ? (
-								<span className="rune ml-2">{lastRun.error.code}</span>
+								<span className="rune ml-2">
+									Error code {lastRun.error.code}
+								</span>
 							) : null}
 						</AlertTitle>
 						<AlertDescription>
+							{lastRun.error && sqlErrorAdvice(lastRun.error) ? (
+								<p>{sqlErrorAdvice(lastRun.error)}</p>
+							) : null}
 							<p className="font-mono text-xs">
 								{lastRun.error?.message ?? "Query failed"}
 							</p>
-							{lastRun.error?.line ? (
-								<p className="text-xs">
-									line {lastRun.error.line}, column {lastRun.error.column}
-								</p>
+							{lastRun.error ? (
+								<ErrorLineQuote sql={sql} error={lastRun.error} />
 							) : null}
 							{lastRun.error?.hint ? (
-								<p className="text-xs">Hint: {lastRun.error.hint}</p>
+								<p className="text-xs">Postgres adds: {lastRun.error.hint}</p>
 							) : null}
 						</AlertDescription>
 					</Alert>
@@ -972,15 +1211,18 @@ function ResultsPanel({
 				<Alert variant="destructive">
 					<GameIcon name="x" />
 					<AlertTitle>
-						{v.title}
+						{verdictTitle(v)}
 						{v.sqlError?.code ? (
-							<span className="rune ml-2">{v.sqlError.code}</span>
+							<span className="rune ml-2">Error code {v.sqlError.code}</span>
 						) : null}
 					</AlertTitle>
 					<AlertDescription>
-						<p>{v.message}</p>
+						<p>{verdictAdvice(v, sql, solutionSql)}</p>
 						{v.sqlError?.message ? (
 							<p className="font-mono text-xs">{v.sqlError.message}</p>
+						) : null}
+						{v.sqlError ? (
+							<ErrorLineQuote sql={sql} error={v.sqlError} />
 						) : null}
 					</AlertDescription>
 				</Alert>

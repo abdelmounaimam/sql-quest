@@ -1,6 +1,8 @@
 import { Link } from "@tanstack/react-router";
 import { motion } from "motion/react";
+import { useEffect, useRef, useState } from "react";
 import { GameIcon } from "#/components/game/icons";
+import { Button } from "#/components/ui/button";
 import type { Chapter } from "#/content/types";
 import { MASTERY_THRESHOLD } from "#/engine/adaptive";
 import type { ChapterStatus } from "#/engine/adaptive/types";
@@ -57,6 +59,8 @@ export function LevelHub({
 	onLearn,
 	onMission,
 	onGate,
+	onBoss,
+	onNextLevel,
 }: {
 	chapter: Chapter;
 	status: ChapterStatus;
@@ -64,6 +68,9 @@ export function LevelHub({
 	onLearn: () => void;
 	onMission: (id: string) => void;
 	onGate: () => void;
+	/** Straight to the boss intro (rematch after a win). */
+	onBoss: () => void;
+	onNextLevel?: () => void;
 }) {
 	const dataset = datasetById.get(chapter.datasetId);
 	const world = worldOfChapter(chapter.id);
@@ -74,6 +81,41 @@ export function LevelHub({
 	);
 	const gauntlet =
 		status.gauntlet && !status.gauntlet.cleared ? status.gauntlet : null;
+	const [showConcepts, setShowConcepts] = useState(false);
+	const weak = status.gateCriteria.weakConcepts.length;
+	const total = chapter.concepts.length;
+
+	// The one next step, pinned above the tab bar so the first screen always has an action.
+	const next = nextStep(
+		status,
+		chapter,
+		onLearn,
+		onMission,
+		onGate,
+		onNextLevel,
+	);
+	// Index of the row that holds the next step (0 = Learn, mains, then boss).
+	const currentIndex = !status.lessonDone
+		? 0
+		: status.nextExerciseId
+			? mains.findIndex((e) => e.id === status.nextExerciseId) + 1
+			: mains.length + 1;
+	const currentRef = useRef<HTMLLIElement>(null);
+	// Bring the current row into view when it opens below the fold (the world map
+	// does the same). Not for the lesson row: the header is worth seeing first
+	// and the pinned button already says "Learn the basics".
+	const scrollOnMount = useRef(currentIndex > 0);
+	useEffect(() => {
+		if (!scrollOnMount.current) return;
+		const t = window.setTimeout(() => {
+			const el = currentRef.current;
+			if (!el) return;
+			const r = el.getBoundingClientRect();
+			if (r.bottom > window.innerHeight - 160)
+				el.scrollIntoView({ behavior: "smooth", block: "center" });
+		}, 350);
+		return () => window.clearTimeout(t);
+	}, []);
 
 	return (
 		<div className="mx-auto w-full max-w-4xl px-4 pt-5 pb-16 sm:px-6">
@@ -108,7 +150,39 @@ export function LevelHub({
 						Dataset: {dataset?.name}
 					</p>
 				</div>
-				<div className="relative grid gap-3 px-5 pt-4 pb-5 sm:grid-cols-2 sm:px-6">
+				{/* Phones: one summary line, bars on demand. Wider screens: always shown. */}
+				<button
+					type="button"
+					onClick={() => setShowConcepts((v) => !v)}
+					aria-expanded={showConcepts}
+					className="mx-5 mt-3 mb-4 flex min-h-11 w-[calc(100%-2.5rem)] items-center gap-2 rounded-xl bg-secondary px-3 py-2 text-left text-sm font-bold text-foreground sm:hidden"
+				>
+					<GameIcon
+						name={weak === 0 ? "check" : "target"}
+						className={cn(
+							"size-4 shrink-0",
+							weak === 0 ? "text-success" : "text-muted-foreground",
+						)}
+					/>
+					<span className="min-w-0 flex-1">
+						{weak === 0
+							? `All ${total} concepts solid`
+							: `${total - weak} of ${total} concepts solid`}
+					</span>
+					<GameIcon
+						name="chevron-down"
+						className={cn(
+							"size-4 shrink-0 text-muted-foreground transition-transform",
+							showConcepts && "rotate-180",
+						)}
+					/>
+				</button>
+				<div
+					className={cn(
+						"relative gap-3 px-5 pb-5 sm:grid sm:grid-cols-2 sm:px-6 sm:pt-4",
+						showConcepts ? "grid" : "hidden",
+					)}
+				>
 					{chapter.concepts.map((c) => (
 						<div key={c}>
 							<div className="mb-1 flex justify-between text-xs">
@@ -128,6 +202,7 @@ export function LevelHub({
 			<ol className="relative space-y-3 before:absolute before:top-4 before:bottom-4 before:left-[27px] before:w-1 before:rounded-full before:bg-secondary">
 				<HubStep
 					index={0}
+					itemRef={currentIndex === 0 ? currentRef : undefined}
 					icon={<GameIcon name="book" className="size-5" />}
 					title="Learn"
 					subtitle={`${chapter.lesson.length} cards: concepts, examples, a quiz, a guided try`}
@@ -144,6 +219,7 @@ export function LevelHub({
 						<HubStep
 							key={e.id}
 							index={i + 1}
+							itemRef={currentIndex === i + 1 ? currentRef : undefined}
 							icon={<span className="font-display text-sm">{i + 1}</span>}
 							title={e.title}
 							subtitle={`${"◆".repeat(e.difficulty)} · ${e.concepts.map(conceptName).join(", ")}`}
@@ -216,6 +292,7 @@ export function LevelHub({
 				{boss ? (
 					<HubStep
 						index={mains.length + 1}
+						itemRef={currentIndex === mains.length + 1 ? currentRef : undefined}
 						icon={<GameIcon name="crown" className="size-5" />}
 						title={
 							/^boss\b/i.test(boss.title) ? boss.title : `Boss: ${boss.title}`
@@ -239,16 +316,104 @@ export function LevelHub({
 							status.bossCleared ? (status.stars[boss.id] ?? 0) : undefined
 						}
 						action={status.bossCleared ? "Rematch" : "Gate check"}
-						onClick={onGate}
+						onClick={status.bossCleared ? onBoss : onGate}
 						forceClickable={status.lessonDone}
 					/>
 				) : null}
 			</ol>
+			{next ? (
+				<div className="sticky bottom-[calc(66px+var(--safe-bottom)+0.75rem)] z-20 mt-6 md:bottom-4">
+					<Button
+						type="button"
+						size="lg"
+						variant={next.variant}
+						onClick={() => {
+							sfx("tap");
+							next.run();
+						}}
+						className="h-auto min-h-14 w-full py-2.5 whitespace-normal shadow-[0_10px_30px_-8px_rgb(0_0_0/0.5)]"
+					>
+						<span className="flex min-w-0 flex-1 flex-col items-start text-left leading-tight">
+							<span className="text-xs tracking-wider opacity-80">
+								{next.kicker}
+							</span>
+							<span className="truncate text-pretty">{next.label}</span>
+						</span>
+						<GameIcon name="chevron-right" className="size-5 shrink-0" />
+					</Button>
+				</div>
+			) : null}
 		</div>
 	);
 }
 
+type NextStep = {
+	kicker: string;
+	label: string;
+	variant: "default" | "info" | "destructive" | "success";
+	run: () => void;
+};
+
+/** What the pinned button does: lesson, drill, next mission, boss, then the next level. */
+function nextStep(
+	status: ChapterStatus,
+	chapter: Chapter,
+	onLearn: () => void,
+	onMission: (id: string) => void,
+	onGate: () => void,
+	onNextLevel?: () => void,
+): NextStep | null {
+	if (!status.lessonDone)
+		return {
+			kicker: "Start here",
+			label: "Learn the basics",
+			variant: "default",
+			run: onLearn,
+		};
+	const drill = status.pendingDrillIds[0];
+	if (drill)
+		return {
+			kicker: "Practice drill",
+			label: findExercise(drill)?.exercise.title ?? "Next drill",
+			variant: "info",
+			run: () => onMission(drill),
+		};
+	if (status.nextExerciseId) {
+		const id = status.nextExerciseId;
+		const n = chapter.exercises.findIndex((e) => e.id === id) + 1;
+		return {
+			kicker: `Continue: mission ${n}`,
+			label: findExercise(id)?.exercise.title ?? "Next mission",
+			variant: "default",
+			run: () => onMission(id),
+		};
+	}
+	if (status.bossUnlocked)
+		return {
+			kicker: "The gate is open",
+			label: "Face the boss",
+			variant: "destructive",
+			run: onGate,
+		};
+	if (status.bossCleared || status.state === "complete")
+		return onNextLevel
+			? {
+					kicker: "Chapter cleared",
+					label: "Next level",
+					variant: "success",
+					run: onNextLevel,
+				}
+			: null;
+	return {
+		kicker: "Almost there",
+		label: "Gate check",
+		variant: "default",
+		run: onGate,
+	};
+}
+
 function HubStep({
+	itemRef,
 	index,
 	icon,
 	title,
@@ -259,6 +424,7 @@ function HubStep({
 	onClick,
 	forceClickable,
 }: {
+	itemRef?: React.Ref<HTMLLIElement>;
 	index: number;
 	icon: React.ReactNode;
 	title: string;
@@ -272,6 +438,7 @@ function HubStep({
 	const clickable = state !== "locked" || forceClickable;
 	return (
 		<motion.li
+			ref={itemRef}
 			initial={{ x: -16, opacity: 0 }}
 			animate={{ x: 0, opacity: 1 }}
 			transition={{ delay: index * 0.05 }}

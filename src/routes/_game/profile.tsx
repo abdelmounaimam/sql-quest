@@ -225,12 +225,19 @@ function SortableTable({
 								return (
 									<th
 										key={h.id}
-										className="px-3 py-2 text-[11px] font-bold tracking-wide whitespace-nowrap text-muted-foreground uppercase"
+										className="px-1 py-0 text-[11px] font-bold tracking-wide whitespace-nowrap text-muted-foreground uppercase"
+										aria-sort={
+											sorted === "asc"
+												? "ascending"
+												: sorted === "desc"
+													? "descending"
+													: undefined
+										}
 									>
 										<button
 											type="button"
 											onClick={h.column.getToggleSortingHandler?.()}
-											className="inline-flex items-center gap-1 hover:text-foreground"
+											className="inline-flex min-h-11 items-center gap-1 rounded-md px-2 uppercase hover:text-foreground"
 										>
 											<table.FlexRender header={h} />
 											{sorted === "asc" ? (

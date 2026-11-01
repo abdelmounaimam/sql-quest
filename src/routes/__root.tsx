@@ -21,8 +21,16 @@ const Devtools = import.meta.env.DEV
 const DESCRIPTION =
 	"A game that teaches SQL and PostgreSQL level by level: 43 levels, 11 worlds, a real Postgres 18 engine in your browser.";
 
-/** Runs before paint: applies the saved theme so there is no flash. */
-const THEME_BOOT = `(function(){try{var s=JSON.parse(localStorage.getItem('sqlq-game')||'{}').settings||{};var t=s.theme||'dark';if(t==='system'){t=matchMedia('(prefers-color-scheme: light)').matches?'light':'dark'}var d=document.documentElement;d.classList.toggle('dark',t==='dark');d.style.colorScheme=t;if(s.reducedMotion==='reduce')d.classList.add('reduce-motion')}catch(e){}})()`;
+/**
+ * Runs before paint: applies the saved theme so there is no flash. It also
+ * picks the installed iPhone app's status bar for that theme: Night keeps
+ * black-translucent (page drawn under a white clock, hidden by the night
+ * strip in styles.css), Day asks for the default light bar with a dark clock,
+ * so no navy band sits above parchment (the inset is then 0, the strip too).
+ * iOS reads this when the app launches, so a theme change applies on the
+ * next launch; meanwhile the night strip keeps the clock readable.
+ */
+const THEME_BOOT = `(function(){try{var s=JSON.parse(localStorage.getItem('sqlq-game')||'{}').settings||{};var t=s.theme||'dark';if(t==='system'){t=matchMedia('(prefers-color-scheme: light)').matches?'light':'dark'}var d=document.documentElement;d.classList.toggle('dark',t==='dark');d.style.colorScheme=t;if(s.reducedMotion==='reduce')d.classList.add('reduce-motion');var m=document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]');if(m)m.setAttribute('content',t==='dark'?'black-translucent':'default');document.querySelectorAll('meta[name="theme-color"]').forEach(function(c){c.setAttribute('content',t==='dark'?'#0E1424':'#FBF5E9')})}catch(e){}})()`;
 
 export const Route = createRootRouteWithContext<RouterContext>()({
 	head: () => ({

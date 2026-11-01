@@ -20,15 +20,53 @@ const components: Components = {
 			</code>
 		);
 	},
+	// A table wider than the card scrolls sideways inside its own box. While it
+	// can scroll, a horizontal drag scrolls the table instead of swiping the
+	// lesson card away (the card listens to pointerdown for its swipe).
+	table({ node: _node, ...props }) {
+		return (
+			<div
+				className="md-table"
+				onPointerDownCapture={(e) => {
+					const el = e.currentTarget;
+					if (el.scrollWidth > el.clientWidth + 1) e.stopPropagation();
+				}}
+			>
+				<table {...props} />
+			</div>
+		);
+	},
+};
+
+/** Inline flavour: paragraphs become plain runs, so the text sits in a label or a sentence. */
+const inlineComponents: Components = {
+	...components,
+	p({ node: _node, children }) {
+		return <>{children}</>;
+	},
 };
 
 export function Markdown({
 	children,
 	className,
+	inline = false,
 }: {
 	children: string;
 	className?: string;
+	/** Render inside a span with no paragraph margins (quiz choices, one-line stories). */
+	inline?: boolean;
 }) {
+	if (inline)
+		return (
+			<span className={cn("md md-inline", className)}>
+				<ReactMarkdown
+					remarkPlugins={[remarkGfm]}
+					components={inlineComponents}
+				>
+					{children}
+				</ReactMarkdown>
+			</span>
+		);
 	return (
 		<div className={cn("md text-[0.95rem] text-muted-foreground", className)}>
 			<ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>

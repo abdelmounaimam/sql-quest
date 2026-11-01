@@ -251,6 +251,29 @@ describe("mastery", () => {
 		);
 	});
 
+	it("lifts a concept past the threshold with the lesson try and one clean solve", () => {
+		for (const difficulty of [1, 2] as const) {
+			const lessonTry = att("c-t", ["x"], T0, {
+				kind: "lesson-try",
+				difficulty: 1,
+			});
+			const clean = computeMastery(
+				[lessonTry, att("c-e1", ["x"], T0 + 1000, { difficulty })],
+				T0 + 2000,
+			).x;
+			expect(clean.mastery).toBeGreaterThanOrEqual(MASTERY_THRESHOLD);
+			// A hint or a failed submission is weaker evidence: still under.
+			const hinted = computeMastery(
+				[
+					lessonTry,
+					att("c-e1", ["x"], T0 + 1000, { difficulty, hintsUsed: 1 }),
+				],
+				T0 + 2000,
+			).x;
+			expect(hinted.mastery).toBeLessThan(MASTERY_THRESHOLD);
+		}
+	});
+
 	it("scores struggle from recent attempts", () => {
 		const m = computeMastery(
 			[att("c-e1", ["x"], T0, { failedSubmissions: 3, hintsUsed: 2 })],
@@ -419,6 +442,85 @@ describe("gate", () => {
 		expect(st.gauntlet?.exerciseIds).toHaveLength(3);
 		expect(st.bossUnlocked).toBe(false);
 		expect(st.reasons[0].kind).toBe("boss-failed");
+	});
+
+	it("opens the boss after a flawless run, even with one mission per concept", () => {
+		const ch = chapter("c");
+		// No lesson try, the weakest evidence: clean solves alone must pass.
+		const attempts = [
+			att("c-e1", ["select"], T0, { difficulty: 1 }),
+			att("c-e2", ["where"], T0 + 1000, { difficulty: 1 }),
+		];
+		const st = chapterStatus(ch, attempts, ctxFor([ch], attempts, T0 + 2000));
+		expect(st.gateCriteria.masteryOk).toBe(true);
+		expect(st.gateCriteria.weakConcepts).toEqual([]);
+		expect(st.gauntlet).toBeNull();
+		expect(st.bossUnlocked).toBe(true);
+		expect(st.reasons).toEqual([]);
+	});
+
+	it("never gates on a concept only the boss practises", () => {
+		const ch = chapter("c", {
+			concepts: ["select", "where", "join"],
+			exercises: [
+				ex("c-e1", ["select"], { difficulty: 1 }),
+				ex("c-e2", ["where"], { difficulty: 2 }),
+				ex("c-boss", ["select", "where", "join"], {
+					difficulty: 3,
+					boss: true,
+				}),
+			],
+		});
+		const attempts = [
+			att("c-e1", ["select"], T0, { difficulty: 1 }),
+			att("c-e2", ["where"], T0 + 1000),
+		];
+		const st = chapterStatus(ch, attempts, ctxFor([ch], attempts, T0 + 2000));
+		expect(st.gateCriteria.weakConcepts).not.toContain("join");
+		expect(st.bossUnlocked).toBe(true);
+	});
+
+	it("waives a low-mastery gauntlet once live mastery and stars meet the gate", () => {
+		const ch = chapter("c");
+		const attempts = [
+			att("c-e1", ["select"], T0, { difficulty: 1, hintsUsed: 1 }),
+			att("c-e2", ["where"], T0 + 1000, { difficulty: 1, hintsUsed: 1 }),
+		];
+		const first = chapterStatus(
+			ch,
+			attempts,
+			ctxFor([ch], attempts, T0 + 2000),
+		);
+		expect(first.gauntlet?.reason).toBe("low-mastery");
+		// One drill and a clean replay lift both concepts: no more drills owed.
+		const later = [
+			...attempts,
+			att("c-p1", ["select", "where"], T0 + 3000, {
+				kind: "practice",
+				difficulty: 3,
+			}),
+			att("c-e1", ["select"], T0 + 4000, { difficulty: 1 }),
+		];
+		const st = chapterStatus(ch, later, ctxFor([ch], later, T0 + 5000));
+		expect(st.gateCriteria.masteryOk).toBe(true);
+		expect(st.gauntlet).toBeNull();
+		expect(st.bossUnlocked).toBe(true);
+		const mastery = st.reasons.some((r) => r.kind === "gauntlet");
+		expect(mastery).toBe(false);
+	});
+
+	it("keeps an open boss open while mastery decays", () => {
+		const ch = chapter("c");
+		const attempts = [
+			...strongPractice("c", T0),
+			att("c-e1", ["select"], T0 + 10_000, { difficulty: 3 }),
+			att("c-e2", ["where"], T0 + 11_000, { difficulty: 3 }),
+		];
+		const later = T0 + 10 * DAY;
+		const ctx = ctxFor([ch], attempts, later);
+		expect(ctx.mastery.select.effective).toBeLessThan(MASTERY_THRESHOLD);
+		const st = chapterStatus(ch, attempts, ctx);
+		expect(st.bossUnlocked).toBe(true);
 	});
 
 	it("locks a chapter until its prerequisites are complete", () => {

@@ -18,6 +18,7 @@ import {
 	gameActions,
 	gameStore,
 	type MotionPref,
+	type Settings,
 	type ThemePref,
 } from "#/game/store";
 import { syncNow } from "#/game/sync";
@@ -107,6 +108,17 @@ function SettingsPage() {
 					checked={settings.bossTimer}
 					onChange={(v) => gameActions.updateSettings({ bossTimer: v })}
 				/>
+				<Choice<ComposerPref>
+					label="Answer with"
+					description="Auto uses the word bank on touch screens and the keyboard elsewhere. The switch inside a mission changes this setting too."
+					value={settings.composer}
+					options={[
+						["auto", "Auto"],
+						["tiles", "Word bank"],
+						["keyboard", "Keyboard"],
+					]}
+					onChange={(v) => gameActions.updateSettings({ composer: v })}
+				/>
 				<Choice<MotionPref>
 					label="Motion"
 					value={settings.reducedMotion}
@@ -177,20 +189,34 @@ function Toggle({
 	);
 }
 
+type ComposerPref = Settings["composer"];
+
 function Choice<T extends string>({
 	label,
+	description,
 	value,
 	options,
 	onChange,
 }: {
 	label: string;
+	description?: string;
 	value: T;
 	options: [T, string][];
 	onChange: (v: T) => void;
 }) {
 	return (
-		<Field orientation="horizontal" className="p-3">
-			<FieldLabel>{label}</FieldLabel>
+		<Field
+			orientation={description ? "vertical" : "horizontal"}
+			className="p-3"
+		>
+			{description ? (
+				<FieldContent>
+					<FieldLabel>{label}</FieldLabel>
+					<FieldDescription>{description}</FieldDescription>
+				</FieldContent>
+			) : (
+				<FieldLabel>{label}</FieldLabel>
+			)}
 			<ToggleGroup
 				type="single"
 				variant="outline"

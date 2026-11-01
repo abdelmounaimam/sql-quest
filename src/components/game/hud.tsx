@@ -185,8 +185,10 @@ const NAV = [
 /** Global top bar (map, profile, settings). The level screen has its own HUD. */
 export function Hud() {
 	return (
-		<header className="sticky top-0 z-40 pt-safe border-b-2 border-border bg-[color-mix(in_oklab,var(--background)_88%,transparent)] backdrop-blur-[10px]">
-			<div className="mx-auto flex h-14 max-w-[1240px] items-center gap-3 px-4 md:px-8">
+		<header className="sticky top-0 z-40 pt-safe border-b-2 border-border bg-background">
+			{/* Phone in landscape: a 48px bar that also carries the tabs (the
+			    bottom tab bar hides), so chrome stays under 15% of the height. */}
+			<div className="mx-auto flex h-14 max-w-[1240px] items-center gap-3 px-4 phone-land:h-12 md:px-8">
 				<Link to="/" aria-label="World map" className="tap-target shrink-0">
 					{/* Full wordmark only where the bar has room (tablet landscape and phones
 					    in landscape get the compact flame, like portrait phones). */}
@@ -204,7 +206,7 @@ export function Hud() {
 				<div className="flex-1" />
 				<EngineDot />
 				<nav
-					className="hidden items-center gap-1 md:flex lg:hidden"
+					className="hidden items-center gap-1 phone-land:flex md:flex lg:hidden"
 					aria-label="Main"
 				>
 					{NAV.map(({ to, label, icon }) => (
@@ -215,7 +217,7 @@ export function Hud() {
 							aria-label={label}
 							className="flex size-11 items-center justify-center rounded-md text-sm font-extrabold text-muted-foreground hover:bg-accent hover:text-foreground data-[status=active]:bg-accent data-[status=active]:text-foreground"
 						>
-							{/* md..lg only: icons, so the bar fits a phone in landscape. */}
+							{/* md..lg and phones in landscape: icons only, so the bar fits. */}
 							<GameIcon name={icon} className="size-6" />
 						</Link>
 					))}
@@ -230,7 +232,7 @@ export function Hud() {
 export function TabBar() {
 	return (
 		<nav
-			className="bottom-bar z-40 border-t-2 border-border bg-card px-safe pb-safe md:hidden"
+			className="bottom-bar z-40 border-t-2 border-border bg-card px-safe pb-safe phone-land:hidden md:hidden"
 			aria-label="Main"
 		>
 			<div className="tabbar">

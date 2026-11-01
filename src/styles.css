@@ -35,6 +35,8 @@
 @custom-variant dark (&:is(.dark *));
 /* Wide AND tall: tablets and desktops, not a phone in landscape (852x393). */
 @custom-variant roomy (@media (min-width: 640px) and (min-height: 600px));
+/* A phone held sideways (734x343 to 932x430): chrome must stay slim. */
+@custom-variant phone-land (@media (orientation: landscape) and (max-height: 500px));
 
 /* ───────────────────────────── Day Atlas (light) ───────────────────────────── */
 :root {
@@ -1094,6 +1096,35 @@ body[data-scroll-locked] {
 .md table { font-size: 0.85rem; border-collapse: collapse; }
 .md th, .md td { border: 1px solid var(--border); padding: 0.2rem 0.5rem; }
 
+/* ── progression: markdown tables and inline markdown ── */
+/* A wide table scrolls inside its own box (markdown.tsx wraps it), never past the card. */
+.md .md-table {
+	max-width: 100%;
+	overflow-x: auto;
+	overscroll-behavior-x: contain;
+	touch-action: pan-x pan-y;
+	margin: 0.6rem 0;
+	border-radius: var(--radius-md);
+}
+.md .md-table table { margin: 0; }
+.md th, .md td { min-width: 6rem; vertical-align: top; text-align: left; }
+.md th { color: var(--foreground); font-weight: 800; background: var(--muted); }
+/* Inline flavour (quiz choices, boss story): no block margins. */
+.md-inline { line-height: 1.45; }
+.md-inline p { display: inline; margin: 0; }
+/* Gate medal: compact on short phones so the criteria and the pinned action fit one screen. */
+.gate-medal { width: 7rem; height: 7rem; }
+.gate-medal .map-node { --node-size: 5.5rem; }
+.gate-medal-icon { width: 2.5rem; height: 2.5rem; }
+@media (min-height: 760px) {
+	.gate-medal { width: 10rem; height: 10rem; margin-block: 2rem; }
+	.gate-medal .map-node { --node-size: 8rem; }
+	.gate-medal-icon { width: 3.5rem; height: 3.5rem; }
+}
+/* Boss intro is always night ink: code chips in its story read on the dark backdrop. */
+.lc-stats.lc-stats-2 { grid-template-columns: repeat(2, 1fr); }
+.boss-intro .md code { background: rgb(255 255 255 / 0.08); border-color: rgb(255 255 255 / 0.16); color: #ffd23f; }
+
 /* ───────────────────────────── CodeMirror: the spellbook ───────────────────────────── */
 .cm-editor { height: 100%; font-size: 15px; background: var(--editor); color: var(--syn-ident); }
 @media (pointer: coarse) { .cm-editor { font-size: 16px; } }
@@ -1288,17 +1319,22 @@ body[data-scroll-locked] {
 
 	/* ── Composer: word bank (Duolingo-style tiles) ── */
 	.wordbank { display: flex; flex-direction: column; gap: 10px; padding: 12px 12px 4px; }
-	.wb-label { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 2px; font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--muted-foreground); }
+	.wb-label { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 18px; padding: 0 2px; font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--muted-foreground); }
+	.wb-label-hint { font-size: 12px; font-weight: 700; letter-spacing: 0; text-transform: none; }
+	/* "Add at the end": a 44px tall hit area that does not push the label down. */
+	.wb-label-action { margin: -13px -6px -13px 0; min-height: 44px; padding: 0 6px; font-size: 12px; font-weight: 800; letter-spacing: 0; text-transform: none; color: var(--lantern); touch-action: manipulation; }
 	/* Your query: reads like the code editor (dark well, flat syntax-coloured tokens). */
-	.wb-answer { list-style: none; margin: 0; min-height: 104px; display: flex; flex-wrap: wrap; align-content: flex-start; align-items: center; gap: 6px 5px; padding: 10px; border-radius: 14px; background: var(--editor); border: 2px solid var(--border); box-shadow: inset 0 2px 0 rgb(0 0 0 / .2); }
+	.wb-answer { list-style: none; margin: 0; min-height: 104px; max-height: 52svh; overflow-y: auto; overscroll-behavior: contain; display: flex; flex-wrap: wrap; align-content: flex-start; align-items: center; gap: 6px 5px; padding: 10px; border-radius: 14px; background: var(--editor); border: 2px solid var(--border); box-shadow: inset 0 2px 0 rgb(0 0 0 / .2); }
 	.wb-answer:has(.wb-empty) { border-style: dashed; }
 	.wb-break { flex-basis: 100%; height: 0; margin: -3px 0; }
-	.wb-ref { margin: 0 0 4px; padding: 10px 12px; border-radius: 12px; border: 2px dashed color-mix(in oklab, var(--destructive) 55%, var(--border)); background: var(--surface-sunken); font-family: var(--font-mono); font-size: 14px; line-height: 1.5; color: var(--muted-foreground); white-space: pre-wrap; overflow-wrap: anywhere; }
+	.wb-ref { margin: 0 0 4px; padding: 10px 12px; border-radius: 12px; border: 2px dashed var(--border); background: var(--surface-sunken); font-family: var(--font-mono); font-size: 14px; line-height: 1.5; color: var(--muted-foreground); white-space: pre-wrap; overflow-wrap: anywhere; }
 	.wb-empty { align-self: center; margin: auto; padding: 8px; font-size: 14px; font-weight: 700; color: var(--muted-foreground); text-align: center; }
 	/* Options: raised tiles to tap. */
 	.wb-bank { list-style: none; margin: 0; display: flex; flex-wrap: wrap; justify-content: center; gap: 10px 8px; padding: 4px 0 6px; }
-	.wb-slot { position: relative; display: inline-flex; }
-	.wb-ghost, .wb-tile { display: inline-flex; align-items: center; height: 44px; padding: 0 13px; border-radius: 12px; font-family: var(--font-mono); font-size: 16px; font-weight: 700; white-space: nowrap; }
+	.wb-slot { position: relative; display: inline-flex; flex: none; max-width: 100%; }
+	.wb-ghost, .wb-tile { display: inline-flex; align-items: center; max-width: 100%; min-height: 44px; padding: 0 13px; border-radius: 12px; font-family: var(--font-mono); font-size: 16px; font-weight: 700; white-space: nowrap; }
+	/* Long literals wrap inside the tile instead of running off the screen. */
+	.wb-ghost[data-kind="string"], .wb-tile[data-kind="string"] { white-space: normal; overflow-wrap: break-word; max-width: 100%; text-align: left; padding-block: 8px; line-height: 1.3; }
 	.wb-ghost { color: transparent; background: var(--surface-sunken); box-shadow: inset 0 2px 0 rgb(0 0 0 / .18); }
 	.wb-slot > .wb-tile { position: absolute; inset: 0; }
 	.wb-tile { background: var(--card); color: var(--syn-ident); border: 2px solid var(--border); box-shadow: 0 3px 0 var(--ledge); touch-action: manipulation; -webkit-tap-highlight-color: transparent; transition: transform 90ms ease-out, box-shadow 90ms ease-out; }
@@ -1308,27 +1344,48 @@ body[data-scroll-locked] {
 	.wb-tile[data-kind="string"] { color: var(--syn-string); }
 	.wb-tile[data-kind="number"] { color: var(--syn-number); }
 	.wb-tile[data-kind="punct"], .wb-tile[data-kind="operator"] { min-width: 44px; justify-content: center; color: var(--foreground); }
-	.wb-tile.is-placed { height: 36px; padding: 0 9px; border-width: 1.5px; border-color: color-mix(in oklab, var(--border) 80%, transparent); border-radius: 9px; background: var(--editor-line); box-shadow: none; font-size: 15px; }
+	.wb-tile.is-placed { min-height: 36px; padding: 0 9px; border-width: 1.5px; border-color: color-mix(in oklab, var(--border) 80%, transparent); border-radius: 9px; background: var(--editor-line); box-shadow: none; font-size: 15px; }
 	.wb-tile.is-placed[data-kind="punct"], .wb-tile.is-placed[data-kind="operator"] { min-width: 32px; padding: 0 6px; }
 	.wb-tile.is-placed:active:not(:disabled) { transform: scale(.95); }
+	.wb-tile.is-placed[data-kind="string"] { padding-block: 6px; }
+	/* Identical tiles share one slot; the badge says how many are left. */
+	.wb-count { position: absolute; top: -7px; right: -7px; display: grid; place-items: center; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 10px; background: var(--syn-keyword); color: var(--editor); font-family: var(--font-sans, inherit); font-size: 12px; font-weight: 800; line-height: 1; box-shadow: 0 0 0 2px var(--card); pointer-events: none; }
+	/* Tiles written without a space between them ("count(*)", "name,") wrap as one. */
+	.wb-run { display: inline-flex; flex: none; flex-wrap: wrap; align-items: center; gap: 4px 2px; max-width: 100%; }
+	.wb-run > .wb-tile { flex: none; }
+	.wb-indent { flex: none; height: 1px; }
+	/* Where the next tile goes after one was taken out. */
+	.wb-caret { flex: none; width: 3px; height: 30px; margin: 0 2px; border-radius: 2px; background: var(--lantern); animation: wb-blink 1s steps(2, jump-none) infinite; }
+	@keyframes wb-blink { 50% { opacity: .2; } }
+	@media (prefers-reduced-motion: reduce) { .wb-caret { animation: none; } }
+	.reduce-motion .wb-caret { animation: none; }
 	.composer-foot { display: flex; align-items: center; gap: 4px; padding: 4px 6px 8px; }
 	.composer-toggle { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 10px; border-radius: 12px; font-size: 12px; font-weight: 800; color: var(--muted-foreground); text-transform: uppercase; letter-spacing: .06em; white-space: nowrap; }
 	.composer-toggle:active { background: var(--accent); }
 
 	/* ── Composer: suggestion strip on the phone keyboard ── */
-	.suggest-bar { position: fixed; left: 0; right: 0; bottom: var(--kb-inset); z-index: 45; display: flex; align-items: center; gap: 6px; padding: 6px calc(8px + var(--safe-right)) calc(6px + var(--safe-bottom)) calc(8px + var(--safe-left)); background: var(--card); border-top: 2px solid var(--border); box-shadow: 0 -6px 18px -10px rgb(0 0 0 / .5); }
-	.suggest-chips { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; overflow-x: auto; scrollbar-width: none; overscroll-behavior-x: contain; }
+	.suggest-bar { position: fixed; left: 0; right: 0; bottom: var(--kb-inset); z-index: 45; display: flex; align-items: center; gap: 4px; padding: 6px calc(8px + var(--safe-right)) calc(6px + var(--safe-bottom)) calc(8px + var(--safe-left)); background: var(--card); border-top: 2px solid var(--border); box-shadow: 0 -6px 18px -10px rgb(0 0 0 / .5); }
+	.suggest-chips { flex: 1; min-width: 0; display: flex; align-items: center; gap: 5px; overflow-x: auto; scrollbar-width: none; overscroll-behavior-x: contain; padding-right: 20px; -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); }
 	.suggest-chips::-webkit-scrollbar { display: none; }
-	.suggest-chip { flex: none; height: 40px; padding: 0 12px; border-radius: 10px; border: 2px solid var(--border); background: var(--surface-sunken); font-family: var(--font-mono); font-size: 15px; font-weight: 700; color: var(--syn-ident); white-space: nowrap; touch-action: manipulation; }
+	.suggest-chip { flex: none; height: 40px; padding: 0 10px; border-radius: 10px; border: 2px solid var(--border); background: var(--surface-sunken); font-family: var(--font-mono); font-size: 15px; font-weight: 700; color: var(--syn-ident); white-space: nowrap; touch-action: manipulation; }
 	.suggest-chip[data-kind="keyword"] { color: var(--syn-keyword); }
 	.suggest-chip[data-kind="string"] { color: var(--syn-string); }
 	.suggest-chip:active { transform: translateY(1px); background: var(--accent); }
-	.suggest-actions { flex: none; display: flex; align-items: center; gap: 6px; padding-left: 6px; border-left: 2px solid var(--border); }
-	.suggest-icon { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 10px; color: var(--muted-foreground); }
+	.suggest-actions { flex: none; display: flex; align-items: center; gap: 2px; padding-left: 2px; border-left: 2px solid var(--border); }
+	.suggest-actions [data-slot="button"] { height: 40px; padding-inline: 10px; margin-left: 2px; }
+	.suggest-icon { display: grid; place-items: center; width: 36px; height: 40px; border-radius: 10px; color: var(--muted-foreground); }
 	.suggest-icon:active { background: var(--accent); }
 	/* Full screen writing view while the phone keyboard is up. */
+	/*
+	 * The status bar always covers the top inset of the screen, keyboard or not,
+	 * and top: --vv-top pins this view to the top of the screen: so the inset is
+	 * always padding, never task text (the old kb-open "padding-top: 0" put the
+	 * "Your task" label under the clock).
+	 */
 	.composer-focus { position: fixed; left: 0; right: 0; top: var(--vv-top); height: calc(var(--vv-h) - 54px - var(--safe-bottom)); z-index: 44; background: var(--editor); padding-top: var(--safe-top); }
-	:root[data-kb="open"] .composer-focus { padding-top: 0; }
+	/* The keyboard hides the home indicator: no bottom inset under the strip. */
+	:root[data-kb="open"] .composer-focus { height: calc(var(--vv-h) - 54px); }
+	:root[data-kb="open"] .suggest-bar { padding-bottom: 6px; }
 	.composer-focus-task { flex: none; max-height: 34%; overflow-y: auto; overscroll-behavior: contain; padding: 10px calc(14px + var(--safe-right)) 10px calc(14px + var(--safe-left)); background: var(--card); border-bottom: 2px solid var(--border); font-size: 15px; line-height: 1.45; }
 	.composer-focus-task::before { content: "Your task"; display: block; margin-bottom: 2px; font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--muted-foreground); }
 	/* Nothing behind the writing view moves while it is open. */
@@ -1389,6 +1446,42 @@ body[data-scroll-locked] {
 	.verdict .msg { font-size: 14px; font-weight: 700; margin-top: 4px; }
 	.rune { display: inline-flex; align-items: center; gap: 4px; font-family: var(--font-mono); font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 8px; background: color-mix(in oklab, currentColor 12%, transparent); }
 
+	/* ── mission: compact phone card, writing view task, checking sheet, error quote ── */
+	/* Phones and tablets: a slimmer ribbon and a goal clamped to three lines. */
+	[data-compact] .mission-ribbon { padding: 10px 8px 10px 16px; }
+	[data-compact] .mission-ribbon .t { font-size: 19px; }
+	[data-compact] .goal-box { padding: 10px 12px; }
+	/* !important: the prose rules (.md p, text-[0.95rem]) are unlayered or utilities and would win. */
+	.goal-box .md > :first-child { margin-top: 0 !important; }
+	.goal-box .md > :last-child { margin-bottom: 0 !important; }
+	.goal-box[data-clamped] .goal-text { max-height: calc(0.95rem * 1.6 * 3); overflow: hidden; }
+	.goal-text[data-fade] { -webkit-mask-image: linear-gradient(to bottom, #000 55%, transparent); mask-image: linear-gradient(to bottom, #000 55%, transparent); }
+	.goal-tools { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
+	.goal-more { display: inline-flex; align-items: center; gap: 2px; min-height: 44px; margin: -6px 0; padding: 0 4px; font-size: 13px; font-weight: 800; text-decoration: underline; text-underline-offset: 3px; color: var(--foreground); touch-action: manipulation; }
+	/* Writing view: the task in two lines, "More" opens it (it then scrolls inside). */
+	.composer-focus-task:has(.focus-task)::before { content: none; }
+	.composer-focus-task:has(.focus-task[data-open]) { max-height: 55%; }
+	.focus-task-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 18px; margin-bottom: 2px; font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--muted-foreground); }
+	.focus-task-more { display: inline-flex; align-items: center; gap: 2px; min-height: 36px; margin: -9px -6px; padding: 0 6px; border-radius: 8px; color: var(--foreground); letter-spacing: .06em; text-transform: uppercase; touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+	.focus-task-more:active { background: var(--accent); }
+	.focus-task-text .md { font-size: 15px !important; line-height: 1.45 !important; }
+	.focus-task-text .md > :first-child { margin-top: 0 !important; }
+	.focus-task-text .md > :last-child { margin-bottom: 0 !important; }
+	.focus-task:not([data-open]) .focus-task-text { max-height: calc(15px * 1.45 * 2); overflow: hidden; }
+	.focus-task-text[data-fade] { -webkit-mask-image: linear-gradient(to bottom, #000 50%, transparent); mask-image: linear-gradient(to bottom, #000 50%, transparent); }
+	/* Submit pressed: the sheet is up at once, neutral, until the verdict lands in it. */
+	.verdict.checking { background: var(--card); color: var(--foreground); border-color: var(--border); }
+	.verdict.checking .medal { background: var(--muted); color: var(--lantern); box-shadow: 0 4px 0 var(--ledge); }
+	.verdict.checking .msg { color: var(--muted-foreground); }
+	.verdict-grip { align-self: center; width: 40px; height: 5px; margin: -8px 0 -4px; border-radius: 999px; background: color-mix(in oklab, currentColor 35%, transparent); }
+	/* The failing line, quoted under the advice (Postgres line numbers mean nothing in tile mode). */
+	.err-quote { margin: 0; overflow: hidden; border-radius: 12px; background: var(--editor); border: 2px solid color-mix(in oklab, var(--destructive) 45%, var(--border)); }
+	.err-quote figcaption { padding: 6px 10px 0; font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--muted-foreground); }
+	.err-quote pre { margin: 0; padding: 2px 10px 8px; overflow-x: auto; font-family: var(--font-mono); font-size: 14px; line-height: 1.5; color: var(--syn-ident); white-space: pre; }
+	.err-quote mark { padding: 0 1px; border-radius: 3px; background: var(--destructive); color: var(--destructive-foreground); }
+	/* The phone action bar steps aside under the verdict sheet (no ledge peeking out). */
+	[data-bottom-bar][data-covered] { visibility: hidden; }
+
 	/* ── Toast medallions (Sonner) ── */
 	.toast-medal { width: 42px; height: 42px; border-radius: 14px; display: grid; place-items: center; flex: none; }
 	.toast-medal svg { width: 22px; height: 22px; }
@@ -1420,7 +1513,8 @@ body[data-scroll-locked] {
 	.lc-stat.xp { border-color: var(--xp); } .lc-stat.xp .h { background: var(--xp); color: var(--info-foreground); } .lc-stat.xp .v { color: var(--xp-text); }
 	.lc-stat.acc { border-color: var(--success); } .lc-stat.acc .h { background: var(--success); color: var(--success-foreground); } .lc-stat.acc .v { color: var(--success-soft-foreground); }
 	.lc-stat.time { border-color: var(--warning); } .lc-stat.time .h { background: var(--warning); color: var(--warning-foreground); } .lc-stat.time .v { color: var(--streak-text); }
-	.wick-cheer { position: absolute; right: -10px; bottom: 96px; width: 56px; height: 68px; animation: bob 1.2s ease-in-out infinite; pointer-events: none; }
+	/* Perched on the card's top-right corner, beside the stars, clear of the buttons. */
+	.wick-cheer { position: absolute; right: -4px; top: -62px; width: 52px; height: 64px; animation: bob 1.2s ease-in-out infinite; pointer-events: none; }
 
 	/* ── World banner card ── */
 	.wb { position: relative; border-radius: 22px; overflow: hidden; box-shadow: 0 6px 0 var(--w-deep); margin-bottom: 6px; }
@@ -1483,3 +1577,22 @@ body[data-scroll-locked] {
 @media (min-width: 640px) {
 	.mn .label { width: 9rem; }
 }
+
+/* ── shell: map, tab bar, toasts ── */
+/* "My level" pill on the map: above the tab bar on phones, lower where there is none. */
+.map-fab { bottom: calc(80px + var(--safe-bottom)); }
+@media (min-width: 768px) { .map-fab { bottom: calc(2rem + var(--safe-bottom)); } }
+@media (orientation: landscape) and (max-height: 500px) { .map-fab { bottom: calc(1rem + var(--safe-bottom)); } }
+/* Sonner only hides the text of stacked toasts it styles itself. Custom toasts
+   (achievements) behind the front one would show through its edges otherwise. */
+[data-sonner-toast][data-styled="false"][data-expanded="false"][data-front="false"] > * { opacity: 0; transition: opacity 200ms ease-out; }
+
+/* ── shell: schema explorer and diagram ── */
+.diagram-foot { flex: none; display: flex; align-items: center; gap: 12px; padding-top: 8px; padding-bottom: 8px; border-top: 2px solid var(--border); background: var(--card); }
+.flow-controls.flow-controls-row { flex-direction: row; margin: 0 !important; }
+.schema-more { display: flex; align-items: center; gap: 10px; min-height: 52px; width: 100%; padding: 8px 14px; border-radius: 18px; border: 2px dashed var(--border); background: transparent; color: var(--foreground); font-weight: 800; font-size: 14px; }
+.schema-more:active { background: var(--accent); }
+
+/* Empty stars stay visible on the tinted verdict sheet (the default empty
+   colours match the green background). */
+.verdict-stars { --star-empty: color-mix(in oklab, currentColor 14%, transparent); --border: color-mix(in oklab, currentColor 45%, transparent); }

@@ -23,6 +23,9 @@ import type {
 export const RUN_TIMEOUT_MS = 6000;
 export const JUDGE_TIMEOUT_MS = 12000;
 const WARM_TIMEOUT_MS = 120000;
+/** Must match BASE_LRU_SIZE and EXERCISE_LRU_SIZE in pglite-provider.ts. */
+const WORKER_BASES = 2;
+const WORKER_EXERCISE_BASES = 3;
 
 interface Pending {
 	request: SqlRequest;
@@ -152,13 +155,55 @@ class SqlClient {
 	/** Builds (or restores) the dataset base and the exercise base. Returns the time spent in ms (0 if already warm). */
 	async warm(datasetId: string, setupSql?: string): Promise<number> {
 		const key = `${datasetId}\u0000${setupSql ?? ""}`;
-		if (this.warmed.has(key) && this.worker) return 0;
+		if (this.warmed.has(key) && this.worker) {
+			this.touch(key);
+			return 0;
+		}
 		const r = await this.send(
 			{ type: "warm", datasetId, setupSql },
 			WARM_TIMEOUT_MS,
 		);
-		this.warmed.add(key);
+		this.touch(key);
 		return r.ms;
+	}
+
+	/**
+	 * Mirror of the worker caches (pglite-provider BASE_LRU_SIZE and
+	 * EXERCISE_LRU_SIZE): a base the worker has evicted must be warmed again
+	 * under the generous budget, never rebuilt inside a learner's run budget.
+	 */
+	private touch(key: string) {
+		this.warmed.delete(key);
+		this.warmed.add(key);
+		const keys = [...this.warmed].reverse();
+		const datasets: string[] = [];
+		let exercises = 0;
+		for (const k of keys) {
+			const [ds, setup] = k.split("\u0000");
+			if (!datasets.includes(ds)) datasets.push(ds);
+			const keepDataset = datasets.indexOf(ds) < WORKER_BASES;
+			const keepExercise = !setup || ++exercises <= WORKER_EXERCISE_BASES;
+			if (!keepDataset || !keepExercise) this.warmed.delete(k);
+		}
+	}
+
+	/**
+	 * Stops the engine (whatever it is doing) and starts a fresh one on the
+	 * next request. Used by the loading screen when a dataset never opens.
+	 */
+	restart() {
+		const cur = this.current;
+		this.current = null;
+		if (cur) {
+			window.clearTimeout(cur.timer);
+			cur.reject(new Error("The SQL engine was restarted"));
+		}
+		this.worker?.terminate();
+		this.worker = null;
+		this.warmed.clear();
+		this.sentDatasets.clear();
+		this.setStatus("restarting");
+		this.pump();
 	}
 
 	isWarm(datasetId: string, setupSql?: string): boolean {

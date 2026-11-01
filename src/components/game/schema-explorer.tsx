@@ -7,10 +7,12 @@ import {
 	Panel,
 	Position,
 	ReactFlow,
+	ReactFlowProvider,
 	useReactFlow,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { useMatch } from "@tanstack/react-router";
 import { AnimatePresence, motion } from "motion/react";
 import { Dialog as DialogPrimitive } from "radix-ui";
 import {
@@ -89,7 +91,28 @@ export function typeFamily(col: CatalogColumn): {
 	}
 }
 
-export function TypeBadge({ col }: { col: CatalogColumn }) {
+/**
+ * Short spelling of long Postgres type names, for the compact diagram cards
+ * ("timestamp with time zone" does not fit a 288px card). Every short form is
+ * a valid Postgres type name too.
+ */
+export function shortType(dataType: string): string {
+	return dataType
+		.replace(/^timestamp(\(\d+\))? with time zone/, "timestamptz$1")
+		.replace(/^timestamp(\(\d+\))? without time zone/, "timestamp$1")
+		.replace(/^time(\(\d+\))? with time zone/, "timetz$1")
+		.replace(/^time(\(\d+\))? without time zone/, "time$1")
+		.replace(/^character varying/, "varchar")
+		.replace(/^double precision/, "float8");
+}
+
+export function TypeBadge({
+	col,
+	short,
+}: {
+	col: CatalogColumn;
+	short?: boolean;
+}) {
 	const f = typeFamily(col);
 	return (
 		<Badge
@@ -106,7 +129,7 @@ export function TypeBadge({ col }: { col: CatalogColumn }) {
 			<span className="opacity-85" aria-hidden="true">
 				{f.glyph}
 			</span>
-			{col.dataType}
+			{short ? shortType(col.dataType) : col.dataType}
 		</Badge>
 	);
 }
@@ -184,6 +207,10 @@ interface ExplorerCtx {
 	columnNotes?: Record<string, string>;
 	/** Tables ("t") and columns ("t.c") that appeared since the previous catalog. */
 	fresh: Set<string>;
+	/** Tables the current mission works with (from its starter and solution SQL). */
+	mission: Set<string>;
+	/** Inside a compact diagram card: short type names. */
+	compact?: boolean;
 }
 const Ctx = createContext<ExplorerCtx | null>(null);
 
@@ -243,7 +270,7 @@ function ChestColumn({
 							className="rounded-sm"
 							aria-label={`Preview ${col.name}`}
 						>
-							<TypeBadge col={col} />
+							<TypeBadge col={col} short={ctx?.compact} />
 						</button>
 					</PopoverTrigger>
 					<PopoverContent className="w-80 text-sm">
@@ -265,7 +292,7 @@ function ChestColumn({
 					</PopoverContent>
 				</Popover>
 			) : (
-				<TypeBadge col={col} />
+				<TypeBadge col={col} short={ctx?.compact} />
 			)}
 		</motion.li>
 	);
@@ -300,7 +327,7 @@ export function Chest({
 				className={cn(
 					"transition-opacity duration-(--duration-fast)",
 					dim && "opacity-40",
-					compact ? "w-60" : "w-full",
+					compact ? "w-72" : "w-full",
 				)}
 				onMouseEnter={() => ctx?.setHovered(table.name)}
 				onMouseLeave={() => ctx?.setHovered(null)}
@@ -378,9 +405,18 @@ function TableNode({ data }: NodeProps<Node<TableNodeData>>) {
 					/>
 				</span>
 			))}
-			<Chest table={t} compact columns={data.columns} />
+			<CompactCtx>
+				<Chest table={t} compact columns={data.columns} />
+			</CompactCtx>
 		</div>
 	);
+}
+
+/** Diagram cards read the explorer context with short type names. */
+function CompactCtx({ children }: { children: React.ReactNode }) {
+	const ctx = use(Ctx);
+	const value = useMemo(() => (ctx ? { ...ctx, compact: true } : null), [ctx]);
+	return <Ctx value={value}>{children}</Ctx>;
 }
 
 const nodeTypes = { table: TableNode };
@@ -439,7 +475,7 @@ function layout(
 		return {
 			id: t.name,
 			type: "table",
-			position: { x: l * 300, y: row },
+			position: { x: l * 340, y: row },
 			data: { table: t, columns: shown },
 		};
 	});
@@ -460,9 +496,23 @@ function relatedTables(catalog: Catalog, name: string | null): Set<string> {
 }
 
 function FlowControls({ onExpand }: { onExpand?: () => void }) {
-	const rf = useReactFlow();
 	return (
 		<Panel position="bottom-right" className="flow-controls">
+			<ZoomButtons />
+			{onExpand ? (
+				<button type="button" aria-label="Open full screen" onClick={onExpand}>
+					<GameIcon name="expand" />
+				</button>
+			) : null}
+		</Panel>
+	);
+}
+
+/** Zoom in, zoom out, fit everything. Needs a React Flow provider above it. */
+function ZoomButtons() {
+	const rf = useReactFlow();
+	return (
+		<>
 			<button
 				type="button"
 				aria-label="Zoom in"
@@ -484,21 +534,22 @@ function FlowControls({ onExpand }: { onExpand?: () => void }) {
 			>
 				<GameIcon name="fit" />
 			</button>
-			{onExpand ? (
-				<button type="button" aria-label="Open full screen" onClick={onExpand}>
-					<GameIcon name="expand" />
-				</button>
-			) : null}
-		</Panel>
+		</>
 	);
 }
 
-/** Frames the focused table (or the whole schema) when focus or layout changes. */
+/**
+ * Frames the focused table, else the mission's tables, else the whole schema,
+ * when focus or layout changes. Framed tables open at a readable zoom (at
+ * least 0.6, so 13px text stays legible); the rest is one pan away.
+ */
 function FocusFit({
 	focus,
+	frame,
 	layoutKey,
 }: {
 	focus: string | null;
+	frame: string[];
 	layoutKey: string;
 }) {
 	const rf = useReactFlow();
@@ -513,8 +564,13 @@ function FocusFit({
 				// A focused table is framed on its own, readable; its links glow
 				// off toward the neighbours (dimmed tables stay in place).
 				rf.fitView({
-					nodes: focus ? [{ id: focus }] : undefined,
-					padding: focus ? 0.2 : 0.12,
+					nodes: focus
+						? [{ id: focus }]
+						: frame.length
+							? frame.map((id) => ({ id }))
+							: undefined,
+					padding: focus || frame.length ? 0.16 : 0.12,
+					minZoom: focus || frame.length ? 0.6 : undefined,
 					maxZoom: 1,
 					duration: 320,
 				}),
@@ -531,6 +587,8 @@ function Flow({
 	focus = null,
 	onFocus,
 	interactive = true,
+	controls = interactive,
+	frame,
 	onExpand,
 }: {
 	catalog: Catalog;
@@ -538,6 +596,10 @@ function Flow({
 	focus?: string | null;
 	onFocus?: (t: string | null) => void;
 	interactive?: boolean;
+	/** Zoom buttons floating on the canvas (the full screen view has a bar instead). */
+	controls?: boolean;
+	/** Tables to frame when nothing is focused (the mission's tables). */
+	frame?: string[];
 	onExpand?: () => void;
 }) {
 	const ctx = use(Ctx);
@@ -599,9 +661,13 @@ function Flow({
 			colorMode={dark ? "dark" : "light"}
 		>
 			<Background gap={22} size={1.2} color="var(--border)" />
-			{interactive ? <FlowControls onExpand={onExpand} /> : null}
+			{controls ? <FlowControls onExpand={onExpand} /> : null}
 			{interactive ? (
-				<FocusFit focus={focus} layoutKey={String(keysOnly)} />
+				<FocusFit
+					focus={focus}
+					frame={frame ?? []}
+					layoutKey={String(keysOnly)}
+				/>
 			) : null}
 		</ReactFlow>
 	);
@@ -705,6 +771,23 @@ function DiagramFullscreen({
 			}
 		: null;
 	const focused = catalog.tables.find((t) => t.name === focus);
+	const missionTables = useMemo(
+		() =>
+			catalog.tables
+				.filter((t) => parent?.mission.has(t.name))
+				.map((t) => t.name),
+		[catalog, parent?.mission],
+	);
+	// The mission's tables first, then the rest in schema order.
+	const chipTables = useMemo(
+		() =>
+			[...catalog.tables].sort(
+				(a, b) =>
+					Number(!!parent?.mission.has(b.name)) -
+					Number(!!parent?.mission.has(a.name)),
+			),
+		[catalog, parent?.mission],
+	);
 	const chipsRef = useRef<HTMLDivElement>(null);
 	useEffect(() => {
 		if (!focus) return;
@@ -749,11 +832,12 @@ function DiagramFullscreen({
 						role="toolbar"
 						aria-label="Focus a table"
 					>
-						{catalog.tables.map((t) => (
+						{chipTables.map((t) => (
 							<button
 								key={t.name}
 								type="button"
 								data-table={t.name}
+								data-mission={parent?.mission.has(t.name) || undefined}
 								className="diagram-chip tap-target"
 								aria-pressed={focus === t.name}
 								onClick={() => setFocus(focus === t.name ? null : t.name)}
@@ -762,18 +846,34 @@ function DiagramFullscreen({
 							</button>
 						))}
 					</div>
-					<div className="relative min-h-0 flex-1">
-						<Ctx value={ctx}>
-							<Flow
-								catalog={catalog}
-								keysOnly={keysOnly}
-								focus={focus}
-								onFocus={setFocus}
-							/>
-						</Ctx>
-						<div className="pointer-events-none absolute inset-x-3 bottom-3 right-[72px] flex">
+					<ReactFlowProvider>
+						<div className="relative min-h-0 flex-1">
+							<Ctx value={ctx}>
+								<Flow
+									catalog={catalog}
+									keysOnly={keysOnly}
+									focus={focus}
+									onFocus={setFocus}
+									controls={false}
+									frame={missionTables}
+								/>
+							</Ctx>
+							<AnimatePresence>
+								{peek ? (
+									<PeekPanel
+										key={peek}
+										datasetId={datasetId}
+										table={peek}
+										onClose={() => setPeek(null)}
+									/>
+								) : null}
+							</AnimatePresence>
+						</div>
+						{/* A bar under the canvas, not over it: the zoom buttons never
+						    hide a table. */}
+						<footer className="diagram-foot px-safe-3">
 							{focused ? (
-								<div className="pointer-events-auto flex min-w-0 flex-1 items-center gap-2 rounded-xl border-2 border-border bg-card p-2 pl-3 shadow-[0_3px_0_var(--ledge)]">
+								<div className="flex min-w-0 flex-1 items-center gap-2">
 									<div className="min-w-0 flex-1">
 										<div className="truncate font-mono text-sm font-bold">
 											{focused.name}
@@ -792,22 +892,17 @@ function DiagramFullscreen({
 									</button>
 								</div>
 							) : (
-								<p className="rounded-lg bg-card/90 px-3 py-1.5 text-xs font-bold text-muted-foreground">
-									Pinch to zoom, drag to move, tap a table to focus it.
+								<p className="min-w-0 flex-1 text-xs font-bold text-muted-foreground">
+									{missionTables.length
+										? "Showing this mission's tables. Pinch or drag to see the rest."
+										: "Pinch to zoom, drag to move, tap a table to focus it."}
 								</p>
 							)}
-						</div>
-						<AnimatePresence>
-							{peek ? (
-								<PeekPanel
-									key={peek}
-									datasetId={datasetId}
-									table={peek}
-									onClose={() => setPeek(null)}
-								/>
-							) : null}
-						</AnimatePresence>
-					</div>
+							<div className="flow-controls flow-controls-row">
+								<ZoomButtons />
+							</div>
+						</footer>
+					</ReactFlowProvider>
 				</DialogPrimitive.Content>
 			</DialogPrimitive.Portal>
 		</DialogPrimitive.Root>
@@ -957,6 +1052,28 @@ function useFreshKeys(
 }
 
 /** Words of the query: tables and columns the spell touches. */
+/**
+ * Starter and solution SQL of the exercise on screen, read from the play
+ * route (mission, drill or boss), so the explorer knows the mission's tables
+ * before the learner types anything.
+ */
+function useMissionSql(): string | undefined {
+	const match = useMatch({
+		from: "/_game/play/$chapterId",
+		shouldThrow: false,
+	});
+	const chapter = match?.loaderData?.chapter;
+	const search = match?.search;
+	return useMemo(() => {
+		if (!chapter || !search) return undefined;
+		const all = [...chapter.exercises, ...(chapter.practice ?? [])];
+		const ex =
+			(search.ex ? all.find((e) => e.id === search.ex) : undefined) ??
+			(search.phase === "boss" ? all.find((e) => e.boss) : undefined);
+		return ex ? `${ex.starterSql ?? ""}\n${ex.solutionSql}` : undefined;
+	}, [chapter, search]);
+}
+
 function queryWords(sql: string): Set<string> {
 	return new Set(
 		sql
@@ -1028,6 +1145,18 @@ export function SchemaExplorer({
 	}, [hovered, catalog.data]);
 
 	const words = useMemo(() => queryWords(sql), [sql]);
+	const missionSql = useMissionSql();
+	// The mission's own tables (named in its starter or solution SQL): listed
+	// first and framed by the diagram, before the learner has typed anything.
+	const mission = useMemo(() => {
+		const out = new Set<string>();
+		if (!missionSql) return out;
+		const named = queryWords(missionSql);
+		for (const t of catalog.data?.tables ?? [])
+			if (named.has(t.name.toLowerCase())) out.add(t.name);
+		return out;
+	}, [missionSql, catalog.data]);
+	const [showOthers, setShowOthers] = useState(false);
 	// Lit chests: what the caller passed plus any table of the LIVE catalog the spell names
 	// (a table the learner just created is not in the base schema).
 	const active = useMemo(() => {
@@ -1063,6 +1192,7 @@ export function SchemaExplorer({
 		activeColumns: words,
 		onPeek: setPeek,
 		fresh,
+		mission,
 		notes: dataset?.tableNotes,
 		columnNotes: dataset?.columnNotes,
 	};
@@ -1071,9 +1201,20 @@ export function SchemaExplorer({
 		? [...catalog.data.tables].sort(
 				(a, b) =>
 					Number(fresh.has(b.name)) - Number(fresh.has(a.name)) ||
-					Number(active.has(b.name)) - Number(active.has(a.name)),
+					Number(active.has(b.name)) - Number(active.has(a.name)) ||
+					Number(mission.has(b.name)) - Number(mission.has(a.name)),
 			)
 		: [];
+	// With a mission, the tables it does not touch fold under one button.
+	const isMain = (name: string) =>
+		mission.has(name) || active.has(name) || fresh.has(name);
+	const folded =
+		mission.size > 0 && !showOthers
+			? tables.filter((t) => !isMain(t.name))
+			: [];
+	const shownTables = folded.length
+		? tables.filter((t) => isMain(t.name))
+		: tables;
 
 	const chests = (
 		<div className="flex h-full flex-col gap-4 overflow-y-auto overscroll-contain p-3 pb-6">
@@ -1088,9 +1229,25 @@ export function SchemaExplorer({
 					) : null}
 				</Badge>
 			) : null}
-			{tables.map((t) => (
+			{shownTables.map((t) => (
 				<Chest key={t.name} table={t} />
 			))}
+			{folded.length ? (
+				<button
+					type="button"
+					className="schema-more"
+					onClick={() => setShowOthers(true)}
+				>
+					<GameIcon name="table" className="size-5" />
+					<span className="min-w-0 flex-1 text-left">
+						{folded.length} more table{folded.length === 1 ? "" : "s"}
+						<span className="block truncate font-mono text-xs font-bold text-muted-foreground">
+							{folded.map((t) => t.name).join(", ")}
+						</span>
+					</span>
+					<GameIcon name="chevron-down" className="size-5" />
+				</button>
+			) : null}
 		</div>
 	);
 

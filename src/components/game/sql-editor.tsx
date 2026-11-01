@@ -35,7 +35,13 @@ const gameTheme = EditorView.theme({
 		backgroundColor: "var(--accent)",
 		color: "var(--foreground)",
 	},
-	".cm-placeholder": { color: "var(--syn-comment)", fontStyle: "italic" },
+	// The placeholder is an inline block: without this it inherits the wrapped
+	// line's hanging indent (-2ch) and its first dash slides under the gutter.
+	".cm-placeholder": {
+		color: "var(--syn-comment)",
+		fontStyle: "italic",
+		textIndent: "0",
+	},
 });
 
 /** Syntax runes: lezer tags → .tok-* classes (theme.css, both modes). */
@@ -143,8 +149,8 @@ export function SqlEditor({
 	bare?: boolean;
 	/** Fill the parent's height (desktop panel); otherwise grow with the text. */
 	fill?: boolean;
-	/** SQL before the cursor, on every edit or caret move. */
-	onCursor?: (before: string) => void;
+	/** SQL before and after the cursor, on every edit or caret move. */
+	onCursor?: (before: string, after: string) => void;
 	onFocusChange?: (focused: boolean) => void;
 	closeBrackets?: boolean;
 }) {
@@ -182,14 +188,20 @@ export function SqlEditor({
 			const before = view.state.sliceDoc(Math.max(0, start - 1), start);
 			const glued =
 				GLUE_LEFT.has(token) ||
-				token.endsWith(".") ||
+				token === "::" ||
 				before === "(" ||
-				before === ".";
+				before === "." ||
+				before === ":";
 			const lead = before === "" || /\s/.test(before) || glued ? "" : " ";
 			// Words get a trailing space so the next suggestion follows on; an
 			// opening paren, a qualifier ("p.") or a function call stay open.
 			const trail =
-				token === "(" || token.endsWith("(") || token.endsWith(".") ? "" : " ";
+				token === "(" ||
+				token === "::" ||
+				token.endsWith("(") ||
+				token.endsWith(".")
+					? ""
+					: " ";
 			const insert = lead + token + trail;
 			view.dispatch({
 				changes: { from: start, to, insert },
@@ -230,7 +242,10 @@ export function SqlEditor({
 				if (u.focusChanged) focusRef.current?.(u.view.hasFocus);
 				if (u.docChanged || u.selectionSet || u.focusChanged) {
 					const pos = u.state.selection.main.head;
-					cursorRef.current?.(u.state.sliceDoc(0, pos));
+					cursorRef.current?.(
+						u.state.sliceDoc(0, pos),
+						u.state.sliceDoc(pos, Math.min(u.state.doc.length, pos + 2000)),
+					);
 				}
 			}),
 			// Keep the caret clear of a fixed bottom bar (Cast / Next), which sits on

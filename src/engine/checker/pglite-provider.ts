@@ -289,7 +289,9 @@ export interface PGliteProvider extends SandboxProvider {
 	dispose(): Promise<void>;
 }
 
-const EXERCISE_LRU_SIZE = 4;
+const EXERCISE_LRU_SIZE = 3;
+/** Dataset bases kept open at once (a chapter uses one dataset). */
+const BASE_LRU_SIZE = 2;
 
 export function createPGliteProvider(
 	registry: DatasetRegistry,
@@ -327,18 +329,45 @@ export function createPGliteProvider(
 					throw err;
 				}
 				if (opts.persist) {
-					const persist = opts.persist;
-					void db
-						.dumpDataDir("gzip")
-						.then((file) => persist(def, file))
-						.catch(() => {});
+					// Awaited on purpose: the first query must not race the dump for
+					// the single worker thread (that showed up as learner timeouts),
+					// and the snapshot is on disk before the learner can leave.
+					try {
+						await opts.persist(def, await db.dumpDataDir("gzip"));
+					} catch (err) {
+						console.warn("[sql] snapshot not saved", err);
+					}
 				}
 				return { db, types: await readTypes(db) };
 			})();
 			bases.set(datasetId, p);
 			p.catch(() => bases.delete(datasetId));
+			evictBases();
+		} else {
+			// refresh LRU position
+			bases.delete(datasetId);
+			bases.set(datasetId, p);
 		}
 		return p;
+	}
+
+	/**
+	 * Every PGlite instance holds its own WASM heap (tens of MB, never given
+	 * back to the OS). Keep only the most recent datasets so a long session
+	 * across many chapters does not get the tab killed (iOS WebKit).
+	 */
+	function evictBases() {
+		while (bases.size > BASE_LRU_SIZE) {
+			const oldestId = bases.keys().next().value as string;
+			const oldest = bases.get(oldestId);
+			bases.delete(oldestId);
+			for (const [k, ex] of exerciseBases) {
+				if (!k.startsWith(`${oldestId}\u0000`)) continue;
+				exerciseBases.delete(k);
+				ex.then((c) => c.db.close()).catch(() => {});
+			}
+			oldest?.then((c) => c.db.close()).catch(() => {});
+		}
 	}
 
 	function exerciseBaseFor(

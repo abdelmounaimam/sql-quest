@@ -1,15 +1,20 @@
 import {
 	animate,
 	motion,
+	type PanInfo,
 	useMotionValue,
 	useReducedMotion,
 	useTransform,
 } from "motion/react";
 import { useEffect, useRef } from "react";
-import { toast } from "sonner";
 import type { Exercise } from "#/content/types";
 import type { MasteryMap } from "#/engine/adaptive/types";
-import type { Verdict } from "#/engine/checker/types";
+import {
+	errorLineOf,
+	sqlErrorAdvice,
+	sqlstateName,
+} from "#/engine/checker/errors";
+import type { SqlErrorInfo, Verdict } from "#/engine/checker/types";
 import type { Reward } from "#/game/progress";
 import { haptic, sfx } from "#/game/sound";
 import { conceptName } from "#/lib/content";
@@ -20,6 +25,8 @@ import {
 	CollapsibleContent,
 	CollapsibleTrigger,
 } from "../ui/collapsible";
+import { Spinner } from "../ui/spinner";
+import { achievementToast } from "./app-effects";
 import { burst, prefersReducedMotion } from "./fx";
 import { GameIcon, StarGlyph } from "./icons";
 import { Markdown } from "./markdown";
@@ -137,54 +144,124 @@ function flyAether(from: HTMLElement | null, amount: number) {
 	};
 }
 
-/** Achievement toast: star-gold medallion flips in, a sheen sweeps once. */
-export function achievementToast(a: {
-	name: string;
-	description: string;
-	emoji: string;
-}) {
-	sfx("achievement");
-	haptic("achievement");
-	toast.custom(
-		() => (
-			<div className="toast-shine flex w-[356px] max-w-[calc(100vw-2rem)] items-center gap-3 rounded-[18px] border-2 border-border bg-popover p-3 text-popover-foreground shadow-[0_4px_0_var(--ledge),0_12px_24px_-12px_var(--ink-shadow)]">
-				<span className="toast-medal achv">
-					<GameIcon name="trophy" />
-				</span>
-				<span className="min-w-0">
-					<b className="block text-[15px]">Achievement · {a.name}</b>
-					<span className="text-[13px] text-muted-foreground">
-						{a.description}
-					</span>
-				</span>
-			</div>
-		),
-		{ duration: 5000 },
-	);
-}
-
 export interface SolvedResult {
 	reward: Reward;
 	revealed: boolean;
 }
 
-/** Bottom verdict sheet: "Correct!" or "Not quite". */
+const SQL_ERROR_TYPES = new Set([
+	"syntax",
+	"unknown_table",
+	"unknown_column",
+	"unknown_function",
+	"runtime",
+]);
+
+/**
+ * What the "Not quite" sheet says. SQL errors get plain advice (no raw
+ * SQLSTATE or line and column: the line is quoted under it), and the row
+ * count advice only mentions joins when the query is about joins.
+ */
+export function verdictAdvice(
+	verdict: Verdict,
+	sql: string,
+	solutionSql: string,
+): string {
+	if (verdict.sqlError && SQL_ERROR_TYPES.has(verdict.errorType ?? "")) {
+		const advice = sqlErrorAdvice(verdict.sqlError);
+		const raw = verdict.sqlError.message;
+		const base = advice ?? `${raw.charAt(0).toUpperCase()}${raw.slice(1)}.`;
+		const hint = verdict.sqlError.hint;
+		return hint ? `${base} Postgres adds: ${hint}` : base;
+	}
+	if (
+		verdict.errorType === "wrong_row_count" &&
+		!/\bjoin\b/i.test(`${sql} ${solutionSql}`)
+	)
+		return verdict.message.replace(/ or a join (duplicates|drops) rows\./, ".");
+	return verdict.message;
+}
+
+/** Headline of a wrong verdict, with "Error 42702 (ambiguous_column)" as plain words. */
+export function verdictTitle(verdict: Verdict): string {
+	const code = verdict.sqlError?.code;
+	if (
+		code === "42P01" &&
+		/missing FROM-clause entry/.test(verdict.sqlError?.message ?? "")
+	)
+		return "Unknown alias";
+	if (verdict.errorType === "runtime" && code) {
+		const name = sqlstateName(code)?.replaceAll("_", " ");
+		return name ? `${name.charAt(0).toUpperCase()}${name.slice(1)}` : "Error";
+	}
+	return verdict.title;
+}
+
+/** The line Postgres points at, with a caret under the spot. */
+export function ErrorLineQuote({
+	sql,
+	error,
+	className,
+}: {
+	sql: string;
+	error: SqlErrorInfo;
+	className?: string;
+}) {
+	const at = errorLineOf(sql, error);
+	if (!at) return null;
+	const lead = at.text.length - at.text.trimStart().length;
+	const line = at.text.trim();
+	const pos = Math.max(0, Math.min(line.length, at.column - 1 - lead));
+	// A long line starts a little before the spot, so the mark is on screen.
+	const cut = pos > 24 ? pos - 16 : 0;
+	const shown = cut ? `…${line.slice(cut)}` : line;
+	const caret = cut ? pos - cut + 1 : pos;
+	return (
+		<figure className={cn("err-quote", className)}>
+			<figcaption>
+				{sql.includes("\n") ? `Line ${at.line} of your query` : "Your query"}
+			</figcaption>
+			<pre>
+				<code>
+					{shown.slice(0, caret)}
+					<mark>{shown.slice(caret, caret + 1) || " "}</mark>
+					{shown.slice(caret + 1)}
+				</code>
+			</pre>
+		</figure>
+	);
+}
+
+/**
+ * Bottom verdict sheet: "Checking" the moment Submit is pressed, then
+ * "Correct!" or "Not quite" in the same sheet. A wrong verdict can be dragged
+ * down to look at the query.
+ */
 export function VerdictSheet({
 	exercise,
 	verdict,
 	solved,
+	checking,
+	sql = "",
 	isBoss,
 	onContinue,
 	onRetry,
+	onDismiss,
 	onHint,
 	continueLabel = "Continue",
 }: {
 	exercise: Exercise;
 	verdict: Verdict | null;
 	solved: SolvedResult | null;
+	/** Submitted, verdict not back yet. */
+	checking?: boolean;
+	/** The submitted SQL, to quote the line an error points at. */
+	sql?: string;
 	isBoss?: boolean;
 	onContinue: () => void;
 	onRetry: () => void;
+	/** Closes a wrong verdict without focusing the editor (drag down). */
+	onDismiss?: () => void;
 	onHint?: () => void;
 	continueLabel?: string;
 }) {
@@ -219,45 +296,67 @@ export function VerdictSheet({
 		if (!ok && verdict && !verdict.pass) haptic("wrong");
 	}, [ok, verdict]);
 
-	if (!ok && (!verdict || verdict.pass)) return null;
+	const pending = !ok && !!checking;
+	if (!ok && !pending && (!verdict || verdict.pass)) return null;
 	const r = solved?.reward;
 	const sqlstate = verdict?.sqlError?.code;
+	const bad = !ok && !pending;
+	const dismiss = (_: unknown, info: PanInfo) => {
+		if (info.offset.y > 70 || info.velocity.y > 500) (onDismiss ?? onRetry)();
+	};
 
 	return (
 		<motion.div
 			role="status"
 			aria-live="polite"
+			aria-busy={pending}
 			initial={reduce ? { opacity: 0 } : { y: "110%" }}
 			animate={reduce ? { opacity: 1 } : { y: 0 }}
 			exit={reduce ? { opacity: 0 } : { y: "110%" }}
-			transition={{ duration: 0.24, ease: [0.32, 0.72, 0, 1] }}
+			transition={{ duration: 0.2, ease: [0.32, 0.72, 0, 1] }}
+			drag={bad && !reduce ? "y" : false}
+			dragConstraints={{ top: 0, bottom: 0 }}
+			dragElastic={{ top: 0, bottom: 0.7 }}
+			dragSnapToOrigin
+			onDragEnd={bad ? dismiss : undefined}
 			className="bottom-bar z-50 px-safe-3 pb-safe-3 lg:px-safe-6"
 		>
 			<div
 				className={cn(
 					"verdict mx-auto max-w-3xl shadow-[0_12px_24px_-12px_var(--ink-shadow)]",
-					ok ? "ok" : "bad",
+					ok ? "ok" : pending ? "checking" : "bad",
 				)}
 			>
+				{bad ? <span className="verdict-grip" aria-hidden="true" /> : null}
 				<div className="top">
 					<div className="medal" ref={medalRef}>
-						<GameIcon name={ok ? "check" : "x"} className="size-7" />
+						{pending ? (
+							<Spinner className="size-7" />
+						) : (
+							<GameIcon name={ok ? "check" : "x"} className="size-7" />
+						)}
 					</div>
 					<div className="min-w-0 flex-1">
 						<div className="ttl">
-							{ok
-								? solved?.revealed
-									? "Solution revealed"
-									: isBoss
-										? "Guardian defeated!"
-										: "Correct!"
-								: verdict?.errorType === "internal"
-									? "Engine hiccup"
-									: verdict?.errorType === "timeout"
-										? "Query timed out"
-										: "Not quite"}
+							{pending
+								? "Checking…"
+								: ok
+									? solved?.revealed
+										? "Solution revealed"
+										: isBoss
+											? "Guardian defeated!"
+											: "Correct!"
+									: verdict?.errorType === "internal"
+										? "Engine hiccup"
+										: verdict?.errorType === "timeout"
+											? "Query timed out"
+											: "Not quite"}
 						</div>
-						{ok && r ? (
+						{pending ? (
+							<div className="msg">
+								Running your query and comparing it with the expected result.
+							</div>
+						) : ok && r ? (
 							<div className="msg flex flex-wrap items-center gap-x-2">
 								<span className="tabular">+{r.xp.total} XP</span>
 								{r.combo >= 2 ? <span>· combo x{r.combo}</span> : null}
@@ -276,16 +375,24 @@ export function VerdictSheet({
 										try again.{" "}
 									</span>
 								) : (
-									<span className="font-extrabold">{verdict?.title}. </span>
+									<span className="font-extrabold">
+										{verdict ? verdictTitle(verdict) : null}.{" "}
+									</span>
 								)}
-								{verdict?.errorType === "internal" ? null : verdict?.message}{" "}
-								{sqlstate ? <span className="rune">{sqlstate}</span> : null}
+								{verdict?.errorType === "internal" || !verdict
+									? null
+									: verdictAdvice(verdict, sql, exercise.solutionSql)}{" "}
+								{sqlstate ? (
+									<span className="rune whitespace-nowrap">
+										Error code {sqlstate}
+									</span>
+								) : null}
 							</div>
 						)}
 					</div>
 					{ok && r ? (
 						<div
-							className="hidden items-end gap-0.5 sm:flex"
+							className="verdict-stars flex items-end gap-0.5"
 							role="img"
 							aria-label={`${r.stars} of 3 stars`}
 						>
@@ -304,13 +411,18 @@ export function VerdictSheet({
 								>
 									<StarGlyph
 										filled={i < r.stars}
-										className={i === 1 ? "size-10" : "size-8"}
+										className={
+											i === 1 ? "size-8 sm:size-10" : "size-6 sm:size-8"
+										}
 									/>
 								</span>
 							))}
 						</div>
 					) : null}
 				</div>
+				{bad && verdict?.sqlError ? (
+					<ErrorLineQuote sql={sql} error={verdict.sqlError} />
+				) : null}
 				{ok && r ? (
 					<div className="grid gap-3 text-foreground sm:grid-cols-2">
 						<MasteryDeltas
@@ -336,7 +448,11 @@ export function VerdictSheet({
 					</div>
 				) : null}
 				<div className="flex items-center gap-2">
-					{ok ? (
+					{pending ? (
+						<Button variant="secondary" size="lg" className="flex-1" disabled>
+							Checking
+						</Button>
+					) : ok ? (
 						<Button
 							variant="success"
 							size="lg"
