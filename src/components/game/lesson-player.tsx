@@ -1,7 +1,7 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { AnimatePresence, motion, type PanInfo } from "motion/react";
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { GameIcon } from "#/components/game/icons";
 import { Button } from "#/components/ui/button";
 import type { Chapter, LessonStep } from "#/content/types";
@@ -10,13 +10,13 @@ import { sqlClient } from "#/engine/sql/client";
 import { markLessonDone, recordAttempt, useGame } from "#/game/progress";
 import { sfx } from "#/game/sound";
 import { functionsQuery, useCatalog } from "#/game/sql-queries";
-import { useIsDesktop } from "#/hooks/use-media";
 import { tryStepAsExercise } from "#/lib/content";
 import { cn } from "#/lib/utils";
 import { burst } from "./fx";
 import { Markdown } from "./markdown";
 import { ResultGrid } from "./result-grid";
-import { QuickKeys, SqlEditor, type SqlEditorHandle } from "./sql-editor";
+import { SqlComposer } from "./sql-composer";
+import { SqlEditor } from "./sql-editor";
 
 type StepState = { done: boolean };
 
@@ -409,9 +409,7 @@ function TryStep({
 	onDone: () => void;
 	done: boolean;
 }) {
-	const isDesktop = useIsDesktop();
 	const autocomplete = useGame((s) => s.settings.autocomplete);
-	const editorRef = useRef<SqlEditorHandle>(null);
 	const [sql, setSql] = useState(step.starterSql ?? "");
 	const [startedAt] = useState(Date.now());
 	const [failures, setFailures] = useState(0);
@@ -419,11 +417,6 @@ function TryStep({
 	const [runs, setRuns] = useState(0);
 	const catalog = useCatalog(chapter.datasetId);
 	const functions = useQuery(functionsQuery(chapter.datasetId));
-	const schema = catalog.data
-		? Object.fromEntries(
-				catalog.data.tables.map((t) => [t.name, t.columns.map((c) => c.name)]),
-			)
-		: undefined;
 	const ex = tryStepAsExercise(chapter, step, index);
 
 	const judgeMut = useMutation({
@@ -473,25 +466,32 @@ function TryStep({
 			</h2>
 			<Markdown className="text-foreground">{step.prompt}</Markdown>
 			<div className="mt-4" onPointerDownCapture={(e) => e.stopPropagation()}>
-				<SqlEditor
-					ref={editorRef}
-					value={sql}
-					onChange={setSql}
-					onRun={() => judgeMut.mutate()}
-					onSubmit={() => judgeMut.mutate()}
-					schema={schema}
-					functions={functions.data}
-					autocomplete={autocomplete}
-					errorLine={v?.sqlError?.line}
-					minHeight="110px"
-					readOnly={done}
-				/>
-				{!isDesktop && !done ? (
-					<QuickKeys
-						className="mt-2 rounded-xl"
-						onKey={(k) => editorRef.current?.insert(k)}
+				<div className="overflow-hidden rounded-xl border-2 border-border bg-card">
+					<SqlComposer
+						value={sql}
+						onChange={setSql}
+						solutionSql={step.solutionSql}
+						seed={ex.id}
+						catalog={catalog.data}
+						onRun={() => judgeMut.mutate()}
+						onSubmit={() => judgeMut.mutate()}
+						functions={functions.data}
+						autocomplete={autocomplete}
+						errorLine={v?.sqlError?.line}
+						minHeight="110px"
+						readOnly={done}
+						keyboardActions={
+							<Button
+								size="sm"
+								variant="success"
+								onClick={() => judgeMut.mutate()}
+								disabled={judgeMut.isPending || done}
+							>
+								Check
+							</Button>
+						}
 					/>
-				) : null}
+				</div>
 			</div>
 			<div className="mt-3 flex flex-wrap items-center gap-2">
 				<Button

@@ -55,7 +55,9 @@ export type GameIconName =
 	| "plus"
 	| "minus"
 	| "fit"
-	| "columns";
+	| "columns"
+	| "keyboard"
+	| "tiles";
 export type WorldGlyphName =
 	| "mug"
 	| "coin"
@@ -121,6 +123,21 @@ export function IconSprite() {
 				</symbol>
 				<symbol id="i-arrow-down" viewBox="0 0 24 24">
 					<path d="M12 4.5V19M6 13.5l6 6 6-6" />
+				</symbol>
+				<symbol id="i-keyboard" viewBox="0 0 24 24">
+					<rect {...DUO} x="2.5" y="5.5" width="19" height="13" rx="3" />
+					<rect x="2.5" y="5.5" width="19" height="13" rx="3" />
+					<path
+						d="M6.5 9.5h.01M10 9.5h.01M13.5 9.5h.01M17 9.5h.01M6.5 12.5h.01M17 12.5h.01M9 15h6"
+						strokeWidth="2.4"
+					/>
+				</symbol>
+				<symbol id="i-tiles" viewBox="0 0 24 24">
+					<rect {...DUO} x="3" y="4.5" width="8" height="6" rx="2" />
+					<rect x="3" y="4.5" width="8" height="6" rx="2" />
+					<rect x="13" y="4.5" width="8" height="6" rx="2" />
+					<rect {...DUO} x="8" y="13.5" width="8" height="6" rx="2" />
+					<rect x="8" y="13.5" width="8" height="6" rx="2" />
 				</symbol>
 				<symbol id="i-arrow-right" viewBox="0 0 24 24">
 					<path d="M4.5 12H19M13.5 6l6 6-6 6" />

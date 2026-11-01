@@ -45,7 +45,7 @@ import { GameIcon, Wick, type WickMood } from "./icons";
 import { Markdown } from "./markdown";
 import { DiffView, ResultGrid } from "./result-grid";
 import { SchemaExplorer } from "./schema-explorer";
-import { QuickKeys, SqlEditor, type SqlEditorHandle } from "./sql-editor";
+import { SqlComposer, type SqlComposerHandle } from "./sql-composer";
 import { StatementLog } from "./statement-log";
 import { type SolvedResult, VerdictSheet } from "./verdict";
 
@@ -175,7 +175,7 @@ export function MissionScreen({
 	const isDesktop = useIsDesktop();
 	const autocomplete = useGame((s) => s.settings.autocomplete);
 	const bossTimerOn = useGame((s) => s.settings.bossTimer);
-	const editorRef = useRef<SqlEditorHandle>(null);
+	const editorRef = useRef<SqlComposerHandle>(null);
 
 	const [sql, setSql] = useState(() => loadDraft(exercise));
 	const [startedAt] = useState(() => Date.now());
@@ -383,7 +383,6 @@ export function MissionScreen({
 
 	const errorLine = verdict?.sqlError?.line ?? lastRun?.error?.line;
 	const dataset = datasetById.get(chapter.datasetId);
-	const tableNames = Object.keys(schema ?? {});
 
 	const missionCard = (
 		<MissionCard
@@ -472,31 +471,41 @@ export function MissionScreen({
 				</Button>
 			</div>
 			<div className={cn(isDesktop && "min-h-0 flex-1")}>
-				<SqlEditor
+				<SqlComposer
 					ref={editorRef}
 					value={sql}
 					onChange={(v) => {
 						setSql(v);
 						saveDraft(v);
 					}}
+					solutionSql={exercise.solutionSql}
+					seed={exercise.id}
+					catalog={catalog.data}
 					onRun={run}
 					onSubmit={cast}
-					schema={schema}
 					functions={functions.data}
 					autocomplete={autocomplete}
 					errorLine={errorLine}
-					bare
 					fill={isDesktop}
-					className={cn(isDesktop && "h-full")}
 					minHeight={isDesktop ? "100%" : "8.5rem"}
+					keyboardActions={
+						<>
+							<button
+								type="button"
+								className="suggest-icon"
+								aria-label="Test the query"
+								onClick={run}
+								disabled={locked}
+							>
+								<GameIcon name="play" className="size-5" />
+							</button>
+							<Button size="sm" onClick={cast} disabled={locked && !busy}>
+								{castLabel}
+							</Button>
+						</>
+					}
 				/>
 			</div>
-			{!isDesktop ? (
-				<QuickKeys
-					tables={tableNames}
-					onKey={(k) => editorRef.current?.insert(k)}
-				/>
-			) : null}
 			{isDesktop ? (
 				<div className="spell-bottom">
 					{lanternButton}

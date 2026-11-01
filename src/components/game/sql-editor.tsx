@@ -96,8 +96,13 @@ function tableRunes(tables: string[]) {
 
 export interface SqlEditorHandle {
 	insert: (text: string) => void;
+	/** Insert a suggested token, replacing `partial` (the word being typed). */
+	insertToken: (token: string, partial: string) => void;
 	focus: () => void;
+	blur: () => void;
 }
+
+const GLUE_LEFT = new Set([",", ")", ";", "."]);
 
 export function SqlEditor({
 	ref,
@@ -116,6 +121,8 @@ export function SqlEditor({
 	ariaLabel = "SQL editor",
 	bare,
 	fill,
+	onCursor,
+	onFocusChange,
 }: {
 	ref?: React.Ref<SqlEditorHandle>;
 	value: string;
@@ -135,6 +142,9 @@ export function SqlEditor({
 	bare?: boolean;
 	/** Fill the parent's height (desktop panel); otherwise grow with the text. */
 	fill?: boolean;
+	/** SQL before the cursor, on every edit or caret move. */
+	onCursor?: (before: string) => void;
+	onFocusChange?: (focused: boolean) => void;
 }) {
 	const viewRef = useRef<EditorView | null>(null);
 	const runRef = useRef(onRun);
@@ -162,10 +172,43 @@ export function SqlEditor({
 			});
 			view.focus();
 		},
+		insertToken(token: string, partial: string) {
+			const view = viewRef.current;
+			if (!view) return;
+			const { from, to } = view.state.selection.main;
+			const start = Math.max(0, from - partial.length);
+			const before = view.state.sliceDoc(Math.max(0, start - 1), start);
+			const glued =
+				GLUE_LEFT.has(token) ||
+				token.endsWith(".") ||
+				before === "(" ||
+				before === ".";
+			const lead = before === "" || /\s/.test(before) || glued ? "" : " ";
+			// Words get a trailing space so the next suggestion follows on; an
+			// opening paren, a qualifier ("p.") or a function call stay open.
+			const trail =
+				token === "(" || token.endsWith("(") || token.endsWith(".") ? "" : " ";
+			const insert = lead + token + trail;
+			view.dispatch({
+				changes: { from: start, to, insert },
+				selection: { anchor: start + insert.length },
+				scrollIntoView: true,
+			});
+			view.focus();
+		},
 		focus() {
 			viewRef.current?.focus();
 		},
+		blur() {
+			viewRef.current?.contentDOM.blur();
+		},
 	}));
+	const cursorRef = useRef(onCursor);
+	const focusRef = useRef(onFocusChange);
+	useLayoutEffect(() => {
+		cursorRef.current = onCursor;
+		focusRef.current = onFocusChange;
+	});
 
 	const extensions = useMemo(() => {
 		const exts = [
@@ -173,7 +216,21 @@ export function SqlEditor({
 			syntaxHighlighting(runeHighlight),
 			gameTheme,
 			EditorView.lineWrapping,
-			EditorView.contentAttributes.of({ "aria-label": ariaLabel }),
+			EditorView.contentAttributes.of({
+				"aria-label": ariaLabel,
+				// Phone keyboards: no auto-capitals, autocorrect or spell check in code.
+				autocapitalize: "off",
+				autocorrect: "off",
+				spellcheck: "false",
+				enterkeyhint: "enter",
+			}),
+			EditorView.updateListener.of((u) => {
+				if (u.focusChanged) focusRef.current?.(u.view.hasFocus);
+				if (u.docChanged || u.selectionSet || u.focusChanged) {
+					const pos = u.state.selection.main.head;
+					cursorRef.current?.(u.state.sliceDoc(0, pos));
+				}
+			}),
 			// Keep the caret clear of a fixed bottom bar (Cast / Next), which sits on
 			// top of the keyboard on phones.
 			EditorView.scrollMargins.of(() => ({ bottom: bottomBarHeight() })),
@@ -301,11 +358,17 @@ const SYMBOL_KEYS = [
 	"AS",
 ];
 
-/** Height of the fixed bottom action bar, if one is showing (mobile). */
+/** Height of the fixed bars over the bottom edge (action bar, suggestion strip). */
 function bottomBarHeight(): number {
-	const bar = document.querySelector<HTMLElement>("[data-bottom-bar]");
-	if (!bar || getComputedStyle(bar).position !== "fixed") return 0;
-	return Math.round(bar.getBoundingClientRect().height) + 8;
+	let h = 0;
+	for (const bar of document.querySelectorAll<HTMLElement>(
+		"[data-bottom-bar], [data-suggest-bar]",
+	)) {
+		const cs = getComputedStyle(bar);
+		if (cs.position !== "fixed" || cs.display === "none") continue;
+		h = Math.max(h, Math.round(bar.getBoundingClientRect().height));
+	}
+	return h ? h + 8 : 0;
 }
 
 /**

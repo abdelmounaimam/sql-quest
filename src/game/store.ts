@@ -17,6 +17,8 @@ export interface Settings {
 	reducedMotion: MotionPref;
 	theme: ThemePref;
 	bossTimer: boolean;
+	/** How SQL is entered: word bank tiles, keyboard, or tiles on touch screens. */
+	composer: "auto" | "tiles" | "keyboard";
 }
 
 export interface Profile {
@@ -47,6 +49,7 @@ export const DEFAULT_SETTINGS: Settings = {
 	reducedMotion: "system",
 	theme: "dark",
 	bossTimer: true,
+	composer: "auto",
 };
 
 const STORAGE_KEY = "sqlq-game";

@@ -1282,6 +1282,48 @@ body[data-scroll-locked] {
 	.quickkeys .keycap.tbl { color: var(--syn-table); }
 	.qk-label { font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--muted-foreground); padding: 8px 12px 0; background: var(--surface-sunken); }
 
+	/* ── Composer: word bank (Duolingo-style tiles) ── */
+	.wb { display: flex; flex-direction: column; gap: 14px; padding: 12px 12px 4px; }
+	.wb-answer {
+		--line: 54px;
+		min-height: calc(var(--line) * 2 + 4px); display: flex; flex-wrap: wrap; align-content: flex-start; align-items: center; gap: 8px 6px; padding: 7px 2px 9px;
+		background-image: repeating-linear-gradient(to bottom, transparent 0 calc(var(--line) - 2px), var(--border) calc(var(--line) - 2px) var(--line));
+		background-position: 0 4px;
+	}
+	.wb-break { flex-basis: 100%; height: 0; }
+	.wb-empty { padding: 10px 4px; font-size: 14px; font-weight: 700; color: var(--muted-foreground); }
+	.wb-bank { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px 8px; padding: 10px 0 6px; }
+	.wb-slot { position: relative; display: inline-flex; }
+	.wb-ghost, .wb-tile { display: inline-flex; align-items: center; height: 44px; padding: 0 13px; border-radius: 12px; font-family: var(--font-mono); font-size: 16px; font-weight: 700; white-space: nowrap; }
+	.wb-ghost { color: transparent; background: var(--surface-sunken); box-shadow: inset 0 2px 0 rgb(0 0 0 / .18); }
+	.wb-slot > .wb-tile { position: absolute; inset: 0; }
+	.wb-tile { background: var(--card); color: var(--syn-ident); border: 2px solid var(--border); box-shadow: 0 3px 0 var(--ledge); touch-action: manipulation; -webkit-tap-highlight-color: transparent; transition: transform 90ms ease-out, box-shadow 90ms ease-out; }
+	.wb-tile:active:not(:disabled) { transform: translateY(2px); box-shadow: 0 1px 0 var(--ledge); }
+	.wb-tile[data-kind="keyword"] { color: var(--syn-keyword); }
+	.wb-tile[data-kind="function"] { color: var(--syn-function); }
+	.wb-tile[data-kind="string"] { color: var(--syn-string); }
+	.wb-tile[data-kind="number"] { color: var(--syn-number); }
+	.wb-tile[data-kind="punct"], .wb-tile[data-kind="operator"] { min-width: 44px; justify-content: center; color: var(--foreground); }
+	.wb-tile.is-placed { height: 40px; padding: 0 11px; }
+	.wb-tile.is-placed[data-kind="punct"], .wb-tile.is-placed[data-kind="operator"] { min-width: 40px; }
+	.composer-foot { display: flex; align-items: center; gap: 8px; padding: 6px 10px 10px; }
+	.composer-toggle { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 10px; border-radius: 12px; font-size: 14px; font-weight: 800; color: var(--muted-foreground); text-transform: uppercase; letter-spacing: .04em; }
+	.composer-toggle:active { background: var(--accent); }
+
+	/* ── Composer: suggestion strip on the phone keyboard ── */
+	.suggest-bar { position: fixed; left: 0; right: 0; bottom: var(--kb-inset); z-index: 45; display: flex; align-items: center; gap: 6px; padding: 6px calc(8px + var(--safe-right)) calc(6px + var(--safe-bottom)) calc(8px + var(--safe-left)); background: var(--card); border-top: 2px solid var(--border); box-shadow: 0 -6px 18px -10px rgb(0 0 0 / .5); }
+	.suggest-chips { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; overflow-x: auto; scrollbar-width: none; overscroll-behavior-x: contain; }
+	.suggest-chips::-webkit-scrollbar { display: none; }
+	.suggest-chip { flex: none; height: 40px; padding: 0 12px; border-radius: 10px; border: 2px solid var(--border); background: var(--surface-sunken); font-family: var(--font-mono); font-size: 15px; font-weight: 700; color: var(--syn-ident); white-space: nowrap; touch-action: manipulation; }
+	.suggest-chip[data-kind="keyword"] { color: var(--syn-keyword); }
+	.suggest-chip[data-kind="string"] { color: var(--syn-string); }
+	.suggest-chip:active { transform: translateY(1px); background: var(--accent); }
+	.suggest-actions { flex: none; display: flex; align-items: center; gap: 6px; padding-left: 6px; border-left: 2px solid var(--border); }
+	.suggest-icon { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 10px; color: var(--muted-foreground); }
+	.suggest-icon:active { background: var(--accent); }
+	/* While typing on a phone the strip replaces the action bar. */
+	:root[data-composing] [data-bottom-bar] { display: none; }
+
 	/* ── Schema chests ── */
 	.chest { overflow: visible; }
 	.chest .lid { position: relative; display: flex; align-items: center; gap: 10px; padding: 10px 12px; background: var(--w-tint); color: var(--w-tint-fg); border-bottom: 2px solid color-mix(in oklab, var(--w) 45%, transparent); border-radius: 18px 18px 0 0; }

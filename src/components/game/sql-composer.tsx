@@ -1,0 +1,454 @@
+import { LayoutGroup, motion } from "motion/react";
+import {
+	useEffect,
+	useImperativeHandle,
+	useMemo,
+	useRef,
+	useState,
+} from "react";
+import { createPortal } from "react-dom";
+import type { Catalog } from "#/engine/checker/pglite-provider";
+import { useGame } from "#/game/progress";
+import { sfx } from "#/game/sound";
+import {
+	buildBank,
+	render,
+	type Suggestions,
+	startsClause,
+	suggest,
+	type Tile,
+	toTiles,
+} from "#/game/sql-tokens";
+import { gameActions } from "#/game/store";
+import { useMediaQuery } from "#/hooks/use-media";
+import { cn } from "#/lib/utils";
+import { GameIcon } from "./icons";
+import { SqlEditor, type SqlEditorHandle } from "./sql-editor";
+
+/** Sample values per "table.column", quoted as SQL literals, for suggestions. */
+function sampleValues(catalog: Catalog): Record<string, string[]> {
+	const out: Record<string, string[]> = {};
+	for (const t of catalog.tables) {
+		const { columns, rows } = t.sampleRows;
+		columns.forEach((c, i) => {
+			const col = t.columns.find((x) => x.name === c.name);
+			if (!col) return;
+			const lit = new Set<string>();
+			for (const r of rows) {
+				const v = r[i];
+				if (v === null || v === undefined || typeof v === "object") continue;
+				if (col.category === "int" || col.category === "numeric")
+					lit.add(String(v));
+				else if (col.category === "bool") lit.add(String(v).toUpperCase());
+				else if (col.category === "text" || col.category === "enum")
+					lit.add(`'${String(v).replaceAll("'", "''")}'`);
+				if (lit.size >= 6) break;
+			}
+			if (lit.size) out[`${t.name}.${c.name}`] = [...lit];
+		});
+	}
+	return out;
+}
+
+// ───────────────────────────── word bank
+
+function TileButton({
+	tile,
+	onClick,
+	placed,
+	disabled,
+}: {
+	tile: Tile;
+	onClick: () => void;
+	placed?: boolean;
+	disabled?: boolean;
+}) {
+	return (
+		<motion.button
+			layoutId={tile.id}
+			layout="position"
+			type="button"
+			className={cn("wb-tile", placed && "is-placed")}
+			data-kind={tile.kind}
+			onClick={onClick}
+			disabled={disabled}
+			transition={{ type: "spring", duration: 0.32, bounce: 0.18 }}
+		>
+			{tile.text}
+		</motion.button>
+	);
+}
+
+/**
+ * Duolingo-style word bank: tap tiles to build the query, tap a placed tile to
+ * send it back. No text field, so no keyboard ever opens.
+ */
+function WordBank({
+	bank,
+	placed,
+	onChange,
+	readOnly,
+	groupId,
+}: {
+	bank: Tile[];
+	placed: string[];
+	onChange: (ids: string[]) => void;
+	readOnly?: boolean;
+	groupId: string;
+}) {
+	const byId = useMemo(() => new Map(bank.map((t) => [t.id, t])), [bank]);
+	const used = new Set(placed);
+	const tap = (ids: string[]) => {
+		sfx("tap");
+		onChange(ids);
+	};
+	return (
+		<LayoutGroup id={groupId}>
+			<div className="wb">
+				<ul
+					className="wb-answer"
+					aria-label="Your query, tap a tile to remove it"
+				>
+					{placed.length ? (
+						placed.map((id, i) => {
+							const t = byId.get(id);
+							if (!t) return null;
+							return (
+								<li key={id} className="contents">
+									{i > 0 && startsClause(t.text) ? (
+										<span className="wb-break" aria-hidden="true" />
+									) : null}
+									<TileButton
+										tile={t}
+										placed
+										disabled={readOnly}
+										onClick={() => tap(placed.filter((x) => x !== id))}
+									/>
+								</li>
+							);
+						})
+					) : (
+						<li className="wb-empty">
+							Tap the tiles below to build your query
+						</li>
+					)}
+				</ul>
+				<ul className="wb-bank" aria-label="Word bank">
+					{bank.map((t) => (
+						<li key={t.id} className="wb-slot">
+							<span className="wb-ghost" aria-hidden="true">
+								{t.text}
+							</span>
+							{used.has(t.id) ? null : (
+								<TileButton
+									tile={t}
+									disabled={readOnly}
+									onClick={() => tap([...placed, t.id])}
+								/>
+							)}
+						</li>
+					))}
+				</ul>
+			</div>
+		</LayoutGroup>
+	);
+}
+
+// ───────────────────────────── suggestion strip
+
+/**
+ * Predictive strip pinned on top of the phone keyboard: the words that can
+ * come next (tables after FROM, columns, operators, sample values), plus the
+ * screen's main actions so they stay reachable while typing.
+ */
+function SuggestionBar({
+	suggestions,
+	onPick,
+	onDone,
+	actions,
+}: {
+	suggestions: Suggestions;
+	onPick: (token: string) => void;
+	onDone: () => void;
+	actions?: React.ReactNode;
+}) {
+	const scroller = useRef<HTMLDivElement>(null);
+	const key = suggestions.items.join("|");
+	// Chips act on pointerup: their pointerdown is cancelled to keep the editor
+	// focused (and the keyboard up), which on iOS also swallows the click. A
+	// horizontal swipe cancels the pointer, so scrolling the strip picks nothing.
+	const suppressClick = useRef(0);
+	// biome-ignore lint/correctness/useExhaustiveDependencies: reset on a new list
+	useEffect(() => {
+		scroller.current?.scrollTo({ left: 0 });
+	}, [key]);
+	return createPortal(
+		<div data-suggest-bar className="suggest-bar">
+			<div
+				ref={scroller}
+				className="suggest-chips"
+				role="toolbar"
+				aria-label="Suggestions"
+			>
+				{suggestions.items.length ? (
+					suggestions.items.map((s) => (
+						<button
+							key={s}
+							type="button"
+							className="suggest-chip"
+							data-kind={
+								/^[A-Z][A-Z ]+$/.test(s)
+									? "keyword"
+									: s.startsWith("'")
+										? "string"
+										: undefined
+							}
+							onPointerDown={(e) => e.preventDefault()}
+							onPointerUp={(e) => {
+								if (e.pointerType === "mouse") return;
+								suppressClick.current = Date.now() + 500;
+								onPick(s);
+							}}
+							onClick={() => {
+								if (Date.now() < suppressClick.current) return;
+								onPick(s);
+							}}
+						>
+							{s}
+						</button>
+					))
+				) : (
+					<span className="px-2 text-xs font-bold text-muted-foreground">
+						Keep typing
+					</span>
+				)}
+			</div>
+			<div className="suggest-actions">
+				{actions}
+				<button
+					type="button"
+					className="suggest-icon"
+					aria-label="Hide the keyboard"
+					onClick={onDone}
+				>
+					<GameIcon name="chevron-down" className="size-5" />
+				</button>
+			</div>
+		</div>,
+		document.body,
+	);
+}
+
+// ───────────────────────────── composer
+
+export interface SqlComposerHandle {
+	focus: () => void;
+}
+
+/**
+ * Where the learner writes SQL. Touch screens start on the word bank
+ * (tap to build, like Duolingo); "Use keyboard" switches to the editor with a
+ * suggestion strip on the keyboard. The choice is remembered.
+ */
+export function SqlComposer({
+	ref,
+	value,
+	onChange,
+	solutionSql,
+	seed,
+	catalog,
+	functions,
+	autocomplete = true,
+	errorLine,
+	readOnly,
+	onRun,
+	onSubmit,
+	minHeight = "8.5rem",
+	fill,
+	keyboardActions,
+	className,
+}: {
+	ref?: React.Ref<SqlComposerHandle>;
+	value: string;
+	onChange: (v: string) => void;
+	solutionSql: string;
+	/** Stable id (exercise id) so the bank shuffles the same way each visit. */
+	seed: string;
+	catalog?: Catalog;
+	functions?: string[];
+	autocomplete?: boolean;
+	errorLine?: number;
+	readOnly?: boolean;
+	onRun?: () => void;
+	onSubmit?: () => void;
+	minHeight?: string;
+	fill?: boolean;
+	/** Compact actions shown on the suggestion strip while typing (Test, Submit). */
+	keyboardActions?: React.ReactNode;
+	className?: string;
+}) {
+	const touch = useMediaQuery("(pointer: coarse)", false);
+	const pref = useGame((s) => s.settings.composer);
+	const editorRef = useRef<SqlEditorHandle>(null);
+
+	const schema = useMemo(
+		() =>
+			catalog
+				? Object.fromEntries(
+						catalog.tables.map((t) => [t.name, t.columns.map((c) => c.name)]),
+					)
+				: undefined,
+		[catalog],
+	);
+	const samples = useMemo(
+		() => (catalog ? sampleValues(catalog) : undefined),
+		[catalog],
+	);
+	// Built once the schema is known, so distractors do not reshuffle later.
+	const bank = useMemo(
+		() => (schema ? buildBank(solutionSql, seed, schema) : null),
+		[solutionSql, seed, schema],
+	);
+
+	const wantTiles = pref === "tiles" || (pref === "auto" && touch);
+	const mode: "tiles" | "keyboard" = wantTiles && bank ? "tiles" : "keyboard";
+
+	// Tiles: placed tile ids. Typed SQL the bank cannot express is stashed so
+	// switching back to the keyboard gives it back.
+	const [placed, setPlaced] = useState<string[]>([]);
+	const [stash, setStash] = useState<string | null>(null);
+	const synced = useRef<string | null>(null);
+	useEffect(() => {
+		if (mode !== "tiles" || !bank) return;
+		const texts = (ids: string[]) =>
+			render(ids.map((id) => bank.find((t) => t.id === id)?.text ?? ""));
+		if (synced.current !== null && value === texts(placed)) return;
+		const ids = value.trim() ? toTiles(value, bank) : [];
+		if (ids) {
+			setPlaced(ids);
+			setStash(null);
+		} else {
+			setPlaced([]);
+			setStash(value);
+		}
+		synced.current = value;
+	}, [mode, bank, value, placed]);
+
+	const setTiles = (ids: string[]) => {
+		if (!bank) return;
+		setPlaced(ids);
+		const sql = render(
+			ids.map((id) => bank.find((t) => t.id === id)?.text ?? ""),
+		);
+		synced.current = sql;
+		if (ids.length) setStash(null);
+		onChange(sql);
+	};
+
+	const switchTo = (next: "tiles" | "keyboard") => {
+		gameActions.updateSettings({ composer: next });
+		if (next === "keyboard" && stash !== null && !placed.length) {
+			onChange(stash);
+			setStash(null);
+		}
+		synced.current = null;
+	};
+
+	// Keyboard mode: suggestions follow the caret while the editor has focus.
+	const [focused, setFocused] = useState(false);
+	const [before, setBefore] = useState("");
+	const showBar = mode === "keyboard" && touch && focused && !readOnly;
+	const suggestions = useMemo(
+		() => (showBar ? suggest(before, { schema, samples, functions }) : null),
+		[showBar, before, schema, samples, functions],
+	);
+	useEffect(() => {
+		const root = document.documentElement;
+		if (showBar) root.dataset.composing = "true";
+		else delete root.dataset.composing;
+		return () => {
+			delete root.dataset.composing;
+		};
+	}, [showBar]);
+
+	useImperativeHandle(ref, () => ({
+		focus() {
+			if (mode === "keyboard") editorRef.current?.focus();
+		},
+	}));
+
+	const toggle =
+		bank && !readOnly ? (
+			<button
+				type="button"
+				className="composer-toggle"
+				onClick={() => switchTo(mode === "tiles" ? "keyboard" : "tiles")}
+			>
+				<GameIcon
+					name={mode === "tiles" ? "keyboard" : "tiles"}
+					className="size-5"
+				/>
+				{mode === "tiles" ? "Use keyboard" : "Use word bank"}
+			</button>
+		) : null;
+
+	if (mode === "tiles" && bank)
+		return (
+			<div className={cn("composer flex flex-col", className)}>
+				<WordBank
+					bank={bank}
+					placed={placed}
+					onChange={setTiles}
+					readOnly={readOnly}
+					groupId={`wb-${seed}`}
+				/>
+				<div className="composer-foot">
+					{toggle}
+					<span className="flex-1" />
+					{placed.length && !readOnly ? (
+						<button
+							type="button"
+							className="composer-toggle"
+							onClick={() => setTiles([])}
+						>
+							<GameIcon name="rewind" className="size-5" /> Start over
+						</button>
+					) : null}
+				</div>
+			</div>
+		);
+
+	return (
+		<div className={cn("composer flex flex-col", fill && "h-full", className)}>
+			<div className={cn(fill && "min-h-0 flex-1")}>
+				<SqlEditor
+					ref={editorRef}
+					value={value}
+					onChange={onChange}
+					onRun={onRun}
+					onSubmit={onSubmit}
+					schema={schema}
+					functions={functions}
+					autocomplete={autocomplete && !touch}
+					errorLine={errorLine}
+					readOnly={readOnly}
+					bare
+					fill={fill}
+					className={cn(fill && "h-full")}
+					minHeight={minHeight}
+					onCursor={setBefore}
+					onFocusChange={setFocused}
+				/>
+			</div>
+			{toggle && touch ? <div className="composer-foot">{toggle}</div> : null}
+			{showBar && suggestions ? (
+				<SuggestionBar
+					suggestions={suggestions}
+					onPick={(t) => editorRef.current?.insertToken(t, suggestions.partial)}
+					onDone={() => editorRef.current?.blur()}
+					actions={keyboardActions}
+				/>
+			) : null}
+		</div>
+	);
+}
