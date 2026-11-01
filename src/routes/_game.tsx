@@ -4,11 +4,10 @@ import {
 	Outlet,
 	useRouterState,
 } from "@tanstack/react-router";
-import { Dumbbell } from "lucide-react";
 import { MotionConfig } from "motion/react";
 import { AppEffects } from "#/components/game/app-effects";
 import { Hud, LeftRail, TabBar } from "#/components/game/hud";
-import { IconSprite } from "#/components/game/icons";
+import { GameIcon, IconSprite } from "#/components/game/icons";
 import { Onboarding } from "#/components/game/onboarding";
 import { activityLink } from "#/components/game/world-map";
 import { Toaster } from "#/components/ui/sonner";
@@ -123,7 +122,7 @@ function PracticeLink() {
 			{...link}
 			className="flex h-12 items-center gap-3 rounded-lg px-4 text-[15px] font-extrabold text-info-soft-foreground hover:bg-accent"
 		>
-			<Dumbbell strokeWidth={2.25} className="size-5" />
+			<GameIcon name="dumbbell" className="size-6" />
 			Practice
 			<span
 				className="ml-auto size-2 rounded-full bg-info"

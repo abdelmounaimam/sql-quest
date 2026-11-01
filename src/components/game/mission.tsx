@@ -1,7 +1,6 @@
 import { useDebouncedCallback, useDebouncedValue } from "@tanstack/react-pacer";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { ChevronDown, Eye, Play, X } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Chapter, Exercise } from "#/content/types";
@@ -96,7 +95,7 @@ export function LevelHud({
 						params={{ chapterId: chapter.id }}
 						search={{ phase: "hub" }}
 					>
-						<X />
+						<GameIcon name="x" className="size-5" />
 					</Link>
 				</Button>
 				<div
@@ -404,7 +403,7 @@ export function MissionScreen({
 		/>
 	);
 
-	const castLabel = mode === "boss" ? "Strike" : "Cast";
+	const castLabel = "Submit";
 	const castButton = (
 		<Button
 			onClick={cast}
@@ -420,7 +419,7 @@ export function MissionScreen({
 			) : (
 				<GameIcon name="wand" data-icon="inline-start" />
 			)}
-			{judgeMut.isPending ? "Casting" : castLabel}
+			{judgeMut.isPending ? "Checking" : castLabel}
 		</Button>
 	);
 
@@ -429,10 +428,10 @@ export function MissionScreen({
 			<Button
 				variant="ghost-glow"
 				onClick={revealHint}
-				aria-label={`Lantern: reveal hint, costs ${HINT_XP_COST} aether`}
+				aria-label={`Reveal a hint, costs ${HINT_XP_COST} XP`}
 			>
 				<GameIcon name="bulb" data-icon="inline-start" />
-				<span className={cn(!isDesktop && "sr-only")}>Lantern</span>
+				<span className={cn(!isDesktop && "sr-only")}>Hint</span>
 				<Badge variant="xp">−{HINT_XP_COST}</Badge>
 			</Button>
 		) : null;
@@ -442,7 +441,7 @@ export function MissionScreen({
 			key={shakeKey}
 			className={cn(
 				"spell-frame",
-				isDesktop ? "h-full min-h-0" : "min-h-[22rem] flex-1",
+				isDesktop && "h-full min-h-0",
 				shakeKey > 0 && "shake",
 			)}
 			data-casting={busy}
@@ -450,11 +449,11 @@ export function MissionScreen({
 			<span className="rune-sweep" aria-hidden="true" />
 			<div className="spell-top">
 				<Wick mood={mood} className="h-8 w-7" />
-				<span className="font-extrabold">Spellbook</span>
+				<span className="font-extrabold">Query</span>
 				<span className="hidden text-xs text-muted-foreground xl:inline">
 					<kbd className="keycap">Ctrl</kbd> +{" "}
 					<kbd className="keycap">Enter</kbd> test ·{" "}
-					<kbd className="keycap">Shift</kbd> casts
+					<kbd className="keycap">Shift</kbd> submits
 				</span>
 				<span className="ml-auto" />
 				<Button
@@ -467,12 +466,12 @@ export function MissionScreen({
 					{runMut.isPending ? (
 						<Spinner data-icon="inline-start" />
 					) : (
-						<Play data-icon="inline-start" />
+						<GameIcon name="play" className="size-5" data-icon="inline-start" />
 					)}
 					Test
 				</Button>
 			</div>
-			<div className="min-h-0 flex-1">
+			<div className={cn(isDesktop && "min-h-0 flex-1")}>
 				<SqlEditor
 					ref={editorRef}
 					value={sql}
@@ -487,8 +486,9 @@ export function MissionScreen({
 					autocomplete={autocomplete}
 					errorLine={errorLine}
 					bare
-					className="h-full"
-					minHeight={isDesktop ? "100%" : "28dvh"}
+					fill={isDesktop}
+					className={cn(isDesktop && "h-full")}
+					minHeight={isDesktop ? "100%" : "8.5rem"}
 				/>
 			</div>
 			{!isDesktop ? (
@@ -581,19 +581,19 @@ export function MissionScreen({
 							<Button
 								variant="secondary"
 								size="icon"
-								aria-label="Chests (schema)"
+								aria-label="Schema"
 								onClick={() => {
 									// Full height: the chest list is long and the diagram needs the room.
 									setSnap(0.92);
 									setDrawer("schema");
 								}}
 							>
-								<GameIcon name="chest" />
+								<GameIcon name="database" />
 							</Button>
 							<Button
 								variant="secondary"
 								size="icon"
-								aria-label="Loot (results)"
+								aria-label="Results"
 								onClick={() => {
 									setSnap(0.45);
 									setDrawer("results");
@@ -616,7 +616,7 @@ export function MissionScreen({
 							data-world={world}
 						>
 							<DrawerTitle className="px-4 pt-2 font-display text-xl">
-								{drawer === "schema" ? "Treasure chests" : "Loot ledger"}
+								{drawer === "schema" ? "Schema" : "Results"}
 							</DrawerTitle>
 							<div className="min-h-0 flex-1 overflow-y-auto px-1 pb-4">
 								{drawer === "schema" ? (
@@ -729,7 +729,8 @@ function MissionCard({
 						className="tap-target grid size-9 place-items-center rounded-md"
 						aria-label={open ? "Collapse mission" : "Expand mission"}
 					>
-						<ChevronDown
+						<GameIcon
+							name="chevron-down"
 							className={cn(
 								"size-5 transition-transform duration-200 ease-out",
 								open && "rotate-180",
@@ -769,7 +770,7 @@ function MissionCard({
 						<Alert variant="info">
 							<GameIcon name="bulb" />
 							<AlertTitle>
-								Lantern {i + 1}
+								Hint {i + 1}
 								{i < freeHints ? " · free" : ""}
 							</AlertTitle>
 							<AlertDescription>
@@ -786,7 +787,7 @@ function MissionCard({
 					className="self-start"
 					onClick={onHint}
 				>
-					<GameIcon name="bulb" data-icon="inline-start" /> Light the lantern{" "}
+					<GameIcon name="bulb" data-icon="inline-start" /> Show hint{" "}
 					{shownHints + 1}/{exercise.hints.length}
 					<Badge variant="xp">−{HINT_XP_COST}</Badge>
 				</Button>
@@ -797,7 +798,7 @@ function MissionCard({
 					<AlertTitle>Quick refresher</AlertTitle>
 					<AlertDescription>
 						<p className="mb-1 text-sm">
-							{failures} casts so far. Here is the idea again:
+							{failures} attempts so far. Here is the idea again:
 						</p>
 						<ul className="flex flex-col gap-1">
 							{exercise.concepts.map((c) => (
@@ -827,7 +828,8 @@ function MissionCard({
 					className="self-start text-destructive-soft-foreground"
 					onClick={onReveal}
 				>
-					<Eye data-icon="inline-start" /> Show the spell (0 stars)
+					<GameIcon name="eye" className="size-5" data-icon="inline-start" />{" "}
+					Show the solution (0 stars)
 				</Button>
 			) : null}
 		</div>
@@ -877,7 +879,7 @@ function ResultsPanel({
 			<div className="panel grid h-full min-h-40 place-items-center p-6">
 				<div className="flex items-center gap-3 text-sm font-bold text-muted-foreground">
 					<Spinner className="size-6 text-lantern" />
-					The spell is working…
+					Running…
 				</div>
 			</div>
 		);
@@ -886,9 +888,9 @@ function ResultsPanel({
 			<div className="panel grid h-full min-h-40 place-items-center p-6 text-center">
 				<div className="flex flex-col items-center gap-2 text-sm text-muted-foreground">
 					<Wick mood="sleeping" className="h-14 w-12" />
-					<span className="font-bold">Your loot appears here.</span>
+					<span className="font-bold">Results appear here.</span>
 					<span>
-						Test the spell to peek at the result, cast it when you are sure.
+						Test your query to preview the result, submit it when you are sure.
 					</span>
 				</div>
 			</div>
@@ -901,9 +903,7 @@ function ResultsPanel({
 					<Alert variant="destructive">
 						<GameIcon name="x" />
 						<AlertTitle>
-							{lastRun.errorType === "timeout"
-								? "The spell ran wild"
-								: "Fizzled"}
+							{lastRun.errorType === "timeout" ? "Query timed out" : "Error"}
 							{lastRun.error?.code ? (
 								<span className="rune ml-2">{lastRun.error.code}</span>
 							) : null}
@@ -1016,7 +1016,7 @@ function BossDefeat({
 					The guardian held
 				</DialogTitle>
 				<DialogDescription className="text-center">
-					No shame in it. A short training gauntlet aimed at the runes of{" "}
+					No shame in it. A short training gauntlet aimed at the concepts of{" "}
 					<b className="text-foreground">{chapter.title}</b> is now open. Clear
 					it and the gate opens again.
 				</DialogDescription>

@@ -1,16 +1,8 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import {
-	Check,
-	ChevronLeft,
-	ChevronRight,
-	Lightbulb,
-	Play,
-	Send,
-	X,
-} from "lucide-react";
 import { AnimatePresence, motion, type PanInfo } from "motion/react";
 import { useRef, useState } from "react";
+import { GameIcon } from "#/components/game/icons";
 import { Button } from "#/components/ui/button";
 import type { Chapter, LessonStep } from "#/content/types";
 import type { RunOutcome, Verdict } from "#/engine/checker/types";
@@ -91,7 +83,7 @@ export function LessonPlayer({
 					aria-label="Leave the lesson"
 				>
 					<Link to="/">
-						<X />
+						<GameIcon name="x" className="size-5" />
 					</Link>
 				</Button>
 				<div className="seg" role="tablist" aria-label="Lesson steps">
@@ -164,7 +156,7 @@ export function LessonPlayer({
 						size="icon-lg"
 						aria-label="Previous step"
 					>
-						<ChevronLeft className="size-5" />
+						<GameIcon name="chevron-left" className="size-5" />
 					</Button>
 					<div className="hidden text-xs text-muted-foreground roomy:block">
 						Swipe or use the arrows
@@ -184,7 +176,11 @@ export function LessonPlayer({
 								: step.kind === "quiz"
 									? "Answer to continue"
 									: "Solve to continue"}
-						<ChevronRight data-icon="inline-end" />
+						<GameIcon
+							name="chevron-right"
+							className="size-5"
+							data-icon="inline-end"
+						/>
 					</Button>
 				</div>
 			</div>
@@ -282,7 +278,7 @@ function ExampleStep({
 				size="lg"
 				className="mt-3"
 			>
-				<Play className="size-4" fill="currentColor" />
+				<GameIcon name="play" className="size-4" />
 				{runMut.isPending ? "Running…" : out ? "Run again" : "Run it"}
 			</Button>
 			<div className="mt-3" onPointerDownCapture={(e) => e.stopPropagation()}>
@@ -365,9 +361,9 @@ function QuizStep({
 								)}
 							>
 								{isRight ? (
-									<Check className="size-4" />
+									<GameIcon name="check" className="size-4" />
 								) : isWrong ? (
-									<X className="size-4" />
+									<GameIcon name="x" className="size-4" />
 								) : (
 									String.fromCharCode(65 + i)
 								)}
@@ -505,7 +501,7 @@ function TryStep({
 					variant="success"
 					size="lg"
 				>
-					<Send className="size-4" />
+					<GameIcon name="send" className="size-4" />
 					{done ? "Solved" : judgeMut.isPending ? "Checking…" : "Check"}
 				</Button>
 				{!done && hints < step.hints.length ? (
@@ -517,7 +513,7 @@ function TryStep({
 						}}
 						className="flex min-h-11 items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-semibold text-(--syn-keyword) hover:bg-secondary"
 					>
-						<Lightbulb className="size-4" /> Hint
+						<GameIcon name="bulb" className="size-4" /> Hint
 					</button>
 				) : null}
 				{!done && failures >= 3 ? (
@@ -538,7 +534,10 @@ function TryStep({
 					key={h}
 					className="mt-2 flex gap-2 rounded-lg bg-info-soft text-info-soft-foreground p-2.5 text-sm"
 				>
-					<Lightbulb className="mt-0.5 size-4 shrink-0 text-(--syn-keyword)" />
+					<GameIcon
+						name="bulb"
+						className="mt-0.5 size-4 shrink-0 text-(--syn-keyword)"
+					/>
 					<span>
 						<b className="text-(--syn-keyword)">Hint {i + 1}:</b>{" "}
 						<Markdown className="inline text-foreground">{h}</Markdown>

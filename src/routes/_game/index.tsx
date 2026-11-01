@@ -58,7 +58,7 @@ function MapPage() {
 				<NextUpCard progress={progress} />
 				<section
 					className="panel flex items-center gap-4 p-5"
-					aria-label="Hearth"
+					aria-label="Streak"
 				>
 					<span className="grid size-14 place-items-center rounded-2xl bg-warning-soft text-streak">
 						<GameIcon name="flame" className="size-8" />
@@ -69,8 +69,8 @@ function MapPage() {
 						</div>
 						<p className="text-sm text-muted-foreground">
 							{streak > 0
-								? "Hearth is lit. Cast once a day to keep it burning."
-								: "Cast a spell today to light your hearth."}
+								? "Streak is on. Solve one exercise a day to keep it going."
+								: "Solve an exercise today to start a streak."}
 						</p>
 					</div>
 				</section>
@@ -79,7 +79,9 @@ function MapPage() {
 						className="panel flex flex-col gap-3 p-5"
 						aria-label="Reviews due"
 					>
-						<div className="kicker text-info-soft-foreground">Fading runes</div>
+						<div className="kicker text-info-soft-foreground">
+							Due for review
+						</div>
 						{progress.reviews.slice(0, 4).map((r) => (
 							<Link
 								key={r.conceptId}

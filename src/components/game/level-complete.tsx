@@ -115,7 +115,7 @@ export function LevelComplete({
 						</DialogDescription>
 						<div className="lc-stats my-5">
 							<div className="lc-stat xp">
-								<div className="h">Aether</div>
+								<div className="h">XP</div>
 								<div className="v">
 									<GameIcon name="zap" />
 									<CountUp to={xp} delay={skipped ? 0 : 1.05} />

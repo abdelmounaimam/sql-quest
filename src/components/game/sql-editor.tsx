@@ -63,7 +63,7 @@ const runeHighlight = HighlightStyle.define([
 	{ tag: [t.name, t.propertyName, t.labelName], class: "tok-ident" },
 ]);
 
-/** Table names known from the dataset get tok-table: "your spell touches this chest". */
+/** Table names known from the dataset get tok-table: "your query uses this table". */
 function tableRunes(tables: string[]) {
 	const names = new Set(tables.map((n) => n.toLowerCase()));
 	const mark = Decoration.mark({ class: "tok-table" });
@@ -112,9 +112,10 @@ export function SqlEditor({
 	readOnly,
 	className,
 	minHeight = "160px",
-	placeholder = "-- write your spell here. Ctrl+Enter tests it, Ctrl+Shift+Enter casts it",
+	placeholder = "-- write your SQL here",
 	ariaLabel = "SQL editor",
 	bare,
+	fill,
 }: {
 	ref?: React.Ref<SqlEditorHandle>;
 	value: string;
@@ -130,8 +131,10 @@ export function SqlEditor({
 	minHeight?: string;
 	placeholder?: string;
 	ariaLabel?: string;
-	/** No frame (inside the spellbook frame). */
+	/** No frame (inside the editor frame). */
 	bare?: boolean;
+	/** Fill the parent's height (desktop panel); otherwise grow with the text. */
+	fill?: boolean;
 }) {
 	const viewRef = useRef<EditorView | null>(null);
 	const runRef = useRef(onRun);
@@ -224,8 +227,16 @@ export function SqlEditor({
 				}),
 			);
 		}
+		// Min height lives on the content and the gutter (not the editor box), so
+		// the line-number gutter runs the full height and a tap anywhere in the
+		// empty area lands in the editor.
+		exts.push(
+			EditorView.theme({
+				".cm-content, .cm-gutter": { minHeight: minHeight },
+			}),
+		);
 		return exts;
-	}, [schema, functions, errorLine, ariaLabel]);
+	}, [schema, functions, errorLine, ariaLabel, minHeight]);
 
 	return (
 		<div
@@ -242,8 +253,7 @@ export function SqlEditor({
 				editable={!readOnly}
 				readOnly={readOnly}
 				theme="none"
-				minHeight={minHeight}
-				height="100%"
+				height={fill ? "100%" : undefined}
 				placeholder={placeholder}
 				onCreateEditor={(view) => {
 					viewRef.current = view;
@@ -259,7 +269,7 @@ export function SqlEditor({
 					lineNumbers: !readOnly,
 					searchKeymap: false,
 				}}
-				className="h-full"
+				className={fill ? "h-full" : undefined}
 			/>
 		</div>
 	);

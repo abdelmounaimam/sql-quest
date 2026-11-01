@@ -112,7 +112,7 @@ export function ResultGrid({
 	typeNames,
 	className,
 	maxHeight = "22rem",
-	caption = "Loot ledger",
+	caption = "Results",
 	meta,
 	animate = true,
 }: {
@@ -203,7 +203,7 @@ export function ResultGrid({
 					{table && table.rowCount > 0
 						? `${table.rowCount} rows came back with no columns at all: name the columns you want after SELECT.`
 						: table?.command
-							? `${table.command} done${typeof table.affectedRows === "number" ? `, ${table.affectedRows} row(s) affected` : ""}. This spell returned no loot.`
+							? `${table.command} done${typeof table.affectedRows === "number" ? `, ${table.affectedRows} row(s) affected` : ""}. No rows returned.`
 							: "No result set."}
 				</p>
 			</div>
@@ -299,7 +299,7 @@ export function ResultGrid({
 				</table>
 				{data.length === 0 ? (
 					<p className="p-4 text-center text-sm text-muted-foreground">
-						0 rows: the chest was empty.
+						0 rows returned.
 					</p>
 				) : null}
 			</div>
@@ -312,7 +312,7 @@ export function DiffView({
 	diff,
 	expected,
 	got,
-	labels = ["Expected loot", "Your loot"],
+	labels = ["Expected", "Your result"],
 }: {
 	diff: TableDiff;
 	expected?: ResultTable;

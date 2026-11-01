@@ -134,7 +134,7 @@ export function BossIntro({
 				</div>
 				<p className="mt-2 text-sm font-bold text-[#A6AEC4]">
 					3 hearts{timer ? ` · ${2 + boss.difficulty} minute clock` : ""} ·
-					bonus aether
+					bonus XP
 				</p>
 				<div className="mt-8 flex flex-col items-center gap-2">
 					<Button

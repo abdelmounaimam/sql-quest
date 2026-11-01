@@ -1,12 +1,4 @@
 import { Link } from "@tanstack/react-router";
-import {
-	Dumbbell,
-	Map as MapIcon,
-	Settings,
-	User,
-	Volume2,
-	VolumeX,
-} from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useState } from "react";
 import { levelFromXp } from "#/engine/adaptive";
@@ -15,7 +7,7 @@ import { useGame } from "#/game/progress";
 import { gameActions } from "#/game/store";
 import { cn } from "#/lib/utils";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
-import { GameIcon } from "./icons";
+import { GameIcon, type GameIconName } from "./icons";
 import { Logo } from "./logo";
 
 export function useEngineStatus(): EngineStatus {
@@ -61,7 +53,7 @@ export function XpBar({ className }: { className?: string }) {
 					<i style={{ transform: `scaleX(${Math.max(0.03, lv.progress)})` }} />
 				</div>
 				<div className="mt-0.5 font-mono text-[11px] font-bold text-xp-text tabular">
-					{fmt.format(lv.current)} / {fmt.format(lv.needed)} aether
+					{fmt.format(lv.current)} / {fmt.format(lv.needed)} XP
 				</div>
 			</div>
 		</div>
@@ -73,7 +65,7 @@ export function StreakStat({ className }: { className?: string }) {
 	return (
 		<span
 			className={cn("stat streak", streak === 0 && "opacity-60", className)}
-			title={`Hearth: ${streak} day streak`}
+			title={`Streak: ${streak} day${streak === 1 ? "" : "s"}`}
 		>
 			<GameIcon name="flame" />
 			{streak}
@@ -86,7 +78,7 @@ export function AetherStat({ className }: { className?: string }) {
 	return (
 		<span
 			className={cn("stat xp", className)}
-			title="Aether (XP)"
+			title="Experience points (XP)"
 			data-hud-aether
 		>
 			<GameIcon name="zap" />
@@ -108,7 +100,7 @@ export function ComboChip() {
 					exit={{ opacity: 0, scale: 0.9 }}
 					transition={{ type: "spring", duration: 0.35, bounce: 0.2 }}
 					className="combo-chip bumped"
-					title="Consecutive first-try casts"
+					title="Consecutive first-try answers"
 				>
 					<GameIcon name="flame" className="size-4" />
 					<span className="relative inline-flex h-5 overflow-hidden">
@@ -151,7 +143,7 @@ function EngineDot() {
 			{/* Status lives in the dot (and title); the label is too wide for this bar. */}
 			<span className="sr-only">
 				{engine === "booting"
-					? "Lighting the lantern"
+					? "Starting Postgres"
 					: engine === "restarting"
 						? "Relighting"
 						: "Postgres 18 · TZ GMT"}
@@ -175,7 +167,7 @@ function SoundToggle() {
 			aria-label={sound ? "Mute sounds" : "Unmute sounds"}
 			aria-pressed={!sound}
 		>
-			{sound ? <Volume2 className="size-5" /> : <VolumeX className="size-5" />}
+			<GameIcon name={sound ? "sound-on" : "sound-off"} className="size-6" />
 		</button>
 	);
 }
@@ -185,10 +177,10 @@ export function Brand({ compact }: { compact?: boolean }) {
 }
 
 const NAV = [
-	{ to: "/", label: "Map", icon: MapIcon },
-	{ to: "/profile", label: "Profile", icon: User },
-	{ to: "/settings", label: "Settings", icon: Settings },
-] as const;
+	{ to: "/", label: "Map", icon: "map" },
+	{ to: "/profile", label: "Profile", icon: "profile" },
+	{ to: "/settings", label: "Settings", icon: "settings" },
+] as const satisfies { to: string; label: string; icon: GameIconName }[];
 
 /** Global top bar (map, profile, settings). The level screen has its own HUD. */
 export function Hud() {
@@ -215,7 +207,7 @@ export function Hud() {
 					className="hidden items-center gap-1 md:flex lg:hidden"
 					aria-label="Main"
 				>
-					{NAV.map(({ to, label, icon: Icon }) => (
+					{NAV.map(({ to, label, icon }) => (
 						<Link
 							key={to}
 							to={to}
@@ -224,7 +216,7 @@ export function Hud() {
 							className="flex size-11 items-center justify-center rounded-md text-sm font-extrabold text-muted-foreground hover:bg-accent hover:text-foreground data-[status=active]:bg-accent data-[status=active]:text-foreground"
 						>
 							{/* md..lg only: icons, so the bar fits a phone in landscape. */}
-							<Icon className="size-5" />
+							<GameIcon name={icon} className="size-6" />
 						</Link>
 					))}
 				</nav>
@@ -242,9 +234,9 @@ export function TabBar() {
 			aria-label="Main"
 		>
 			<div className="tabbar">
-				{NAV.map(({ to, label, icon: Icon }) => (
+				{NAV.map(({ to, label, icon }) => (
 					<Link key={to} to={to} activeOptions={{ exact: to === "/" }}>
-						<Icon strokeWidth={2.25} />
+						<GameIcon name={icon} />
 						{label}
 					</Link>
 				))}
@@ -263,12 +255,12 @@ export function LeftRail({ practice }: { practice?: React.ReactNode }) {
 			className="sticky top-[calc(3.5rem+var(--safe-top))] hidden h-[calc(100dvh-3.5rem-var(--safe-top))] flex-col gap-2 border-r-2 border-border px-4 py-6 lg:flex"
 			aria-label="Main"
 		>
-			{NAV.slice(0, 1).map(({ to, label, icon: Icon }) => (
+			{NAV.slice(0, 1).map(({ to, label, icon }) => (
 				<RailLink
 					key={to}
 					to={to}
 					label={label}
-					icon={<Icon strokeWidth={2.25} />}
+					icon={<GameIcon name={icon} className="size-6" />}
 				/>
 			))}
 			{practice ?? (
@@ -276,15 +268,15 @@ export function LeftRail({ practice }: { practice?: React.ReactNode }) {
 					className="flex h-12 items-center gap-3 rounded-lg px-4 text-[15px] font-extrabold text-muted-foreground opacity-60"
 					title="No drill or review due right now"
 				>
-					<Dumbbell strokeWidth={2.25} className="size-5" /> Practice
+					<GameIcon name="dumbbell" className="size-6" /> Practice
 				</span>
 			)}
-			{NAV.slice(1).map(({ to, label, icon: Icon }) => (
+			{NAV.slice(1).map(({ to, label, icon }) => (
 				<RailLink
 					key={to}
 					to={to}
 					label={label}
-					icon={<Icon strokeWidth={2.25} />}
+					icon={<GameIcon name={icon} className="size-6" />}
 				/>
 			))}
 			<div className="mt-auto">

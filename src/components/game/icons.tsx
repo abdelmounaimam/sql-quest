@@ -24,6 +24,7 @@ export type GameIconName =
 	| "link"
 	| "bulb"
 	| "chest"
+	| "database"
 	| "wand"
 	| "table"
 	| "scroll"
@@ -34,7 +35,27 @@ export type GameIconName =
 	| "sparkle"
 	| "trophy"
 	| "clock"
-	| "target";
+	| "target"
+	| "map"
+	| "profile"
+	| "settings"
+	| "sound-on"
+	| "sound-off"
+	| "book"
+	| "swords"
+	| "eye"
+	| "chevron-left"
+	| "chevron-right"
+	| "chevron-down"
+	| "arrow-up"
+	| "arrow-down"
+	| "arrow-right"
+	| "send"
+	| "expand"
+	| "plus"
+	| "minus"
+	| "fit"
+	| "columns";
 export type WorldGlyphName =
 	| "mug"
 	| "coin"
@@ -48,6 +69,16 @@ export type WorldGlyphName =
 	| "gear"
 	| "spire";
 
+/**
+ * Two-tone layer: a flat fill under the outline, at --duo opacity (0.28 by
+ * default, raised on active/selected icons). Inline so it survives <use>.
+ */
+const DUO = {
+	fill: "currentColor",
+	stroke: "none",
+	style: { opacity: "var(--duo, .28)" },
+} as const;
+
 export function IconSprite() {
 	return (
 		<svg
@@ -57,21 +88,136 @@ export function IconSprite() {
 			aria-hidden="true"
 		>
 			<defs>
+				{/* ── interface ── */}
 				<symbol id="i-lock" viewBox="0 0 24 24">
-					<rect x="5" y="11" width="14" height="10" rx="2.5" />
-					<path d="M8 11V7.5a4 4 0 0 1 8 0V11" />
+					<rect {...DUO} x="4.5" y="10.5" width="15" height="10.5" rx="3" />
+					<rect x="4.5" y="10.5" width="15" height="10.5" rx="3" />
+					<path d="M8 10.5V8.2a4 4 0 0 1 8 0v2.3" />
+					<path d="M12 14.6v2.2" />
 				</symbol>
 				<symbol id="i-check" viewBox="0 0 24 24">
-					<path d="M5 12.5l4.5 4.5L19 7.5" />
+					<path d="M4.8 12.9l4.4 4.3L19.3 7" />
 				</symbol>
 				<symbol id="i-x" viewBox="0 0 24 24">
 					<path d="M6.5 6.5l11 11M17.5 6.5l-11 11" />
 				</symbol>
+				<symbol id="i-plus" viewBox="0 0 24 24">
+					<path d="M12 5v14M5 12h14" />
+				</symbol>
+				<symbol id="i-minus" viewBox="0 0 24 24">
+					<path d="M5 12h14" />
+				</symbol>
+				<symbol id="i-chevron-left" viewBox="0 0 24 24">
+					<path d="M14.5 5.5L8 12l6.5 6.5" />
+				</symbol>
+				<symbol id="i-chevron-right" viewBox="0 0 24 24">
+					<path d="M9.5 5.5L16 12l-6.5 6.5" />
+				</symbol>
+				<symbol id="i-chevron-down" viewBox="0 0 24 24">
+					<path d="M5.5 9.5L12 16l6.5-6.5" />
+				</symbol>
+				<symbol id="i-arrow-up" viewBox="0 0 24 24">
+					<path d="M12 19.5V5M6 10.5L12 4.5l6 6" />
+				</symbol>
+				<symbol id="i-arrow-down" viewBox="0 0 24 24">
+					<path d="M12 4.5V19M6 13.5l6 6 6-6" />
+				</symbol>
+				<symbol id="i-arrow-right" viewBox="0 0 24 24">
+					<path d="M4.5 12H19M13.5 6l6 6-6 6" />
+				</symbol>
+				<symbol id="i-expand" viewBox="0 0 24 24">
+					<rect {...DUO} x="6.5" y="6.5" width="11" height="11" rx="2" />
+					<path d="M4 9V5.5A1.5 1.5 0 0 1 5.5 4H9M15 4h3.5A1.5 1.5 0 0 1 20 5.5V9M20 15v3.5a1.5 1.5 0 0 1-1.5 1.5H15M9 20H5.5A1.5 1.5 0 0 1 4 18.5V15" />
+				</symbol>
+				<symbol id="i-fit" viewBox="0 0 24 24">
+					<circle {...DUO} cx="12" cy="12" r="4" />
+					<circle cx="12" cy="12" r="4" />
+					<path d="M12 2.5V6M12 18v3.5M2.5 12H6M18 12h3.5" />
+				</symbol>
+				<symbol id="i-map" viewBox="0 0 24 24">
+					<path {...DUO} d="M9 4.2l6 2.3v13.3l-6-2.3z" />
+					<path d="M3.5 6.6L9 4.2l6 2.3 5.5-2.4v13.3L15 19.8l-6-2.3-5.5 2.4z" />
+					<path d="M9 4.2v13.3M15 6.5v13.3" />
+					<path
+						d="M5.6 14.3c.9-.2 1.5-.8 1.9-1.6"
+						strokeWidth="1.6"
+						strokeDasharray="0.1 2.6"
+					/>
+				</symbol>
+				<symbol id="i-profile" viewBox="0 0 24 24">
+					<path {...DUO} d="M4.8 20.5c.4-4 3.3-6.6 7.2-6.6s6.8 2.6 7.2 6.6z" />
+					<circle {...DUO} cx="12" cy="8" r="3.9" />
+					<circle cx="12" cy="8" r="3.9" />
+					<path d="M4.8 20.5c.4-4 3.3-6.6 7.2-6.6s6.8 2.6 7.2 6.6z" />
+				</symbol>
+				<symbol id="i-settings" viewBox="0 0 24 24">
+					<path d="M4 6.5h16M4 12h16M4 17.5h16" />
+					<circle {...DUO} cx="9" cy="6.5" r="2.4" style={{ opacity: 1 }} />
+					<circle {...DUO} cx="15.5" cy="12" r="2.4" style={{ opacity: 1 }} />
+					<circle {...DUO} cx="7.5" cy="17.5" r="2.4" style={{ opacity: 1 }} />
+				</symbol>
+				<symbol id="i-sound-on" viewBox="0 0 24 24">
+					<path
+						{...DUO}
+						d="M3.5 10.2a1.2 1.2 0 0 1 1.2-1.2h2.6L11.5 5v14l-4.2-4H4.7a1.2 1.2 0 0 1-1.2-1.2z"
+					/>
+					<path d="M3.5 10.2a1.2 1.2 0 0 1 1.2-1.2h2.6L11.5 5v14l-4.2-4H4.7a1.2 1.2 0 0 1-1.2-1.2z" />
+					<path d="M15 9.2a4 4 0 0 1 0 5.6M17.9 6.4a8 8 0 0 1 0 11.2" />
+				</symbol>
+				<symbol id="i-sound-off" viewBox="0 0 24 24">
+					<path
+						{...DUO}
+						d="M3.5 10.2a1.2 1.2 0 0 1 1.2-1.2h2.6L11.5 5v14l-4.2-4H4.7a1.2 1.2 0 0 1-1.2-1.2z"
+					/>
+					<path d="M3.5 10.2a1.2 1.2 0 0 1 1.2-1.2h2.6L11.5 5v14l-4.2-4H4.7a1.2 1.2 0 0 1-1.2-1.2z" />
+					<path d="M15.5 9.5l5 5M20.5 9.5l-5 5" />
+				</symbol>
+				<symbol id="i-eye" viewBox="0 0 24 24">
+					<path
+						{...DUO}
+						d="M2.5 12S6 5.8 12 5.8 21.5 12 21.5 12 18 18.2 12 18.2 2.5 12 2.5 12z"
+					/>
+					<path d="M2.5 12S6 5.8 12 5.8 21.5 12 21.5 12 18 18.2 12 18.2 2.5 12 2.5 12z" />
+					<circle cx="12" cy="12" r="2.8" fill="currentColor" />
+				</symbol>
+				<symbol id="i-send" viewBox="0 0 24 24">
+					<path {...DUO} d="M20.5 3.5L3.5 10l6.5 3.5 3.5 7z" />
+					<path d="M20.5 3.5L3.5 10l6.5 3.5 3.5 7zM20.5 3.5L10 13.5" />
+				</symbol>
+				<symbol id="i-book" viewBox="0 0 24 24">
+					<path
+						{...DUO}
+						d="M12 6.6C10 5 7 4.6 3.2 5v13.6c3.8-.4 6.8 0 8.8 1.6z"
+					/>
+					<path d="M12 6.6C10 5 7 4.6 3.2 5v13.6c3.8-.4 6.8 0 8.8 1.6 2-1.6 5-2 8.8-1.6V5C17 4.6 14 5 12 6.6zM12 6.6v13.6" />
+				</symbol>
+				<symbol id="i-swords" viewBox="0 0 24 24">
+					<path {...DUO} d="M3.6 3.6l4.1.6 7.1 7.1-3.5 3.5-7.1-7.1z" />
+					<path d="M3.6 3.6l4.1.6 7.1 7.1M3.6 3.6l.6 4.1 7.1 7.1M10 17.4l7.4-7.4M14.6 14.6l5 5M20.4 3.6l-4.1.6-3.9 3.9M20.4 3.6l-.6 4.1-3.9 3.9M14 17.4L6.6 10M9.4 14.6l-5 5" />
+				</symbol>
+				<symbol id="i-columns" viewBox="0 0 24 24">
+					<rect {...DUO} x="3.5" y="4" width="17" height="5" rx="1.5" />
+					<rect x="3.5" y="4" width="17" height="16" rx="2.5" />
+					<path d="M3.5 9h17M8.5 13.5h8M8.5 16.5h5" />
+				</symbol>
+				{/* ── game ── */}
 				<symbol id="i-star" viewBox="0 0 24 24">
 					<path d="M12 2.6l2.9 5.9 6.5.9-4.7 4.6 1.1 6.5L12 17.4l-5.8 3.1 1.1-6.5L2.6 9.4l6.5-.9z" />
 				</symbol>
 				<symbol id="i-crown" viewBox="0 0 24 24">
-					<path d="M3 8l4.5 4L12 5l4.5 7L21 8l-2 11H5z" />
+					<path
+						{...DUO}
+						d="M3.5 8l4.6 4.2L12 5.2l3.9 7L20.5 8l-1.9 10H5.4z"
+						style={{ opacity: 1 }}
+					/>
+					<path
+						d="M3.5 8l4.6 4.2L12 5.2l3.9 7L20.5 8l-1.9 10H5.4zM5.4 21h13.2"
+						fill="none"
+						stroke="currentColor"
+						strokeWidth="2"
+						strokeLinejoin="round"
+						strokeLinecap="round"
+					/>
 				</symbol>
 				<symbol id="i-skull" viewBox="0 0 24 24">
 					<path d="M12 3a8 8 0 0 0-8 8c0 2.9 1.4 4.6 3 5.6V20a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1v-3.4c1.6-1 3-2.7 3-5.6a8 8 0 0 0-8-8z" />
@@ -80,7 +226,7 @@ export function IconSprite() {
 					<path d="M10.5 21v-2.5M13.5 21v-2.5" />
 				</symbol>
 				<symbol id="i-play" viewBox="0 0 24 24">
-					<path d="M8 5.5v13a1 1 0 0 0 1.5.9l10-6.5a1 1 0 0 0 0-1.7l-10-6.5A1 1 0 0 0 8 5.5z" />
+					<path d="M8 5.8v12.4a1.1 1.1 0 0 0 1.7.9l9.6-6.2a1.1 1.1 0 0 0 0-1.8L9.7 4.9A1.1 1.1 0 0 0 8 5.8z" />
 				</symbol>
 				<symbol id="i-zap" viewBox="0 0 24 24">
 					<path d="M13.5 2L4 13.5h7l-1 8.5L20 10h-7z" />
@@ -98,38 +244,64 @@ export function IconSprite() {
 					<path d="M12 20.5s-8.5-5-8.5-11A4.8 4.8 0 0 1 12 6.6a4.8 4.8 0 0 1 8.5 2.9c0 6-8.5 11-8.5 11z" />
 				</symbol>
 				<symbol id="i-key" viewBox="0 0 24 24">
-					<circle cx="8" cy="15" r="4.5" />
-					<path d="M11.2 11.8L20 3M16.5 6.5l3 3M14 9l2.5 2.5" />
+					<circle {...DUO} cx="8" cy="15.5" r="4.5" />
+					<circle cx="8" cy="15.5" r="4.5" />
+					<circle cx="8" cy="15.5" r="1.2" fill="currentColor" stroke="none" />
+					<path d="M11.2 12.3L19.5 4M16 7.5l2.8 2.8M13.6 9.9l2 2" />
 				</symbol>
 				<symbol id="i-link" viewBox="0 0 24 24">
 					<path d="M10 14a4.5 4.5 0 0 0 6.4 0l3-3a4.5 4.5 0 0 0-6.4-6.4l-1 1M14 10a4.5 4.5 0 0 0-6.4 0l-3 3a4.5 4.5 0 0 0 6.4 6.4l1-1" />
 				</symbol>
 				<symbol id="i-bulb" viewBox="0 0 24 24">
-					<path d="M9 18h6M10 21.5h4M12 2.5a6.5 6.5 0 0 0-4 11.6c.7.6 1 1.3 1 2.4h6c0-1.1.3-1.8 1-2.4a6.5 6.5 0 0 0-4-11.6z" />
+					<path
+						{...DUO}
+						d="M12 2.8a6.4 6.4 0 0 0-3.9 11.5c.7.6 1 1.3 1 2.2h5.8c0-.9.3-1.6 1-2.2A6.4 6.4 0 0 0 12 2.8z"
+					/>
+					<path d="M9.2 19h5.6M10.2 21.6h3.6M12 2.8a6.4 6.4 0 0 0-3.9 11.5c.7.6 1 1.3 1 2.2h5.8c0-.9.3-1.6 1-2.2A6.4 6.4 0 0 0 12 2.8z" />
+					<path d="M12 6.5a3 3 0 0 0-3 3" strokeWidth="1.6" />
 				</symbol>
 				<symbol id="i-chest" viewBox="0 0 24 24">
+					<path {...DUO} d="M3 10a5 5 0 0 1 5-5h8a5 5 0 0 1 5 5v2H3z" />
 					<path d="M3 10a5 5 0 0 1 5-5h8a5 5 0 0 1 5 5v9a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 19z" />
 					<path d="M3 12h18" />
 					<rect x="10" y="10" width="4" height="5" rx="1.2" />
+				</symbol>
+				<symbol id="i-database" viewBox="0 0 24 24">
+					<ellipse {...DUO} cx="12" cy="6" rx="7.5" ry="3" />
+					<ellipse cx="12" cy="6" rx="7.5" ry="3" />
+					<path d="M4.5 6v12c0 1.7 3.4 3 7.5 3s7.5-1.3 7.5-3V6M4.5 12c0 1.7 3.4 3 7.5 3s7.5-1.3 7.5-3" />
 				</symbol>
 				<symbol id="i-wand" viewBox="0 0 24 24">
 					<path d="M4 20l10-10M15 3v2.5M15 12.5V15M8.5 8.5h2.5M19 8.5h2.5M18.2 5.3l1.6-1.6M18.2 11.7l1.6 1.6M11.8 5.3l-1.6-1.6" />
 				</symbol>
 				<symbol id="i-table" viewBox="0 0 24 24">
-					<rect x="3" y="4" width="18" height="16" rx="2.5" />
-					<path d="M3 10h18M9.5 10v10" />
+					<path
+						{...DUO}
+						d="M3.5 6.5A2.5 2.5 0 0 1 6 4h12a2.5 2.5 0 0 1 2.5 2.5V9.5h-17z"
+					/>
+					<rect x="3.5" y="4" width="17" height="16" rx="2.5" />
+					<path d="M3.5 9.5h17M3.5 14.7h17M9.5 9.5V20" />
 				</symbol>
 				<symbol id="i-scroll" viewBox="0 0 24 24">
 					<path d="M8 21h10a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v12" />
 					<path d="M5 17a2 2 0 1 0 0 4h3v-4zM9 8h7M9 12h7" />
 				</symbol>
 				<symbol id="i-dumbbell" viewBox="0 0 24 24">
-					<path d="M6.5 6v12M17.5 6v12M3.5 9v6M20.5 9v6M6.5 12h11" />
+					<rect {...DUO} x="5" y="5.5" width="3.5" height="13" rx="1.4" />
+					<rect {...DUO} x="15.5" y="5.5" width="3.5" height="13" rx="1.4" />
+					<rect x="5" y="5.5" width="3.5" height="13" rx="1.4" />
+					<rect x="15.5" y="5.5" width="3.5" height="13" rx="1.4" />
+					<path d="M8.5 12h7M2.5 9.5v5M21.5 9.5v5" />
 				</symbol>
 				<symbol id="i-moon" viewBox="0 0 24 24">
+					<path
+						{...DUO}
+						d="M20.5 13.5A8.5 8.5 0 1 1 10.5 3.5a6.5 6.5 0 0 0 10 10z"
+					/>
 					<path d="M20.5 13.5A8.5 8.5 0 1 1 10.5 3.5a6.5 6.5 0 0 0 10 10z" />
 				</symbol>
 				<symbol id="i-sun" viewBox="0 0 24 24">
+					<circle {...DUO} cx="12" cy="12" r="4.5" />
 					<circle cx="12" cy="12" r="4.5" />
 					<path d="M12 2v2M12 20v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M2 12h2M20 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4" />
 				</symbol>
@@ -141,46 +313,68 @@ export function IconSprite() {
 					<path d="M12 2.5l2 6.5 6.5 2-6.5 2-2 6.5-2-6.5-6.5-2 6.5-2z" />
 				</symbol>
 				<symbol id="i-trophy" viewBox="0 0 24 24">
-					<path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0z" />
+					<path {...DUO} d="M7 4h10v5a5 5 0 0 1-10 0z" />
+					<path d="M8 21h8M12 14v7M7 4h10v5a5 5 0 0 1-10 0z" />
 					<path d="M7 6H4.5a2.5 2.5 0 0 0 2.5 4M17 6h2.5A2.5 2.5 0 0 1 17 10" />
 				</symbol>
 				<symbol id="i-clock" viewBox="0 0 24 24">
+					<circle {...DUO} cx="12" cy="12" r="9" />
 					<circle cx="12" cy="12" r="9" />
 					<path d="M12 7v5l3 2" />
 				</symbol>
 				<symbol id="i-target" viewBox="0 0 24 24">
 					<circle cx="12" cy="12" r="9" />
+					<circle {...DUO} cx="12" cy="12" r="5" />
 					<circle cx="12" cy="12" r="5" />
-					<circle cx="12" cy="12" r="1.5" />
+					<circle cx="12" cy="12" r="1.5" fill="currentColor" />
 				</symbol>
+				{/* ── world banners ── */}
 				<symbol id="w-mug" viewBox="0 0 24 24">
+					<path {...DUO} d="M5 11h10v7a3 3 0 0 1-3 3H8a3 3 0 0 1-3-3z" />
 					<path d="M5 9h10v9a3 3 0 0 1-3 3H8a3 3 0 0 1-3-3z" />
 					<path d="M15 11h2a3 3 0 0 1 0 6h-2M7.5 5c0 1 1 1.3 1 2.5M11 3.5c0 1 1 1.3 1 2.5" />
 				</symbol>
 				<symbol id="w-coin" viewBox="0 0 24 24">
+					<circle {...DUO} cx="12" cy="12" r="8.5" />
 					<circle cx="12" cy="12" r="8.5" />
 					<path d="M12 7v10M14.5 9.5h-3.5a1.75 1.75 0 0 0 0 3.5h2a1.75 1.75 0 0 1 0 3.5H9.5" />
 				</symbol>
 				<symbol id="w-bridge" viewBox="0 0 24 24">
+					<path {...DUO} d="M4 21v-4a8 6.5 0 0 1 16 0v4z" />
 					<path d="M1.5 9h21M3 9v3M21 9v3M4 21v-4a8 6.5 0 0 1 16 0v4M8 9v3.6M12 9v2.4M16 9v3.6M2 21h20" />
 				</symbol>
 				<symbol id="w-arch" viewBox="0 0 24 24">
+					<path
+						{...DUO}
+						d="M4 21V11a8 8 0 0 1 16 0v10h-4v-9a4 4 0 0 0-8 0v9z"
+					/>
 					<path d="M4 21V11a8 8 0 0 1 16 0v10" />
 					<path d="M8 21v-9a4 4 0 0 1 8 0v9M2.5 21h19" />
 				</symbol>
 				<symbol id="w-scope" viewBox="0 0 24 24">
+					<path {...DUO} d="M3.5 14.5l12-6 2 4-12 6z" />
 					<path d="M3.5 14.5l12-6 2 4-12 6zM17.5 6.5l2-1 2 4-2 1M10 16l-3 5.5M11.5 15.5l3 5.5" />
 				</symbol>
 				<symbol id="w-anvil" viewBox="0 0 24 24">
+					<path
+						{...DUO}
+						d="M3 7h13a5 5 0 0 1-5 5H10v3h3l2 5H5l2-5h2v-3C5.5 12 3 10 3 7z"
+					/>
 					<path d="M3 7h13a5 5 0 0 1-5 5H10v3h3l2 5H5l2-5h2v-3C5.5 12 3 10 3 7zM16 7h5" />
 				</symbol>
 				<symbol id="w-tower" viewBox="0 0 24 24">
+					<path {...DUO} d="M7 9h10v12H7z" />
 					<path d="M7 21V9h10v12M5.5 9h13M7 9V4.5h2v2h2v-2h2v2h2v-2h2V9M10 21v-4a2 2 0 0 1 4 0v4M4 21h16" />
 				</symbol>
 				<symbol id="w-flask" viewBox="0 0 24 24">
+					<path
+						{...DUO}
+						d="M7 15h10l2.4 3.5A1.7 1.7 0 0 1 18 21H6a1.7 1.7 0 0 1-1.4-2.5z"
+					/>
 					<path d="M9 3h6M10 3v6L4.6 18.5A1.7 1.7 0 0 0 6 21h12a1.7 1.7 0 0 0 1.4-2.5L14 9V3M7 15h10" />
 				</symbol>
 				<symbol id="w-book" viewBox="0 0 24 24">
+					<path {...DUO} d="M12 6.5C10 4.8 7 4.5 3 5v14c4-.5 7-.2 9 1.5z" />
 					<path d="M12 6.5C10 4.8 7 4.5 3 5v14c4-.5 7-.2 9 1.5 2-1.7 5-2 9-1.5V5c-4-.5-7-.2-9 1.5zM12 6.5v14" />
 				</symbol>
 				<symbol id="w-gear" viewBox="0 0 24 24">
@@ -191,9 +385,11 @@ export function IconSprite() {
 						strokeDasharray="3.1 2.4"
 						strokeWidth="4"
 					/>
+					<circle {...DUO} cx="12" cy="12" r="5" />
 					<circle cx="12" cy="12" r="3" />
 				</symbol>
 				<symbol id="w-spire" viewBox="0 0 24 24">
+					<path {...DUO} d="M12 2l3 7.5V21H9V9.5z" />
 					<path d="M12 2l3 7.5V21H9V9.5zM9 14h6M5 21h14M19 4l.7 1.6 1.6.7-1.6.7L19 8.6l-.7-1.6-1.6-.7 1.6-.7z" />
 				</symbol>
 			</defs>

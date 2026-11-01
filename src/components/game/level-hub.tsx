@@ -1,14 +1,6 @@
 import { Link } from "@tanstack/react-router";
-import {
-	BookOpen,
-	Check,
-	ChevronLeft,
-	Crown,
-	Lock,
-	Play,
-	Swords,
-} from "lucide-react";
 import { motion } from "motion/react";
+import { GameIcon } from "#/components/game/icons";
 import type { Chapter } from "#/content/types";
 import { MASTERY_THRESHOLD } from "#/engine/adaptive";
 import type { ChapterStatus } from "#/engine/adaptive/types";
@@ -89,7 +81,7 @@ export function LevelHub({
 				to="/"
 				className="tap-target mb-4 inline-flex items-center gap-1 text-sm font-semibold text-muted-foreground no-underline hover:text-foreground"
 			>
-				<ChevronLeft className="size-4" /> World map
+				<GameIcon name="chevron-left" className="size-4" /> World map
 			</Link>
 			<motion.header
 				initial={{ opacity: 0, y: 12 }}
@@ -113,7 +105,7 @@ export function LevelHub({
 				<div className="px-5 pt-4 sm:px-6">
 					<p className="text-muted-foreground">{chapter.subtitle}</p>
 					<p className="mt-1 text-xs font-bold text-muted-foreground">
-						Treasure: {dataset?.name}
+						Dataset: {dataset?.name}
 					</p>
 				</div>
 				<div className="relative grid gap-3 px-5 pt-4 pb-5 sm:grid-cols-2 sm:px-6">
@@ -136,7 +128,7 @@ export function LevelHub({
 			<ol className="relative space-y-3 before:absolute before:top-4 before:bottom-4 before:left-[27px] before:w-1 before:rounded-full before:bg-secondary">
 				<HubStep
 					index={0}
-					icon={<BookOpen className="size-5" />}
+					icon={<GameIcon name="book" className="size-5" />}
 					title="Learn"
 					subtitle={`${chapter.lesson.length} cards: concepts, examples, a quiz, a guided try`}
 					state={status.lessonDone ? "done" : "open"}
@@ -169,7 +161,7 @@ export function LevelHub({
 						className="relative ml-16 rounded-2xl border-2 border-info/50 bg-info-soft p-4 text-info-soft-foreground"
 					>
 						<div className="flex items-center gap-2 font-display text-xl">
-							<Swords className="size-5" /> Practice gauntlet
+							<GameIcon name="swords" className="size-5" /> Practice gauntlet
 						</div>
 						<ul className="mt-1 space-y-0.5 text-sm text-foreground">
 							{status.reasons.map((r) => (
@@ -201,9 +193,15 @@ export function LevelHub({
 												{ex?.title ?? id}
 											</span>
 											{cleared ? (
-												<Check className="size-4 text-success" />
+												<GameIcon
+													name="check"
+													className="size-4 text-success"
+												/>
 											) : (
-												<Play className="size-4 text-destructive" />
+												<GameIcon
+													name="play"
+													className="size-4 text-destructive"
+												/>
 											)}
 										</div>
 										<div className="mt-0.5 text-xs text-muted-foreground">
@@ -218,7 +216,7 @@ export function LevelHub({
 				{boss ? (
 					<HubStep
 						index={mains.length + 1}
-						icon={<Crown className="size-5" />}
+						icon={<GameIcon name="crown" className="size-5" />}
 						title={
 							/^boss\b/i.test(boss.title) ? boss.title : `Boss: ${boss.title}`
 						}
@@ -302,9 +300,9 @@ function HubStep({
 				}
 			>
 				{state === "done" ? (
-					<Check className="size-6" />
+					<GameIcon name="check" className="size-6" />
 				) : state === "locked" ? (
-					<Lock className="size-5" />
+					<GameIcon name="lock" className="size-5" />
 				) : (
 					icon
 				)}

@@ -9,9 +9,9 @@ import {
 	tableFeatures,
 	useTable,
 } from "@tanstack/react-table";
-import { ArrowDown, ArrowUp, Trophy } from "lucide-react";
 import { motion } from "motion/react";
 import { useMemo } from "react";
+import { GameIcon } from "#/components/game/icons";
 import { SkillRadar } from "#/components/game/skill-radar";
 import { Splash } from "#/components/game/splash";
 import { StarRow } from "#/components/game/stars";
@@ -234,9 +234,9 @@ function SortableTable({
 										>
 											<table.FlexRender header={h} />
 											{sorted === "asc" ? (
-												<ArrowUp className="size-3" />
+												<GameIcon name="arrow-up" className="size-3" />
 											) : sorted === "desc" ? (
-												<ArrowDown className="size-3" />
+												<GameIcon name="arrow-down" className="size-3" />
 											) : null}
 										</button>
 									</th>
@@ -379,7 +379,8 @@ function Leaderboard() {
 	return (
 		<section className="panel p-5">
 			<h2 className="mb-3 flex items-center gap-2 font-display text-lg text-foreground">
-				<Trophy className="size-5 text-(--syn-keyword)" /> Leaderboard
+				<GameIcon name="trophy" className="size-5 text-(--syn-keyword)" />{" "}
+				Leaderboard
 			</h2>
 			{isLoading ? (
 				<p className="text-sm text-muted-foreground">Loading…</p>

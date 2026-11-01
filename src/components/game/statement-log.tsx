@@ -20,7 +20,7 @@ export function StatementLog({
 	return (
 		<div className={cn("panel overflow-hidden", className)}>
 			<div className="flex items-center gap-2 border-b-2 border-border px-3.5 py-2.5">
-				<span className="font-extrabold">Spell log</span>
+				<span className="font-extrabold">Statement log</span>
 				<span className="text-sm text-muted-foreground tabular">
 					{statements.length} statements
 				</span>

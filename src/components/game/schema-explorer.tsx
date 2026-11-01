@@ -1,17 +1,18 @@
 import {
 	Background,
-	Controls,
 	type Edge,
 	Handle,
 	type Node,
 	type NodeProps,
+	Panel,
 	Position,
 	ReactFlow,
+	useReactFlow,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { Eye, X } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
+import { Dialog as DialogPrimitive } from "radix-ui";
 import {
 	createContext,
 	use,
@@ -27,6 +28,7 @@ import type {
 } from "#/engine/checker/pglite-provider";
 import { sqlClient } from "#/engine/sql/client";
 import { useCatalog, usePeek } from "#/game/sql-queries";
+import { useIsDesktop } from "#/hooks/use-media";
 import { datasetById } from "#/lib/content";
 import { cn } from "#/lib/utils";
 import { Badge } from "../ui/badge";
@@ -272,10 +274,15 @@ function ChestColumn({
 export function Chest({
 	table,
 	compact,
+	columns,
 }: {
 	table: CatalogTable;
 	compact?: boolean;
+	/** Subset of columns to list (diagram "keys only"); the rest are counted. */
+	columns?: CatalogColumn[];
 }) {
+	const shown = columns ?? table.columns;
+	const hidden = table.columns.length - shown.length;
 	const ctx = use(Ctx);
 	const lit = !!ctx?.active.has(table.name);
 	const dim =
@@ -302,15 +309,15 @@ export function Chest({
 					type="button"
 					className="lid w-full text-left"
 					onClick={() => ctx?.onPeek(table.name)}
-					title="Peek at the loot"
+					title="Preview rows"
 				>
 					<span className="ico">
-						<GameIcon name="chest" />
+						<GameIcon name="table" />
 					</span>
 					<span className="nm truncate">{table.name}</span>
 					<span className="rows flex items-center gap-1 tabular">
 						{table.kind !== "table" ? `${table.kind} · ` : ""}
-						{table.rowCount} rows <Eye className="size-3.5" />
+						{table.rowCount} rows <GameIcon name="eye" className="size-3.5" />
 					</span>
 				</button>
 				{!compact && ctx?.notes?.[table.name] ? (
@@ -319,14 +326,19 @@ export function Chest({
 					</p>
 				) : null}
 				<ul className="chest-cols">
-					{table.columns.map((c) => (
+					{shown.map((c) => (
 						<ChestColumn key={c.name} table={table} col={c} />
 					))}
 				</ul>
+				{hidden > 0 ? (
+					<p className="-mt-1 px-3 pb-2.5 text-xs font-bold text-muted-foreground">
+						+ {hidden} more column{hidden === 1 ? "" : "s"}
+					</p>
+				) : null}
 				{lit || isNew ? (
 					<div className="flex gap-2 px-3 pb-3">
-						{isNew ? <Badge variant="success">+ New chest</Badge> : null}
-						{lit ? <span className="lit-tag">+ In your spell</span> : null}
+						{isNew ? <Badge variant="success">New table</Badge> : null}
+						{lit ? <span className="lit-tag">In your query</span> : null}
 					</div>
 				) : null}
 			</Card>
@@ -336,20 +348,24 @@ export function Chest({
 
 // ───────────────────────────── diagram (React Flow)
 
-type TableNodeData = { table: CatalogTable };
+type TableNodeData = { table: CatalogTable; columns: CatalogColumn[] };
+
+/** Column handle geometry, matched to the compact table card. */
+const HANDLE_TOP = 62;
+const ROW_H = 31;
 
 function TableNode({ data }: NodeProps<Node<TableNodeData>>) {
 	const t = data.table;
 	return (
 		<div className="relative">
-			{t.columns.map((c, i) => (
+			{data.columns.map((c, i) => (
 				<span key={c.name}>
 					<Handle
 						type="target"
 						position={Position.Left}
 						id={`${c.name}-t`}
 						className="!size-1.5 !border-0 !bg-transparent"
-						style={{ top: 62 + i * 31 }}
+						style={{ top: HANDLE_TOP + i * ROW_H }}
 						isConnectable={false}
 					/>
 					<Handle
@@ -357,19 +373,45 @@ function TableNode({ data }: NodeProps<Node<TableNodeData>>) {
 						position={Position.Right}
 						id={`${c.name}-s`}
 						className="!size-1.5 !border-0 !bg-transparent"
-						style={{ top: 62 + i * 31 }}
+						style={{ top: HANDLE_TOP + i * ROW_H }}
 						isConnectable={false}
 					/>
 				</span>
 			))}
-			<Chest table={t} compact />
+			<Chest table={t} compact columns={data.columns} />
 		</div>
 	);
 }
 
 const nodeTypes = { table: TableNode };
 
-function layout(catalog: Catalog): Node<TableNodeData>[] {
+/** Columns drawn in the diagram: all, or only keys (PK, FK, referenced). */
+function diagramColumns(catalog: Catalog, keysOnly: boolean) {
+	const referenced = new Set<string>();
+	for (const t of catalog.tables)
+		for (const c of t.columns)
+			if (c.references)
+				referenced.add(`${c.references.table}.${c.references.column}`);
+	const out = new Map<string, CatalogColumn[]>();
+	for (const t of catalog.tables)
+		out.set(
+			t.name,
+			keysOnly
+				? t.columns.filter(
+						(c) =>
+							c.isPrimaryKey ||
+							!!c.references ||
+							referenced.has(`${t.name}.${c.name}`),
+					)
+				: t.columns,
+		);
+	return out;
+}
+
+function layout(
+	catalog: Catalog,
+	columns: Map<string, CatalogColumn[]>,
+): Node<TableNodeData>[] {
 	const level = new Map<string, number>();
 	const tables = catalog.tables;
 	const depth = (name: string, seen = new Set<string>()): number => {
@@ -389,26 +431,128 @@ function layout(catalog: Catalog): Node<TableNodeData>[] {
 	for (const t of tables) depth(t.name);
 	const cols = new Map<number, number>();
 	return tables.map((t) => {
+		const shown = columns.get(t.name) ?? t.columns;
 		const l = level.get(t.name) ?? 0;
 		const row = cols.get(l) ?? 0;
-		cols.set(l, row + t.columns.length * 31 + 110);
+		const extra = shown.length < t.columns.length ? 26 : 0;
+		cols.set(l, row + shown.length * ROW_H + 110 + extra);
 		return {
 			id: t.name,
 			type: "table",
 			position: { x: l * 300, y: row },
-			data: { table: t },
+			data: { table: t, columns: shown },
 		};
 	});
 }
 
-function Diagram({ catalog }: { catalog: Catalog }) {
+/** Tables one foreign key away from `name` (both directions). */
+function relatedTables(catalog: Catalog, name: string | null): Set<string> {
+	const s = new Set<string>();
+	if (!name) return s;
+	for (const t of catalog.tables)
+		for (const c of t.columns)
+			if (c.references) {
+				if (t.name === name) s.add(c.references.table);
+				if (c.references.table === name) s.add(t.name);
+			}
+	s.delete(name);
+	return s;
+}
+
+function FlowControls({ onExpand }: { onExpand?: () => void }) {
+	const rf = useReactFlow();
+	return (
+		<Panel position="bottom-right" className="flow-controls">
+			<button
+				type="button"
+				aria-label="Zoom in"
+				onClick={() => rf.zoomIn({ duration: 200 })}
+			>
+				<GameIcon name="plus" />
+			</button>
+			<button
+				type="button"
+				aria-label="Zoom out"
+				onClick={() => rf.zoomOut({ duration: 200 })}
+			>
+				<GameIcon name="minus" />
+			</button>
+			<button
+				type="button"
+				aria-label="Fit the whole schema"
+				onClick={() => rf.fitView({ padding: 0.12, duration: 300 })}
+			>
+				<GameIcon name="fit" />
+			</button>
+			{onExpand ? (
+				<button type="button" aria-label="Open full screen" onClick={onExpand}>
+					<GameIcon name="expand" />
+				</button>
+			) : null}
+		</Panel>
+	);
+}
+
+/** Frames the focused table (or the whole schema) when focus or layout changes. */
+function FocusFit({
+	focus,
+	layoutKey,
+}: {
+	focus: string | null;
+	layoutKey: string;
+}) {
+	const rf = useReactFlow();
+	const mounted = useRef(false);
+	// biome-ignore lint/correctness/useExhaustiveDependencies: refit on focus or layout change
+	useEffect(() => {
+		// First run waits for React Flow to measure the nodes.
+		const delay = mounted.current ? 30 : 280;
+		mounted.current = true;
+		const t = setTimeout(
+			() =>
+				// A focused table is framed on its own, readable; its links glow
+				// off toward the neighbours (dimmed tables stay in place).
+				rf.fitView({
+					nodes: focus ? [{ id: focus }] : undefined,
+					padding: focus ? 0.2 : 0.12,
+					maxZoom: 1,
+					duration: 320,
+				}),
+			delay,
+		);
+		return () => clearTimeout(t);
+	}, [focus, layoutKey]);
+	return null;
+}
+
+function Flow({
+	catalog,
+	keysOnly = false,
+	focus = null,
+	onFocus,
+	interactive = true,
+	onExpand,
+}: {
+	catalog: Catalog;
+	keysOnly?: boolean;
+	focus?: string | null;
+	onFocus?: (t: string | null) => void;
+	interactive?: boolean;
+	onExpand?: () => void;
+}) {
 	const ctx = use(Ctx);
-	const nodes = useMemo(() => layout(catalog), [catalog]);
+	const columns = useMemo(
+		() => diagramColumns(catalog, keysOnly),
+		[catalog, keysOnly],
+	);
+	const nodes = useMemo(() => layout(catalog, columns), [catalog, columns]);
 	const edges = useMemo<Edge[]>(() => {
 		const out: Edge[] = [];
 		for (const t of catalog.tables)
 			for (const c of t.columns)
 				if (c.references) {
+					const touchesFocus =
+						!!focus && (t.name === focus || c.references.table === focus);
 					const both =
 						!!ctx?.active.has(t.name) && !!ctx.active.has(c.references.table);
 					out.push({
@@ -418,11 +562,17 @@ function Diagram({ catalog }: { catalog: Catalog }) {
 						target: t.name,
 						targetHandle: `${c.name}-t`,
 						type: "smoothstep",
-						className: both ? "is-referenced" : undefined,
+						className: focus
+							? touchesFocus
+								? "is-referenced"
+								: "is-dim"
+							: both
+								? "is-referenced"
+								: undefined,
 					});
 				}
 		return out;
-	}, [catalog, ctx?.active]);
+	}, [catalog, ctx?.active, focus]);
 	const dark =
 		typeof document !== "undefined" &&
 		document.documentElement.classList.contains("dark");
@@ -433,15 +583,302 @@ function Diagram({ catalog }: { catalog: Catalog }) {
 			nodeTypes={nodeTypes}
 			fitView
 			fitViewOptions={{ padding: 0.12 }}
-			minZoom={0.25}
-			maxZoom={1.5}
+			minZoom={0.15}
+			maxZoom={2.5}
 			nodesConnectable={false}
+			nodesDraggable={false}
+			elementsSelectable={false}
+			panOnDrag={interactive}
+			zoomOnPinch={interactive}
+			zoomOnScroll={interactive}
+			zoomOnDoubleClick={interactive}
+			preventScrolling={interactive}
+			onNodeClick={onFocus ? (_, n) => onFocus(n.id) : undefined}
+			onPaneClick={onFocus ? () => onFocus(null) : undefined}
 			proOptions={{ hideAttribution: true }}
 			colorMode={dark ? "dark" : "light"}
 		>
 			<Background gap={22} size={1.2} color="var(--border)" />
-			<Controls showInteractive={false} position="bottom-right" />
+			{interactive ? <FlowControls onExpand={onExpand} /> : null}
+			{interactive ? (
+				<FocusFit focus={focus} layoutKey={String(keysOnly)} />
+			) : null}
 		</ReactFlow>
+	);
+}
+
+/** Every foreign key as a readable line: child.column → parent.column. */
+function Relationships({
+	catalog,
+	onPick,
+}: {
+	catalog: Catalog;
+	onPick: (table: string) => void;
+}) {
+	const rels = catalog.tables.flatMap((t) =>
+		t.columns
+			.filter((c) => c.references)
+			.map((c) => ({
+				id: `${t.name}.${c.name}`,
+				from: t.name,
+				col: c.name,
+				to: c.references?.table ?? "",
+				toCol: c.references?.column ?? "",
+			})),
+	);
+	return (
+		<section aria-label="Relationships">
+			<h3 className="mb-2 px-1 text-xs font-extrabold tracking-[.08em] text-muted-foreground uppercase">
+				Relationships (foreign keys)
+			</h3>
+			{rels.length ? (
+				<ul className="rel-list">
+					{rels.map((r) => (
+						<li key={r.id}>
+							<button type="button" onClick={() => onPick(r.from)}>
+								<span className="rel-from">
+									<GameIcon name="link" className="size-4" />
+									<span>
+										{r.from}.<b>{r.col}</b>
+									</span>
+								</span>
+								<span className="rel-to">
+									<GameIcon name="arrow-right" className="size-4" />
+									<span>
+										{r.to}.<b>{r.toCol}</b>
+									</span>
+								</span>
+							</button>
+						</li>
+					))}
+				</ul>
+			) : (
+				<p className="px-1 text-sm text-muted-foreground">
+					No foreign keys in this schema: the tables stand alone.
+				</p>
+			)}
+		</section>
+	);
+}
+
+/**
+ * Full screen diagram: the whole viewport for pinch and pan (no sheet to fight
+ * with), zoom buttons, a table picker that frames a table and its neighbours,
+ * and a "keys only" switch that shrinks every table to its key columns.
+ */
+function DiagramFullscreen({
+	open,
+	onOpenChange,
+	catalog,
+	datasetId,
+	initialFocus,
+	world,
+}: {
+	open: boolean;
+	onOpenChange: (o: boolean) => void;
+	catalog: Catalog;
+	datasetId: string;
+	initialFocus: string | null;
+	world?: string;
+}) {
+	const parent = use(Ctx);
+	const [focus, setFocus] = useState<string | null>(initialFocus);
+	const [keysOnly, setKeysOnly] = useState(false);
+	const [peek, setPeek] = useState<string | null>(null);
+	useEffect(() => {
+		if (open) {
+			setFocus(initialFocus);
+			setPeek(null);
+		}
+	}, [open, initialFocus]);
+	const related = useMemo(
+		() => relatedTables(catalog, focus),
+		[catalog, focus],
+	);
+	const ctx: ExplorerCtx | null = parent
+		? {
+				...parent,
+				hovered: focus,
+				setHovered: () => {},
+				related,
+				onPeek: (t) => setFocus(t),
+			}
+		: null;
+	const focused = catalog.tables.find((t) => t.name === focus);
+	const chipsRef = useRef<HTMLDivElement>(null);
+	useEffect(() => {
+		if (!focus) return;
+		chipsRef.current
+			?.querySelector<HTMLElement>(`[data-table="${CSS.escape(focus)}"]`)
+			?.scrollIntoView({
+				inline: "center",
+				block: "nearest",
+				behavior: "smooth",
+			});
+	}, [focus]);
+	return (
+		<DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
+			<DialogPrimitive.Portal>
+				<DialogPrimitive.Content
+					className="diagram-full fixed inset-0 z-[60] flex flex-col bg-background pt-safe pb-safe outline-none"
+					data-world={world}
+					aria-describedby={undefined}
+				>
+					<header className="flex items-center gap-2 border-b-2 border-border bg-card px-safe-3 py-2">
+						<DialogPrimitive.Title className="min-w-0 flex-1 truncate font-display text-xl">
+							Schema diagram
+						</DialogPrimitive.Title>
+						<button
+							type="button"
+							className="diagram-chip tap-target"
+							aria-pressed={keysOnly}
+							onClick={() => setKeysOnly((k) => !k)}
+						>
+							<GameIcon name="key" className="size-4" /> Keys only
+						</button>
+						<DialogPrimitive.Close
+							className="grid size-11 place-items-center rounded-md hover:bg-accent"
+							aria-label="Close the diagram"
+						>
+							<GameIcon name="x" className="size-6" />
+						</DialogPrimitive.Close>
+					</header>
+					<div
+						ref={chipsRef}
+						className="diagram-chips"
+						role="toolbar"
+						aria-label="Focus a table"
+					>
+						{catalog.tables.map((t) => (
+							<button
+								key={t.name}
+								type="button"
+								data-table={t.name}
+								className="diagram-chip tap-target"
+								aria-pressed={focus === t.name}
+								onClick={() => setFocus(focus === t.name ? null : t.name)}
+							>
+								{t.name}
+							</button>
+						))}
+					</div>
+					<div className="relative min-h-0 flex-1">
+						<Ctx value={ctx}>
+							<Flow
+								catalog={catalog}
+								keysOnly={keysOnly}
+								focus={focus}
+								onFocus={setFocus}
+							/>
+						</Ctx>
+						<div className="pointer-events-none absolute inset-x-3 bottom-3 right-[72px] flex">
+							{focused ? (
+								<div className="pointer-events-auto flex min-w-0 flex-1 items-center gap-2 rounded-xl border-2 border-border bg-card p-2 pl-3 shadow-[0_3px_0_var(--ledge)]">
+									<div className="min-w-0 flex-1">
+										<div className="truncate font-mono text-sm font-bold">
+											{focused.name}
+										</div>
+										<div className="text-xs font-bold text-muted-foreground tabular">
+											{focused.rowCount} rows · {focused.columns.length} columns
+											{related.size ? ` · linked to ${related.size}` : ""}
+										</div>
+									</div>
+									<button
+										type="button"
+										className="diagram-chip tap-target"
+										onClick={() => setPeek(focused.name)}
+									>
+										<GameIcon name="eye" className="size-4" /> Rows
+									</button>
+								</div>
+							) : (
+								<p className="rounded-lg bg-card/90 px-3 py-1.5 text-xs font-bold text-muted-foreground">
+									Pinch to zoom, drag to move, tap a table to focus it.
+								</p>
+							)}
+						</div>
+						<AnimatePresence>
+							{peek ? (
+								<PeekPanel
+									key={peek}
+									datasetId={datasetId}
+									table={peek}
+									onClose={() => setPeek(null)}
+								/>
+							) : null}
+						</AnimatePresence>
+					</div>
+				</DialogPrimitive.Content>
+			</DialogPrimitive.Portal>
+		</DialogPrimitive.Root>
+	);
+}
+
+/**
+ * Diagram tab. Desktop: the live diagram in the panel. Phone: a still preview
+ * that opens the full screen viewer (pinching inside a sheet drags the sheet),
+ * plus the foreign keys as a list that reads without zooming.
+ */
+function DiagramView({
+	catalog,
+	datasetId,
+}: {
+	catalog: Catalog;
+	datasetId: string;
+}) {
+	const isDesktop = useIsDesktop();
+	const [open, setOpen] = useState(false);
+	const [focus, setFocus] = useState<string | null>(null);
+	const [world, setWorld] = useState<string | undefined>();
+	const rootRef = useRef<HTMLDivElement>(null);
+	const openAt = (t: string | null) => {
+		setWorld(
+			rootRef.current?.closest("[data-world]")?.getAttribute("data-world") ??
+				undefined,
+		);
+		setFocus(t);
+		setOpen(true);
+	};
+	const full = (
+		<DiagramFullscreen
+			open={open}
+			onOpenChange={setOpen}
+			catalog={catalog}
+			datasetId={datasetId}
+			initialFocus={focus}
+			world={world}
+		/>
+	);
+	if (isDesktop)
+		return (
+			<div ref={rootRef} className="relative h-full">
+				<Flow catalog={catalog} onExpand={() => openAt(null)} />
+				{full}
+			</div>
+		);
+	return (
+		<div
+			ref={rootRef}
+			className="flex h-full flex-col gap-4 overflow-y-auto overscroll-contain p-3 pb-6"
+		>
+			<div className="diagram-preview shrink-0">
+				<div className="pointer-events-none h-60 w-full" inert>
+					<Flow catalog={catalog} keysOnly interactive={false} />
+				</div>
+				<button
+					type="button"
+					className="absolute inset-0 flex items-end justify-center pb-3"
+					onClick={() => openAt(null)}
+					aria-label="Open the schema diagram full screen"
+				>
+					<span className="diagram-preview-cta">
+						<GameIcon name="expand" className="size-5" /> Open full screen
+					</span>
+				</button>
+			</div>
+			<Relationships catalog={catalog} onPick={(t) => openAt(t)} />
+			{full}
+		</div>
 	);
 }
 
@@ -465,7 +902,7 @@ function PeekPanel({
 			transition={{ duration: 0.3, ease: [0.32, 0.72, 0, 1] }}
 			className="absolute inset-x-0 bottom-0 z-20 max-h-[80%] overflow-auto rounded-t-2xl border-t-2 border-border bg-card p-3"
 			role="dialog"
-			aria-label={`Loot in ${table}`}
+			aria-label={`Rows in ${table}`}
 		>
 			<div className="mb-2 flex items-center justify-between gap-2">
 				<div className="font-mono text-base font-bold">{table}</div>
@@ -475,7 +912,7 @@ function PeekPanel({
 					className="grid size-9 place-items-center rounded-md hover:bg-accent"
 					aria-label="Close"
 				>
-					<X className="size-5" />
+					<GameIcon name="x" className="size-5" />
 				</button>
 			</div>
 			{peek.isLoading ? (
@@ -484,7 +921,7 @@ function PeekPanel({
 				<ResultGrid
 					table={peek.data}
 					maxHeight="16rem"
-					caption="First loot"
+					caption="First rows"
 					animate={false}
 				/>
 			) : null}
@@ -642,7 +1079,7 @@ export function SchemaExplorer({
 		<div className="flex h-full flex-col gap-4 overflow-y-auto overscroll-contain p-3 pb-6">
 			{unknownHint ? (
 				<Badge variant="info" className="self-start">
-					No chest named <code className="font-mono">{unknownHint.n}</code>
+					No table named <code className="font-mono">{unknownHint.n}</code>
 					{unknownHint.near ? (
 						<>
 							, did you mean{" "}
@@ -664,13 +1101,11 @@ export function SchemaExplorer({
 					<div className="flex flex-col gap-3 p-3">
 						<Skeleton className="h-32 w-full rounded-xl" />
 						<Skeleton className="h-24 w-full rounded-xl" />
-						<p className="text-sm text-muted-foreground">
-							Lighting the lantern: Postgres is waking up…
-						</p>
+						<p className="text-sm text-muted-foreground">Starting Postgres…</p>
 					</div>
 				) : catalog.error ? (
 					<p className="p-4 text-sm text-destructive-soft-foreground">
-						Could not read the chests: {(catalog.error as Error).message}
+						Could not read the schema: {(catalog.error as Error).message}
 					</p>
 				) : catalog.data ? (
 					showTabs ? (
@@ -680,14 +1115,16 @@ export function SchemaExplorer({
 							className="h-full min-h-0 gap-0"
 						>
 							<div className="flex items-center justify-between gap-2 border-b-2 border-border px-3 py-2">
-								<div className="min-w-0 text-sm font-extrabold">
-									<span className="truncate">{dataset?.name ?? datasetId}</span>
-									<span className="ml-2 font-bold text-muted-foreground tabular">
-										{catalog.data.tables.length} chests
-									</span>
+								<div className="min-w-0 leading-tight">
+									<div className="truncate text-sm font-extrabold">
+										{dataset?.name ?? datasetId}
+									</div>
+									<div className="text-xs font-bold text-muted-foreground tabular">
+										{catalog.data.tables.length} tables
+									</div>
 								</div>
 								<TabsList>
-									<TabsTrigger value="chests">Chests</TabsTrigger>
+									<TabsTrigger value="chests">Tables</TabsTrigger>
 									<TabsTrigger value="diagram">Diagram</TabsTrigger>
 								</TabsList>
 							</div>
@@ -695,7 +1132,7 @@ export function SchemaExplorer({
 								{chests}
 							</TabsContent>
 							<TabsContent value="diagram" className="min-h-0">
-								<Diagram catalog={catalog.data} />
+								<DiagramView catalog={catalog.data} datasetId={datasetId} />
 							</TabsContent>
 						</Tabs>
 					) : (

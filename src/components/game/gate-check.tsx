@@ -1,4 +1,3 @@
-import { Check, X } from "lucide-react";
 import { motion } from "motion/react";
 import { useEffect } from "react";
 import { Button } from "#/components/ui/button";
@@ -124,7 +123,11 @@ export function GateCheck({
 									: "bg-destructive text-destructive-foreground",
 							)}
 						>
-							{r.ok ? <Check className="size-4" /> : <X className="size-4" />}
+							{r.ok ? (
+								<GameIcon name="check" className="size-4" />
+							) : (
+								<GameIcon name="x" className="size-4" />
+							)}
 						</span>
 						<span className="text-sm font-extrabold">{r.label}</span>
 					</motion.li>

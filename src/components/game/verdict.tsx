@@ -168,7 +168,7 @@ export interface SolvedResult {
 	revealed: boolean;
 }
 
-/** Bottom verdict sheet: "The spell holds!" or "Fizzled". */
+/** Bottom verdict sheet: "Correct!" or "Not quite". */
 export function VerdictSheet({
 	exercise,
 	verdict,
@@ -247,20 +247,20 @@ export function VerdictSheet({
 						<div className="ttl">
 							{ok
 								? solved?.revealed
-									? "Spell revealed"
+									? "Solution revealed"
 									: isBoss
 										? "Guardian defeated!"
-										: "The spell holds!"
+										: "Correct!"
 								: verdict?.errorType === "timeout"
-									? "The spell ran wild"
-									: "Fizzled"}
+									? "Query timed out"
+									: "Not quite"}
 						</div>
 						{ok && r ? (
 							<div className="msg flex flex-wrap items-center gap-x-2">
-								<span className="tabular">+{r.xp.total} aether</span>
+								<span className="tabular">+{r.xp.total} XP</span>
 								{r.combo >= 2 ? <span>· combo x{r.combo}</span> : null}
 								{r.xp.hintPenalty ? (
-									<span>· lantern −{r.xp.hintPenalty}</span>
+									<span>· hint −{r.xp.hintPenalty}</span>
 								) : null}
 								{r.levelAfter > r.levelBefore ? (
 									<span>· level {r.levelAfter}!</span>

@@ -1097,7 +1097,10 @@ body[data-scroll-locked] {
 @media (pointer: coarse) { .cm-editor { font-size: 16px; } }
 .cm-editor .cm-scroller { font-family: var(--font-mono); line-height: 1.7; }
 .cm-editor.cm-focused { outline: none; }
-.cm-editor .cm-gutters { background: var(--editor-gutter); color: var(--syn-comment); border-right: 2px solid var(--border); }
+.cm-editor .cm-gutters { background: var(--editor-gutter); color: var(--syn-comment); border-right: 1.5px solid color-mix(in oklab, var(--border) 70%, transparent); }
+.cm-editor .cm-lineNumbers .cm-gutterElement { min-width: 2.2ch; padding: 0 8px 0 10px; font-size: .8em; }
+/* Wrapped lines hang under the first word, so a long line never reads as a new line. */
+.cm-editor .cm-lineWrapping .cm-line { padding-left: calc(6px + 2ch); text-indent: -2ch; }
 .cm-editor .cm-activeLine { background: var(--editor-line); }
 .cm-editor .cm-activeLineGutter { background: var(--editor-line); color: var(--syn-keyword); }
 .cm-editor .cm-cursor { border-left: 2.5px solid var(--lantern); }
@@ -1131,6 +1134,25 @@ body[data-scroll-locked] {
 	--xy-controls-button-border-color: var(--border);
 	--xy-controls-button-background-color-hover: var(--accent);
 }
+.react-flow__edge.is-dim { opacity: .15; }
+.flow-controls { display: flex; flex-direction: column; gap: 8px; margin: 12px !important; }
+.flow-controls button { width: 44px; height: 44px; display: grid; place-items: center; border-radius: 14px; background: var(--card); border: 2px solid var(--border); box-shadow: 0 3px 0 var(--ledge); color: var(--foreground); }
+.flow-controls button:active { transform: translateY(2px); box-shadow: 0 1px 0 var(--ledge); }
+.flow-controls svg { width: 20px; height: 20px; }
+.diagram-chips { display: flex; gap: 8px; overflow-x: auto; padding: 10px 12px; padding-left: calc(12px + var(--safe-left, 0px)); border-bottom: 2px solid var(--border); background: var(--card); scrollbar-width: none; overscroll-behavior-x: contain; }
+.diagram-chips::-webkit-scrollbar { display: none; }
+.diagram-chip { flex: none; display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 12px; border-radius: 999px; border: 2px solid var(--border); background: var(--card); font-family: var(--font-mono); font-size: 13px; font-weight: 700; color: var(--muted-foreground); white-space: nowrap; }
+.diagram-chip[aria-pressed="true"] { border-color: var(--lantern); color: var(--foreground); background: var(--accent); }
+.diagram-full .react-flow { touch-action: none; }
+.diagram-preview { position: relative; display: block; width: 100%; overflow: hidden; border-radius: 18px; border: 2px solid var(--border); background: var(--surface-sunken); box-shadow: 0 4px 0 var(--ledge); text-align: left; }
+.diagram-preview-cta { display: inline-flex; align-items: center; gap: 8px; height: 44px; padding: 0 16px; border-radius: 999px; background: var(--primary); color: var(--primary-foreground); font-weight: 800; box-shadow: 0 3px 0 var(--primary-edge, var(--ledge)); white-space: nowrap; }
+.rel-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.rel-list button { width: 100%; display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border-radius: 14px; border: 2px solid var(--border); background: var(--card); text-align: left; font-family: var(--font-mono); font-size: 13.5px; }
+.rel-list button:active { background: var(--accent); }
+.rel-list .rel-from, .rel-list .rel-to { display: flex; align-items: center; gap: 8px; min-width: 0; overflow-wrap: anywhere; }
+.rel-list .rel-from svg { color: var(--syn-function); }
+.rel-list .rel-to { color: var(--muted-foreground); }
+.rel-list b { color: var(--foreground); font-weight: 700; }
 .react-flow__edge.is-referenced .react-flow__edge-path {
 	stroke: var(--lantern);
 	stroke-width: 2.5;
@@ -1178,8 +1200,10 @@ body[data-scroll-locked] {
  * ledger, verdict sheet, level complete, world banners, Wick.
  * ═════════════════════════════════════════════════════════════════════════ */
 @layer components {
-	.icon-stroke { fill: none; stroke: currentColor; stroke-width: 2.25; stroke-linecap: round; stroke-linejoin: round; }
+	.icon-stroke { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 	.icon-solid { fill: currentColor; stroke: none; }
+	/* Two-tone icons: the fill layer deepens on the active/selected item. */
+	a[data-status="active"], [aria-current="page"], [aria-pressed="true"], [data-state="active"], [data-lit="true"] { --duo: .5; }
 
 	/* Speech bubble (map START, Wick lines) */
 	.speech-bubble {
@@ -1199,7 +1223,7 @@ body[data-scroll-locked] {
 
 	/* ── World map ── */
 	.map-frame { border-radius: 28px; overflow: hidden; border: 2px solid var(--border); box-shadow: 0 6px 0 var(--ledge); background: var(--card); }
-	.unit-banner { position: sticky; top: calc(3.5rem + var(--safe-top)); z-index: 12; /* above the current node (z-10) and its START bubble */ padding: 16px 18px 18px; display: flex; align-items: center; gap: 14px; border-bottom: 4px solid var(--w-deep); }
+	.unit-banner { position: relative; z-index: 12; /* above the current node (z-10) and its START bubble */ padding: 16px 18px 18px; display: flex; align-items: center; gap: 14px; border-bottom: 4px solid var(--w-deep); }
 	.unit-banner .wn { font-size: 12px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; opacity: .85; }
 	.unit-banner .wt { font-family: var(--font-display); font-size: 26px; line-height: 1.05; }
 	.map-body { position: relative; overflow: hidden; background: var(--w-tint); }
@@ -1265,8 +1289,6 @@ body[data-scroll-locked] {
 	.chest .lid .ico svg { width: 19px; height: 19px; }
 	.chest .lid .nm { font-family: var(--font-mono); font-weight: 700; font-size: 15px; }
 	.chest .lid .rows { margin-left: auto; font-size: 12px; font-weight: 800; opacity: .85; white-space: nowrap; }
-	.chest .lid::before, .chest .lid::after { content: ""; position: absolute; bottom: -5px; width: 8px; height: 8px; border-radius: 50%; background: var(--w); box-shadow: 0 0 0 2px var(--card); }
-	.chest .lid::before { left: 14px; } .chest .lid::after { right: 14px; }
 	.chest.glow-lantern[data-lit="true"] { border-color: var(--lantern); }
 	.chest-cols { list-style: none; margin: 0; padding: 6px 0 8px; }
 	.chest-cols li { display: flex; align-items: center; gap: 8px; padding: 5px 12px; font-family: var(--font-mono); font-size: 13.5px; }
@@ -1371,7 +1393,8 @@ body[data-scroll-locked] {
 	.tabbar { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; height: 64px; }
 	.tabbar a, .tabbar button { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; font-size: 11px; font-weight: 800; color: var(--muted-foreground); }
 	.tabbar [aria-current="page"], .tabbar [aria-current="true"], .tabbar [data-status="active"] { color: var(--syn-keyword); }
-	.tabbar svg { width: 24px; height: 24px; }
+	.tabbar svg { width: 26px; height: 26px; transition: transform var(--duration-fast, 120ms) ease-out; }
+	.tabbar [data-status="active"] svg { transform: translateY(-1px); }
 }
 
 @keyframes blink { 0%, 46%, 50%, 100% { transform: scaleY(1); } 48% { transform: scaleY(.1); } }

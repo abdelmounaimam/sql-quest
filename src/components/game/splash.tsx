@@ -1,7 +1,7 @@
 import { LogoMark, Wordmark } from "./logo";
 
 /** Loading screen: the lockup with a gently bobbing mark and a lantern glow. */
-export function Splash({ label = "Lighting the lantern" }: { label?: string }) {
+export function Splash({ label = "Starting Postgres" }: { label?: string }) {
 	return (
 		<div
 			className="grid min-h-dvh place-items-center"
