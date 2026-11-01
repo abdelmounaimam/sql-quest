@@ -123,6 +123,7 @@ export function SqlEditor({
 	fill,
 	onCursor,
 	onFocusChange,
+	closeBrackets = true,
 }: {
 	ref?: React.Ref<SqlEditorHandle>;
 	value: string;
@@ -145,6 +146,7 @@ export function SqlEditor({
 	/** SQL before the cursor, on every edit or caret move. */
 	onCursor?: (before: string) => void;
 	onFocusChange?: (focused: boolean) => void;
+	closeBrackets?: boolean;
 }) {
 	const viewRef = useRef<EditorView | null>(null);
 	const runRef = useRef(onRun);
@@ -321,6 +323,9 @@ export function SqlEditor({
 				}}
 				basicSetup={{
 					autocompletion: autocomplete,
+					// Phones: auto-inserted closers end up on the wrong line when the
+					// learner types a newline inside parentheses or quotes.
+					closeBrackets,
 					foldGutter: false,
 					highlightActiveLine: !readOnly,
 					lineNumbers: !readOnly,

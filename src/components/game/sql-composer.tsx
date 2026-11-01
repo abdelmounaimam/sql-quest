@@ -12,9 +12,9 @@ import { useGame } from "#/game/progress";
 import { sfx } from "#/game/sound";
 import {
 	buildBank,
+	lineStarts,
 	render,
 	type Suggestions,
-	startsClause,
 	suggest,
 	type Tile,
 	tokenize,
@@ -111,6 +111,7 @@ function WordBank({
 }) {
 	const byId = useMemo(() => new Map(bank.map((t) => [t.id, t])), [bank]);
 	const used = new Set(placed);
+	const breaks = lineStarts(placed.map((id) => byId.get(id)?.text ?? ""));
 	const tap = (ids: string[]) => {
 		sfx("tap");
 		onChange(ids);
@@ -137,7 +138,7 @@ function WordBank({
 							if (!t) return null;
 							return (
 								<li key={id} className="contents">
-									{i > 0 && startsClause(t.text) ? (
+									{breaks[i] ? (
 										<span className="wb-break" aria-hidden="true" />
 									) : null}
 									<TileButton
@@ -492,6 +493,7 @@ export function SqlComposer({
 					schema={schema}
 					functions={functions}
 					autocomplete={autocomplete && !touch}
+					closeBrackets={!touch}
 					errorLine={errorLine}
 					readOnly={readOnly}
 					bare

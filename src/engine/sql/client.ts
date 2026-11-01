@@ -30,6 +30,8 @@ interface Pending {
 	resolve: (v: unknown) => void;
 	reject: (e: Error) => void;
 	onTimeout?: () => unknown;
+	/** Replayed once after the worker reported an unknown dataset. */
+	retried?: boolean;
 }
 
 type Listener = (s: EngineStatus) => void;
@@ -76,6 +78,14 @@ class SqlClient {
 		if (!cur || cur.id !== reply.id) return;
 		window.clearTimeout(cur.timer);
 		this.current = null;
+		// The worker lost its dataset definitions (a fresh module instance):
+		// send them again and replay the request once.
+		if (!reply.ok && /Unknown dataset/i.test(reply.error) && !cur.retried) {
+			this.sentDatasets.clear();
+			this.queue.unshift({ ...cur, retried: true });
+			this.pump();
+			return;
+		}
 		if (reply.ok) cur.resolve(reply.result);
 		else cur.reject(new Error(reply.error));
 		this.pump();

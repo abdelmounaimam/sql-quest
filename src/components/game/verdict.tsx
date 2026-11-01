@@ -251,9 +251,11 @@ export function VerdictSheet({
 									: isBoss
 										? "Guardian defeated!"
 										: "Correct!"
-								: verdict?.errorType === "timeout"
-									? "Query timed out"
-									: "Not quite"}
+								: verdict?.errorType === "internal"
+									? "Engine hiccup"
+									: verdict?.errorType === "timeout"
+										? "Query timed out"
+										: "Not quite"}
 						</div>
 						{ok && r ? (
 							<div className="msg flex flex-wrap items-center gap-x-2">
@@ -268,8 +270,15 @@ export function VerdictSheet({
 							</div>
 						) : (
 							<div className="msg">
-								<span className="font-extrabold">{verdict?.title}.</span>{" "}
-								{verdict?.message}{" "}
+								{verdict?.errorType === "internal" ? (
+									<span className="font-extrabold">
+										The SQL engine failed, not your query. Nothing was counted:
+										try again.{" "}
+									</span>
+								) : (
+									<span className="font-extrabold">{verdict?.title}. </span>
+								)}
+								{verdict?.errorType === "internal" ? null : verdict?.message}{" "}
 								{sqlstate ? <span className="rune">{sqlstate}</span> : null}
 							</div>
 						)}

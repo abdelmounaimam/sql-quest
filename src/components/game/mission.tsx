@@ -324,6 +324,12 @@ export function MissionScreen({
 					window.setTimeout(() => sfx("combo", reward.combo), 220);
 				return;
 			}
+			// The engine failed, not the learner: no failure, no lost heart, no
+			// mastery penalty. The sheet says so and offers a retry.
+			if (v.errorType === "internal") {
+				setMood("idle");
+				return;
+			}
 			const f = failures + 1;
 			const errs = v.errorType ? [...errorTypes, v.errorType] : errorTypes;
 			setFailures(f);

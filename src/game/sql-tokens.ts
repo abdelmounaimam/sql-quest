@@ -99,14 +99,15 @@ const CLAUSES = new Set([
 ]);
 
 const RAW =
-	/'(?:[^']|'')*'?|"[^"]*"?|[A-Za-z_][A-Za-z0-9_$]*(?:\.(?:[A-Za-z_][A-Za-z0-9_$]*|\*))*\(?|\d+(?:\.\d+)?|::|<>|<=|>=|!=|->>|->|#>>|#>|\|\||@>|<@|<->|<=>|<#>|&&|[^\s]/g;
+	/\$([A-Za-z_]\w*)?\$[\s\S]*?\$\1\$|[Ee]?'(?:[^']|'')*'?|"[^"]*"?|[A-Za-z_][A-Za-z0-9_$]*(?:\.(?:[A-Za-z_][A-Za-z0-9_$]*|\*))*\(?|\d+(?:\.\d+)?(?:[eE][-+]?\d+)?|<=>|<->|<#>|<<=|>>=|-\|-|->>|#>>|::|->|#>|#-|=>|@>|<@|@\?|@@|<<|>>|\?\||\?&|<>|<=|>=|!=|\|\||&&|~~\*|!~~|~~|!~\*|!~|~\*|[^\s]/g;
 
 function stripComments(sql: string): string {
 	return sql.replace(/--[^\n]*/g, " ").replace(/\/\*[\s\S]*?\*\//g, " ");
 }
 
 export function kindOf(tok: string): TokenKind {
-	if (tok.startsWith("'")) return "string";
+	if (tok.startsWith("'") || tok.startsWith("$") || /^[Ee]'/.test(tok))
+		return "string";
 	if (/^\d/.test(tok)) return "number";
 	if (tok.endsWith("(") && tok.length > 1) return "function";
 	if (/^[A-Za-z]/.test(tok)) {
@@ -144,16 +145,31 @@ export function tokenize(sql: string): string[] {
 	return out;
 }
 
-const NO_SPACE_BEFORE = new Set([",", ")", ";", "::", "."]);
-const NO_SPACE_AFTER = new Set(["(", "::", "."]);
+const NO_SPACE_BEFORE = new Set([",", ")", ";", "::", ".", "[", "]"]);
+const NO_SPACE_AFTER = new Set(["(", "::", ".", "["]);
 
-/** Tiles back to SQL, one clause per line. */
+/**
+ * For each token, whether it starts a new line: a clause keyword outside
+ * parentheses (a subquery or function call stays on its line).
+ */
+export function lineStarts(tokens: string[]): boolean[] {
+	let depth = 0;
+	return tokens.map((t, i) => {
+		const brk = i > 0 && depth === 0 && CLAUSES.has(t);
+		if (t === "(" || (t.endsWith("(") && t.length > 1)) depth++;
+		else if (t === ")") depth = Math.max(0, depth - 1);
+		return brk;
+	});
+}
+
+/** Tiles back to SQL, one top-level clause per line. */
 export function render(tokens: string[]): string {
+	const breaks = lineStarts(tokens);
 	let s = "";
 	let prev = "";
-	for (const t of tokens) {
+	tokens.forEach((t, i) => {
 		if (!s) s = t;
-		else if (CLAUSES.has(t) && prev !== "(") s += `\n${t}`;
+		else if (breaks[i]) s += `\n${t}`;
 		else if (
 			NO_SPACE_BEFORE.has(t) ||
 			NO_SPACE_AFTER.has(prev) ||
@@ -162,7 +178,7 @@ export function render(tokens: string[]): string {
 			s += t;
 		else s += ` ${t}`;
 		prev = t;
-	}
+	});
 	return s;
 }
 

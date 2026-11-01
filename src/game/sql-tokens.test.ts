@@ -96,3 +96,48 @@ describe("suggest", () => {
 		expect(suggest("SELECT name ", { schema }).items).toContain("FROM");
 	});
 });
+
+describe("every solution in the course survives the word bank", () => {
+	const chapters = import.meta.glob<{ default: unknown }>(
+		"../content/chapters/ch*.ts",
+		{ eager: true },
+	);
+	type Ex = { id: string; solutionSql: string };
+	const sols: Ex[] = [];
+	for (const m of Object.values(chapters)) {
+		const c = (m.default ?? Object.values(m)[0]) as {
+			id: string;
+			lesson?: { kind: string; solutionSql?: string }[];
+			exercises?: Ex[];
+			practice?: Ex[];
+		};
+		for (const e of [...(c.exercises ?? []), ...(c.practice ?? [])])
+			sols.push(e);
+		(c.lesson ?? []).forEach((s, i) => {
+			if (s.kind === "try" && s.solutionSql)
+				sols.push({ id: `${c.id}-try${i}`, solutionSql: s.solutionSql });
+		});
+	}
+	const strip = (sql: string) =>
+		sql
+			.replace(/--[^\n]*/g, " ")
+			.replace(/\$(\w*)\$[\s\S]*?\$\1\$/g, " ")
+			.replace(/'(?:[^']|'')*'/g, " ");
+	const opRuns = (sql: string) =>
+		strip(sql).match(/[<>=!@#?&|~\-+/%^:$]{2,}/g) ?? [];
+
+	it("finds the course content", () => {
+		expect(sols.length).toBeGreaterThan(300);
+	});
+	it.each(
+		sols.map((e) => [e.id, e.solutionSql]),
+	)("%s keeps multi-character operators and literals intact", (_id, sql) => {
+		const out = render(tokenize(sql));
+		for (const op of opRuns(sql)) expect(strip(out)).toContain(op);
+		// Strings and dollar-quoted bodies come back byte for byte.
+		for (const lit of sql
+			.replace(/--[^\n]*/g, "")
+			.match(/\$(\w*)\$[\s\S]*?\$\1\$|'(?:[^']|'')*'/g) ?? [])
+			expect(out).toContain(lit);
+	});
+});

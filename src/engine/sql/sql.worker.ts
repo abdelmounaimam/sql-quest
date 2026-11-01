@@ -21,16 +21,38 @@ import { loadSnapshot, saveSnapshot, snapshotKey } from "./snapshots";
 /** Rows kept for display (the grid is virtualized); comparison always uses every row. */
 const DISPLAY = { displayLimit: 10_000 };
 
-const known = new Map<string, DatasetDef>();
-// Initialised bases are cached in IndexedDB: the second visit restores the
-// dump instead of re-running the dataset setupSql (dungeon: 100k rows).
-const provider = createPGliteProvider(
-	{ getDataset: (id) => known.get(id) },
-	{
-		restore: async (def) => loadSnapshot(await snapshotKey(def)),
-		persist: async (def, dump) => saveSnapshot(await snapshotKey(def), dump),
-	},
-);
+/**
+ * WebKit can evaluate this module twice (PGlite extension chunks import a
+ * helper from the worker entry chunk, and Safari does not dedupe that import
+ * with the worker's own script). State therefore lives on the worker global,
+ * so a second evaluation reuses the same datasets, PGlite instances and queue
+ * instead of starting empty ("Unknown dataset").
+ */
+type WorkerState = {
+	known: Map<string, DatasetDef>;
+	provider: ReturnType<typeof createPGliteProvider>;
+	chain: Promise<unknown>;
+};
+const g = globalThis as typeof globalThis & { __sqlqWorker?: WorkerState };
+if (!g.__sqlqWorker) {
+	const known = new Map<string, DatasetDef>();
+	g.__sqlqWorker = {
+		known,
+		// Initialised bases are cached in IndexedDB: the second visit restores
+		// the dump instead of re-running the dataset setupSql (dungeon: 100k rows).
+		provider: createPGliteProvider(
+			{ getDataset: (id) => known.get(id) },
+			{
+				restore: async (def) => loadSnapshot(await snapshotKey(def)),
+				persist: async (def, dump) =>
+					saveSnapshot(await snapshotKey(def), dump),
+			},
+		),
+		chain: Promise.resolve(),
+	};
+}
+const state = g.__sqlqWorker;
+const { known, provider } = state;
 
 async function handle(env: WorkerEnvelope): Promise<unknown> {
 	for (const d of env.datasets) {
@@ -69,12 +91,11 @@ async function handle(env: WorkerEnvelope): Promise<unknown> {
 	}
 }
 
-// Serialise requests: PGlite instances are single threaded anyway.
-let chain: Promise<unknown> = Promise.resolve();
-
+// Serialise requests: PGlite instances are single threaded anyway. The queue
+// is shared too, so a second evaluation of this module keeps the ordering.
 self.onmessage = (ev: MessageEvent<WorkerEnvelope>) => {
 	const env = ev.data;
-	chain = chain.then(async () => {
+	state.chain = state.chain.then(async () => {
 		let reply: WorkerReply;
 		try {
 			reply = { id: env.id, ok: true, result: await handle(env) };
