@@ -471,6 +471,7 @@ function TryStep({
 						value={sql}
 						onChange={setSql}
 						solutionSql={step.solutionSql}
+						starterSql={step.starterSql}
 						seed={ex.id}
 						catalog={catalog.data}
 						onRun={() => judgeMut.mutate()}

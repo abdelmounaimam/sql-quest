@@ -17,6 +17,7 @@ import {
 	startsClause,
 	suggest,
 	type Tile,
+	tokenize,
 	toTiles,
 } from "#/game/sql-tokens";
 import { gameActions } from "#/game/store";
@@ -48,6 +49,15 @@ function sampleValues(catalog: Catalog): Record<string, string[]> {
 		});
 	}
 	return out;
+}
+
+const sameSql = (a: string, b: string) =>
+	tokenize(a).join(" ") === tokenize(b).join(" ");
+/** True when the solution can be reached by appending tiles to `start`. */
+function isPrefix(start: string, solution: string): boolean {
+	const a = tokenize(start).map((t) => t.toUpperCase());
+	const b = tokenize(solution).map((t) => t.toUpperCase());
+	return a.length <= b.length && a.every((t, i) => t === b[i]);
 }
 
 // ───────────────────────────── word bank
@@ -104,7 +114,10 @@ function WordBank({
 	};
 	return (
 		<LayoutGroup id={groupId}>
-			<div className="wb">
+			<div className="wordbank">
+				<div className="wb-label" aria-hidden="true">
+					Your query
+				</div>
 				<ul
 					className="wb-answer"
 					aria-label="Your query, tap a tile to remove it"
@@ -128,11 +141,12 @@ function WordBank({
 							);
 						})
 					) : (
-						<li className="wb-empty">
-							Tap the tiles below to build your query
-						</li>
+						<li className="wb-empty">Tap the words below to build it</li>
 					)}
 				</ul>
+				<div className="wb-label" aria-hidden="true">
+					Tap to add
+				</div>
 				<ul className="wb-bank" aria-label="Word bank">
 					{bank.map((t) => (
 						<li key={t.id} className="wb-slot">
@@ -267,6 +281,7 @@ export function SqlComposer({
 	fill,
 	keyboardActions,
 	prompt,
+	starterSql,
 	className,
 }: {
 	ref?: React.Ref<SqlComposerHandle>;
@@ -286,6 +301,8 @@ export function SqlComposer({
 	fill?: boolean;
 	/** Compact actions shown on the suggestion strip while typing (Test, Submit). */
 	keyboardActions?: React.ReactNode;
+	/** Pre-filled SQL of the exercise, dropped in tile mode when it cannot be extended. */
+	starterSql?: string;
 	/** The task, repeated above the editor while typing full screen on a phone. */
 	prompt?: React.ReactNode;
 	className?: string;
@@ -326,6 +343,19 @@ export function SqlComposer({
 		const texts = (ids: string[]) =>
 			render(ids.map((id) => bank.find((t) => t.id === id)?.text ?? ""));
 		if (synced.current !== null && value === texts(placed)) return;
+		// Tiles only append, so pre-filled SQL with a gap to fill in the middle
+		// ("SELECT … FROM pilots;") cannot be completed by tapping: start empty.
+		if (
+			starterSql?.trim() &&
+			sameSql(value, starterSql) &&
+			!isPrefix(starterSql, solutionSql)
+		) {
+			setPlaced([]);
+			setStash(null);
+			synced.current = "";
+			if (value) onChange("");
+			return;
+		}
 		const ids = value.trim() ? toTiles(value, bank) : [];
 		if (ids) {
 			setPlaced(ids);
@@ -335,7 +365,7 @@ export function SqlComposer({
 			setStash(value);
 		}
 		synced.current = value;
-	}, [mode, bank, value, placed]);
+	}, [mode, bank, value, placed, starterSql, solutionSql, onChange]);
 
 	const setTiles = (ids: string[]) => {
 		if (!bank) return;
@@ -386,12 +416,13 @@ export function SqlComposer({
 				type="button"
 				className="composer-toggle"
 				onClick={() => switchTo(mode === "tiles" ? "keyboard" : "tiles")}
+				aria-label={mode === "tiles" ? "Use the keyboard" : "Use the word bank"}
 			>
 				<GameIcon
 					name={mode === "tiles" ? "keyboard" : "tiles"}
 					className="size-5"
 				/>
-				{mode === "tiles" ? "Use keyboard" : "Use word bank"}
+				{mode === "tiles" ? "Keyboard" : "Word bank"}
 			</button>
 		) : null;
 
@@ -414,7 +445,7 @@ export function SqlComposer({
 							className="composer-toggle"
 							onClick={() => setTiles([])}
 						>
-							<GameIcon name="rewind" className="size-5" /> Start over
+							<GameIcon name="rewind" className="size-5" /> Clear
 						</button>
 					) : null}
 				</div>

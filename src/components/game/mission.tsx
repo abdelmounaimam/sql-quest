@@ -483,6 +483,7 @@ export function MissionScreen({
 						saveDraft(v);
 					}}
 					solutionSql={exercise.solutionSql}
+					starterSql={exercise.starterSql}
 					seed={exercise.id}
 					catalog={catalog.data}
 					onRun={run}

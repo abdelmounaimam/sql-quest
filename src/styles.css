@@ -1287,16 +1287,15 @@ body[data-scroll-locked] {
 	.qk-label { font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--muted-foreground); padding: 8px 12px 0; background: var(--surface-sunken); }
 
 	/* ── Composer: word bank (Duolingo-style tiles) ── */
-	.wb { display: flex; flex-direction: column; gap: 14px; padding: 12px 12px 4px; }
-	.wb-answer {
-		--line: 54px;
-		min-height: calc(var(--line) * 2 + 4px); display: flex; flex-wrap: wrap; align-content: flex-start; align-items: center; gap: 8px 6px; padding: 7px 2px 9px;
-		background-image: repeating-linear-gradient(to bottom, transparent 0 calc(var(--line) - 2px), var(--border) calc(var(--line) - 2px) var(--line));
-		background-position: 0 4px;
-	}
-	.wb-break { flex-basis: 100%; height: 0; }
-	.wb-empty { padding: 10px 4px; font-size: 14px; font-weight: 700; color: var(--muted-foreground); }
-	.wb-bank { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px 8px; padding: 10px 0 6px; }
+	.wordbank { display: flex; flex-direction: column; gap: 10px; padding: 12px 12px 4px; }
+	.wb-label { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 2px; font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--muted-foreground); }
+	/* Your query: reads like the code editor (dark well, flat syntax-coloured tokens). */
+	.wb-answer { list-style: none; margin: 0; min-height: 104px; display: flex; flex-wrap: wrap; align-content: flex-start; align-items: center; gap: 6px 5px; padding: 10px; border-radius: 14px; background: var(--editor); border: 2px solid var(--border); box-shadow: inset 0 2px 0 rgb(0 0 0 / .2); }
+	.wb-answer:has(.wb-empty) { border-style: dashed; }
+	.wb-break { flex-basis: 100%; height: 0; margin: -3px 0; }
+	.wb-empty { align-self: center; margin: auto; padding: 8px; font-size: 14px; font-weight: 700; color: var(--muted-foreground); text-align: center; }
+	/* Options: raised tiles to tap. */
+	.wb-bank { list-style: none; margin: 0; display: flex; flex-wrap: wrap; justify-content: center; gap: 10px 8px; padding: 4px 0 6px; }
 	.wb-slot { position: relative; display: inline-flex; }
 	.wb-ghost, .wb-tile { display: inline-flex; align-items: center; height: 44px; padding: 0 13px; border-radius: 12px; font-family: var(--font-mono); font-size: 16px; font-weight: 700; white-space: nowrap; }
 	.wb-ghost { color: transparent; background: var(--surface-sunken); box-shadow: inset 0 2px 0 rgb(0 0 0 / .18); }
@@ -1308,10 +1307,11 @@ body[data-scroll-locked] {
 	.wb-tile[data-kind="string"] { color: var(--syn-string); }
 	.wb-tile[data-kind="number"] { color: var(--syn-number); }
 	.wb-tile[data-kind="punct"], .wb-tile[data-kind="operator"] { min-width: 44px; justify-content: center; color: var(--foreground); }
-	.wb-tile.is-placed { height: 40px; padding: 0 11px; }
-	.wb-tile.is-placed[data-kind="punct"], .wb-tile.is-placed[data-kind="operator"] { min-width: 40px; }
-	.composer-foot { display: flex; align-items: center; gap: 8px; padding: 6px 10px 10px; }
-	.composer-toggle { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 10px; border-radius: 12px; font-size: 14px; font-weight: 800; color: var(--muted-foreground); text-transform: uppercase; letter-spacing: .04em; }
+	.wb-tile.is-placed { height: 36px; padding: 0 9px; border-width: 1.5px; border-color: color-mix(in oklab, var(--border) 80%, transparent); border-radius: 9px; background: var(--editor-line); box-shadow: none; font-size: 15px; }
+	.wb-tile.is-placed[data-kind="punct"], .wb-tile.is-placed[data-kind="operator"] { min-width: 32px; padding: 0 6px; }
+	.wb-tile.is-placed:active:not(:disabled) { transform: scale(.95); }
+	.composer-foot { display: flex; align-items: center; gap: 4px; padding: 4px 6px 8px; }
+	.composer-toggle { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 10px; border-radius: 12px; font-size: 12px; font-weight: 800; color: var(--muted-foreground); text-transform: uppercase; letter-spacing: .06em; white-space: nowrap; }
 	.composer-toggle:active { background: var(--accent); }
 
 	/* ── Composer: suggestion strip on the phone keyboard ── */
