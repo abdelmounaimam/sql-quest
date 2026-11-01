@@ -52,6 +52,8 @@
 	--safe-bottom: env(safe-area-inset-bottom, 0px);
 	--safe-left: env(safe-area-inset-left, 0px);
 	--kb-inset: 0px;
+	--vv-top: 0px;
+	--vv-h: 100dvh;
 
 	/* Surfaces: parchment and ink */
 	--background: #fbf5e9;
@@ -1321,6 +1323,13 @@ body[data-scroll-locked] {
 	.suggest-actions { flex: none; display: flex; align-items: center; gap: 6px; padding-left: 6px; border-left: 2px solid var(--border); }
 	.suggest-icon { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 10px; color: var(--muted-foreground); }
 	.suggest-icon:active { background: var(--accent); }
+	/* Full screen writing view while the phone keyboard is up. */
+	.composer-focus { position: fixed; left: 0; right: 0; top: var(--vv-top); height: calc(var(--vv-h) - 54px - var(--safe-bottom)); z-index: 44; background: var(--editor); padding-top: var(--safe-top); }
+	:root[data-kb="open"] .composer-focus { padding-top: 0; }
+	.composer-focus-task { flex: none; max-height: 34%; overflow-y: auto; overscroll-behavior: contain; padding: 10px calc(14px + var(--safe-right)) 10px calc(14px + var(--safe-left)); background: var(--card); border-bottom: 2px solid var(--border); font-size: 15px; line-height: 1.45; }
+	.composer-focus-task::before { content: "Your task"; display: block; margin-bottom: 2px; font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--muted-foreground); }
+	/* Nothing behind the writing view moves while it is open. */
+	:root[data-composing] body { overflow: hidden; }
 	/* While typing on a phone the strip replaces the action bar. */
 	:root[data-composing] [data-bottom-bar] { display: none; }
 

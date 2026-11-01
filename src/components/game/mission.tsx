@@ -488,6 +488,9 @@ export function MissionScreen({
 					errorLine={errorLine}
 					fill={isDesktop}
 					minHeight={isDesktop ? "100%" : "8.5rem"}
+					prompt={
+						<Markdown className="text-foreground">{exercise.prompt}</Markdown>
+					}
 					keyboardActions={
 						<>
 							<button

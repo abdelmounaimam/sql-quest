@@ -480,6 +480,9 @@ function TryStep({
 						errorLine={v?.sqlError?.line}
 						minHeight="110px"
 						readOnly={done}
+						prompt={
+							<Markdown className="text-foreground">{step.prompt}</Markdown>
+						}
 						keyboardActions={
 							<Button
 								size="sm"

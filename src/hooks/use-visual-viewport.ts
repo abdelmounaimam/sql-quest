@@ -26,6 +26,9 @@ export function useVisualViewportInsets() {
 			const gap = Math.round(window.innerHeight - vv.height - vv.offsetTop);
 			const open = !zoomed && gap > KEYBOARD_MIN;
 			root.style.setProperty("--kb-inset", open ? `${gap}px` : "0px");
+			// The visible area itself, for screens that must fit above the keyboard.
+			root.style.setProperty("--vv-top", `${Math.round(vv.offsetTop)}px`);
+			root.style.setProperty("--vv-h", `${Math.round(vv.height)}px`);
 			if (open) root.dataset.kb = "open";
 			else delete root.dataset.kb;
 		};
@@ -40,6 +43,8 @@ export function useVisualViewportInsets() {
 			vv.removeEventListener("scroll", schedule);
 			if (raf) cancelAnimationFrame(raf);
 			root.style.removeProperty("--kb-inset");
+			root.style.removeProperty("--vv-top");
+			root.style.removeProperty("--vv-h");
 			delete root.dataset.kb;
 		};
 	}, []);

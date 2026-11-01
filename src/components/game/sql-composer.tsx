@@ -266,6 +266,7 @@ export function SqlComposer({
 	minHeight = "8.5rem",
 	fill,
 	keyboardActions,
+	prompt,
 	className,
 }: {
 	ref?: React.Ref<SqlComposerHandle>;
@@ -285,6 +286,8 @@ export function SqlComposer({
 	fill?: boolean;
 	/** Compact actions shown on the suggestion strip while typing (Test, Submit). */
 	keyboardActions?: React.ReactNode;
+	/** The task, repeated above the editor while typing full screen on a phone. */
+	prompt?: React.ReactNode;
 	className?: string;
 }) {
 	const touch = useMediaQuery("(pointer: coarse)", false);
@@ -418,9 +421,24 @@ export function SqlComposer({
 			</div>
 		);
 
+	// Phones: while typing, the composer leaves the page and fills exactly the
+	// visible area above the keyboard (task on top, editor, suggestion strip),
+	// so iOS never has to scroll the page around the caret. Same element, only
+	// its position changes, so the editor keeps focus and the keyboard stays up.
+	const focusMode = showBar;
 	return (
-		<div className={cn("composer flex flex-col", fill && "h-full", className)}>
-			<div className={cn(fill && "min-h-0 flex-1")}>
+		<div
+			className={cn(
+				"composer flex flex-col",
+				fill && !focusMode && "h-full",
+				focusMode && "composer-focus",
+				className,
+			)}
+		>
+			{focusMode && prompt ? (
+				<div className="composer-focus-task">{prompt}</div>
+			) : null}
+			<div className={cn((fill || focusMode) && "min-h-0 flex-1")}>
 				<SqlEditor
 					ref={editorRef}
 					value={value}
@@ -433,14 +451,16 @@ export function SqlComposer({
 					errorLine={errorLine}
 					readOnly={readOnly}
 					bare
-					fill={fill}
-					className={cn(fill && "h-full")}
-					minHeight={minHeight}
+					fill={fill || focusMode}
+					className={cn((fill || focusMode) && "h-full")}
+					minHeight={focusMode ? "100%" : minHeight}
 					onCursor={setBefore}
 					onFocusChange={setFocused}
 				/>
 			</div>
-			{toggle && touch ? <div className="composer-foot">{toggle}</div> : null}
+			{toggle && touch && !focusMode ? (
+				<div className="composer-foot">{toggle}</div>
+			) : null}
 			{showBar && suggestions ? (
 				<SuggestionBar
 					suggestions={suggestions}
