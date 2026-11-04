@@ -16,9 +16,9 @@
 
 ## Demo
 
-[![SQL Quest demo video](docs/media/demo-poster.jpg)](https://github.com/abdelmounaimam/sql-quest/releases/download/v1.0.0/sql-quest-demo.mp4)
+https://github.com/user-attachments/assets/6c25b2ec-480d-496d-86ff-8078887e0256
 
-<p align="center"><em>32 second tour. Click the image to watch the video.</em></p>
+<p align="center"><em>32 second tour. <a href="https://github.com/abdelmounaimam/sql-quest/releases/download/v1.0.0/sql-quest-demo.mp4">Download the full quality video</a>.</em></p>
 
 ## What it is
 
