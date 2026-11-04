@@ -14,7 +14,7 @@ Before editing files for a substantial task:
 
 ## Project skills (load before touching the matching library)
 
-Installed in `.claude/skills/` (source copies in `.agents/skills/`, pinned in `skills-lock.json`):
+Pinned in `skills-lock.json` and installed per machine into `.agents/skills/` and `.claude/skills/` (both gitignored; reinstall them from the sources listed in the lock file with the `skills` CLI):
 - TanStack Start, Router, DB, Table, Devtools: official skills shipped in node_modules, use `pnpm exec intent list` / `pnpm exec intent load <pkg>#<skill>` as described above.
 - TanStack Query, Form, Store, Pacer, Virtual: `tanstack-query`, `tanstack-form`, `tanstack-store`, `tanstack-pacer`, `tanstack-virtual`.
 - UI: `shadcn` (all UI is built on shadcn/ui components, restyled through CSS variables), `tailwind-design-system` (Tailwind v4).

@@ -12,3 +12,11 @@ dist-ssr
 __unconfig*
 todos.json
 .data
+
+# Local agent tooling, installed per machine (see skills-lock.json)
+.agents
+.claude/skills
+.claude/settings.local.json
+
+# Third-party reference captures used during design, not redistributable
+docs/design/refs

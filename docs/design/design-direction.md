@@ -7,7 +7,7 @@ Source of truth for the styling pass. Companion files:
 | `docs/design/theme.css` | Drop-in replacement for `src/styles.css` (Tailwind v4 + shadcn tokens, component classes, keyframes). Compiles with Tailwind 4.3 (checked with `@tailwindcss/node`). |
 | `docs/design/preview.html` | Living style tile. Its tokens and component classes are injected verbatim from `theme.css`, so what you see there is what the app gets. Open it locally, toggle light/dark (top right) or add `?theme=light`. |
 | `docs/design/preview-desktop.png`, `preview-mobile.png` | Screenshots at 1440px and 390px (dark mode, the app default). |
-| `docs/design/refs/*.png` | Reference captures (Duolingo, Brilliant, CodeCombat, SQL Murder Mystery). |
+| `docs/design/refs/*.png` | Reference captures of other products used during design (kept out of the repository, they are not ours to redistribute). |
 
 Rules for the build agent: restyle shadcn components through tokens and variants; never replace them. Everything below names a shadcn component, a token or a class from `theme.css`.
 

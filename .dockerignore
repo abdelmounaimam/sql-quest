@@ -1,0 +1,11 @@
+node_modules
+.output
+.data
+.git
+.tanstack
+.nitro
+.agents
+.claude
+docs
+*.local
+.env

@@ -1,0 +1,24 @@
+name: Level feedback
+description: A mission graded unfairly, a confusing prompt, a typo in a lesson
+labels: [content]
+body:
+  - type: input
+    id: exercise
+    attributes:
+      label: Chapter or exercise id
+      description: Shown in the mission header.
+      placeholder: ch09-ex03
+    validations:
+      required: true
+  - type: textarea
+    id: query
+    attributes:
+      label: Your query
+      render: sql
+  - type: textarea
+    id: problem
+    attributes:
+      label: What is wrong
+      description: For example "this query is correct but was rejected" or "the prompt does not say the column order".
+    validations:
+      required: true
