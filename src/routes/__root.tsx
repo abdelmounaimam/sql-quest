@@ -51,8 +51,7 @@ export const Route = createRootRouteWithContext<RouterContext>()({
 			{ property: "og:description", content: DESCRIPTION },
 			{
 				property: "og:image",
-				content:
-					"https://sql-quest.up.railway.app/brand/og-image.png",
+				content: "https://sql-quest.up.railway.app/brand/og-image.png",
 			},
 			{ property: "og:image:width", content: "1200" },
 			{ property: "og:image:height", content: "630" },
@@ -66,8 +65,7 @@ export const Route = createRootRouteWithContext<RouterContext>()({
 			{ name: "twitter:description", content: DESCRIPTION },
 			{
 				name: "twitter:image",
-				content:
-					"https://sql-quest.up.railway.app/brand/og-image.png",
+				content: "https://sql-quest.up.railway.app/brand/og-image.png",
 			},
 			{
 				name: "theme-color",
