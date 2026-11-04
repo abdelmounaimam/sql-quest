@@ -15,8 +15,8 @@ ENV NODE_ENV=production \
     PORT=3000 \
     SQL_QUEST_DB=/data/sql-quest.db
 COPY --from=build /app/.output ./.output
-RUN mkdir -p /data && chown node:node /data
-USER node
-VOLUME /data
+# Mount a volume at /data to keep progress across restarts
+# (docker run -v sql-quest-data:/data, or a Railway volume).
+RUN mkdir -p /data
 EXPOSE 3000
 CMD ["node", ".output/server/index.mjs"]
