@@ -4,7 +4,7 @@
   "description": "Learn SQL by playing: a game that teaches real PostgreSQL in the browser.",
   "license": "MIT",
   "author": "Abdelmounaim Ammari (https://abdelmounaimammari.me)",
-  "homepage": "https://web-production-e47e5.up.railway.app",
+  "homepage": "https://sql-quest.up.railway.app",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/abdelmounaimam/sql-quest.git"

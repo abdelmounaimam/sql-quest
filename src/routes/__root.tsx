@@ -52,7 +52,7 @@ export const Route = createRootRouteWithContext<RouterContext>()({
 			{
 				property: "og:image",
 				content:
-					"https://web-production-e47e5.up.railway.app/brand/og-image.png",
+					"https://sql-quest.up.railway.app/brand/og-image.png",
 			},
 			{ property: "og:image:width", content: "1200" },
 			{ property: "og:image:height", content: "630" },
@@ -67,7 +67,7 @@ export const Route = createRootRouteWithContext<RouterContext>()({
 			{
 				name: "twitter:image",
 				content:
-					"https://web-production-e47e5.up.railway.app/brand/og-image.png",
+					"https://sql-quest.up.railway.app/brand/og-image.png",
 			},
 			{
 				name: "theme-color",

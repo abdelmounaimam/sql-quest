@@ -6,7 +6,7 @@
 
 **Learn SQL by playing.** A free, open source game that teaches real PostgreSQL, from your first `SELECT` to window functions, JSON, pgvector and query plans.
 
-[**Play it now**](https://web-production-e47e5.up.railway.app) · [Watch the demo](#demo) · [Run it yourself](#run-it-locally) · [Contribute a level](CONTRIBUTING.md)
+[**Play it now**](https://sql-quest.up.railway.app) · [Watch the demo](#demo) · [Run it yourself](#run-it-locally) · [Contribute a level](CONTRIBUTING.md)
 
 [![CI](https://github.com/abdelmounaimam/sql-quest/actions/workflows/ci.yml/badge.svg)](https://github.com/abdelmounaimam/sql-quest/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-f5b82e.svg)](LICENSE)
