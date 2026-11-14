@@ -20,14 +20,18 @@ async function reload() {
  * After a deploy, tells the open app a new version is live: checks
  * /api/version when the app comes back to the foreground, when the network
  * returns, and every 5 minutes while visible. Never reloads by itself.
+ * A dismissed banner comes back the next time the app returns to the
+ * foreground, so an installed PWA left open for days still updates.
  */
 export function useUpdateCheck() {
 	useEffect(() => {
 		if (import.meta.env.DEV) return;
 		let found = false;
+		let snoozed = false;
 		let busy = false;
 		const check = async () => {
-			if (found || busy || document.visibilityState !== "visible") return;
+			if (found || snoozed || busy || document.visibilityState !== "visible")
+				return;
 			busy = true;
 			try {
 				const res = await fetch("/api/version", { cache: "no-store" });
@@ -47,6 +51,10 @@ export function useUpdateCheck() {
 					duration: Number.POSITIVE_INFINITY,
 					dismissible: true,
 					action: { label: "Reload", onClick: () => void reload() },
+					onDismiss: () => {
+						found = false;
+						snoozed = true;
+					},
 					classNames: {
 						actionButton:
 							"!h-11 !rounded-xl !bg-primary !px-4 !text-sm !font-extrabold !text-primary-foreground",
@@ -59,7 +67,8 @@ export function useUpdateCheck() {
 			}
 		};
 		const onVisible = () => {
-			if (document.visibilityState === "visible") void check();
+			if (document.visibilityState === "hidden") snoozed = false;
+			else void check();
 		};
 		const first = setTimeout(check, 5_000);
 		const timer = setInterval(check, EVERY_MS);
