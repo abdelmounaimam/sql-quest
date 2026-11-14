@@ -25,7 +25,7 @@ https://github.com/user-attachments/assets/6c25b2ec-480d-496d-86ff-8078887e0256
 SQL Quest is a map of 43 levels spread over 11 worlds, covering 199 concepts. Each level is a short lesson, a set of missions and a boss. Every query you write runs against a **real PostgreSQL 18 database inside your browser** (via [PGlite](https://pglite.dev)), so what you learn is exactly what you will type at work.
 
 - **Real Postgres, zero setup.** No server, no account, no install. The database runs in a Web Worker and the app works offline as a PWA.
-- **Six story datasets.** A space port, an adventurers' guild, a dungeon, an inn, a library and a bard's catalogue. Missions come from characters of each world instead of `table1` and `foo`.
+- **Six themed datasets.** A space port, an adventurers' guild, a dungeon, an inn, a library and a bard's catalogue. Real looking example data instead of `table1` and `foo`, while every lesson and mission is written in plain technical language.
 - **Graded like a teacher would.** The checker compares results, column names, ordering, table state after `INSERT`/`UPDATE`/`DELETE`, schema after DDL, expected error codes and even plan shapes. Wrong answers get a diff and a targeted hint, not just "incorrect".
 - **Adaptive progression.** Mastery is tracked per concept. Stars, XP, combos and streaks reward you, and a gate asks for proof before the boss when a concept is still shaky.
 - **Made for phones too.** On mobile you build queries from a word bank of tokens, no typing on glass required. On desktop you get a full CodeMirror editor with autocomplete from the live schema.

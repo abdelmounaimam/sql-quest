@@ -15,22 +15,28 @@ Sources: `docs/research/curriculum.md` (concept catalog, pedagogy, verified PGli
 
 ## 2. Style guide
 
-### 2.1 Tone
-- Second person, present tense, playful and short. The learner is a new recruit at the dataset's location; missions come from characters of that world ("The quartermaster needs...").
-- Game words, not school words: *mission*, *quest*, *boss*, *loot*, never *assignment* or *homework*.
-- One joke per screen at most. The SQL is the star.
+### 2.1 Tone: the app plays like a game, the teaching reads like documentation
+The game lives in the **interactions** (map, missions, bosses, hearts, XP, combos) and in the **names** (world names, level titles like *The Void*, the mascot). Everything that teaches is plain technical writing:
+- Lesson cards, examples, quiz questions and explanations, mission prompts, hints and post-success explanations use the vocabulary of the PostgreSQL docs: *table, row, column, query, clause, predicate, NULL, join, index*. No role play, no characters, no "your first shift at the Starport", no "the dock chief needs...".
+- Introduce each topic directly: what it is, the syntax, what it returns, the pitfalls. A learner must never have to understand a story to understand the SQL.
+- The datasets are only example data. Refer to them by table and column names ("the `pilots` table", "ships with a `hull_integrity` below 50"), never as a world the learner lives in.
+- Exercise `title`s describe the task ("Fix a trailing comma", "Ships per faction"), short, no puns.
+- Exercise `story` is omitted on regular missions. On a boss it is one neutral sentence that says what the challenge combines ("Combines OR, AND and IS NULL in one WHERE clause."), shown on the boss intro.
+- Chapter `subtitle` is technical ("SELECT, column lists, aliases and quoting"). Chapter `title` and `world` keep their game names.
+- When a text points to another level, name the concept first ("NULL, covered in *The Void*"), not only the level.
+- Second person, present tense, short sentences. Keep it friendly, not playful.
 - No dash punctuation in learner-facing prose (no em dash, no en dash, no spaced hyphen). Use commas, colons, parentheses or a new sentence.
 
-### 2.2 Story framing per dataset
+### 2.2 Datasets (example data, not a story)
 
-| dataset | world(s) | framing | recurring characters / objects |
-|---|---|---|---|
-| `starport` 🚀 Starport Exchange | 1, 2, 3, 6 | You work the docks of a trading post past the Rim: registers, customs, cargo, money | the dock chief, the Harbor Master, Customs, the Census Bureau, pilots like Ada Quasar, Jax O'Hara, Lumen |
-| `guild` 🐉 Guild of the Silver Dragon | 4, 7, 8 | You are the guild's new archivist: heroes, quests, mentors, loot bags, a messy legacy ledger | Aldric Stormborn, Morwen the Grey, the quartermaster, the old scribe who kept `adventurer_sheet_legacy` |
-| `dungeon` 🗡️ Dungeon Delve Leaderboard | 5, 10 | You run the arcade leaderboard of a roguelike: seasons, runs, badges, cheaters, a huge archive | NightOwl, Kaito, Ægir, the season commissioner, the anti-cheat bot |
-| `bardic` 🎻 Bardic Beats | 5 (ch17), 9 (ch36) | A streaming service for tavern music: listeners, plays, moods, embeddings | the bard-in-chief, listeners in Tokyo and Paris, "find me something like this" |
-| `inn` 🏨 The Wandering Star Inn | 6 (ch23), 8 (ch29, ch33) | An inn whose doors open onto realms in different time zones: rooms, bookings, payments | two clerks fighting over The Last Room, the bookkeeper, guests from Pacific/Chatham |
-| `library` 📜 The Great Library of Aethel | 8 (ch34), 9 (ch35), 11 | A magical library: scrolls in English and French, readers, loans, clearance levels | Head Librarian Elowen, the archivists, apprentice readers, Mittens the Mouser |
+| dataset | world(s) | what it holds |
+|---|---|---|
+| `starport` 🚀 Starport Exchange | 1, 2, 3, 6 | planets, factions, pilots, ships, traders, commodities, trades, routes |
+| `guild` 🐉 Guild of the Silver Dragon | 4, 7, 8 | heroes, guilds, quests, quest completions, inventories, a legacy denormalized table |
+| `dungeon` 🗡️ Dungeon Delve Leaderboard | 5, 10 | players, seasons, runs, achievements, logins, a large archive table |
+| `bardic` 🎻 Bardic Beats | 5 (ch17), 9 (ch36) | artists, albums, tracks, listeners, plays, playlists, embeddings |
+| `inn` 🏨 The Wandering Star Inn | 6 (ch23), 8 (ch29, ch33) | rooms, guests, bookings, payments, staff shifts across time zones |
+| `library` 📜 The Great Library of Aethel | 8 (ch34), 9 (ch35), 11 | scrolls in English and French, readers, loans, sections, access logs |
 
 ### 2.3 Writing prompts so exactly one result is correct
 - **Name every output column, in order**: "Return the **name** and **credits** of ...". Bold the column names. Column titles only matter when the check has `matchColumnNames: true`; then say so explicitly ("titled **Planet**").

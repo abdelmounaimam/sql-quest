@@ -32,7 +32,7 @@ Content is plain TypeScript, no UI code needed.
 |---|---|
 | `src/content/types.ts` | The contract for chapters, exercises, checks and datasets. Treat it as frozen: open an issue before changing it. |
 | `src/content/chapters/chNN-*.ts` | One file per chapter. Files in this folder are picked up automatically. |
-| `src/content/datasets/*.ts` | The six story databases. |
+| `src/content/datasets/*.ts` | The six example databases. |
 | `src/content/concepts.ts` | The concept catalog that drives mastery tracking. |
 | `scripts/negative-cases/<chapter-id>.ts` | Wrong answers that must be rejected, per chapter. |
 | `docs/levels/level-map.md` | The blueprint: tone, rules for prompts, the list of every chapter. Read sections 1 and 2 before writing. |
