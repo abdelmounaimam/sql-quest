@@ -149,8 +149,9 @@ export function LessonPlayer({
 			<div className="kicker mb-3 text-(--syn-keyword)">
 				Learn · {chapter.title}
 			</div>
-			<div className="relative flex-1">
+			<div className="relative flex flex-1 flex-col">
 				<AnimatePresence mode="wait" custom={dir} initial={false}>
+					{/* The whole area under the card swipes too, not just the card. */}
 					<motion.div
 						key={index}
 						custom={dir}
@@ -163,16 +164,18 @@ export function LessonPlayer({
 						dragElastic={0.25}
 						dragDirectionLock
 						onDragEnd={onDragEnd}
-						className="panel touch-pan-y p-5 sm:p-7"
+						className="flex-1 touch-pan-y"
 					>
-						<StepView
-							key={index}
-							chapter={chapter}
-							step={step}
-							index={index}
-							onDone={markDone}
-							done={!!states[index]?.done}
-						/>
+						<div className="panel p-5 sm:p-7">
+							<StepView
+								key={index}
+								chapter={chapter}
+								step={step}
+								index={index}
+								onDone={markDone}
+								done={!!states[index]?.done}
+							/>
+						</div>
 					</motion.div>
 				</AnimatePresence>
 			</div>
