@@ -7,7 +7,7 @@ const chapter: Chapter = {
 	tier: "adept",
 	track: "query",
 	title: "Exists or Not",
-	subtitle: "Semi-joins, anti-joins, the NOT IN trap, and comparing with ANY or ALL",
+	subtitle: "EXISTS, NOT EXISTS, anti-joins, NOT IN with NULLs, ANY and ALL",
 	emoji: "❓",
 	datasetId: "guild",
 	concepts: ["semi-join-exists", "anti-join", "not-in-null-trap", "any-all"],
@@ -15,30 +15,30 @@ const chapter: Chapter = {
 	lesson: [
 		{
 			kind: "explain",
-			title: "Is there at least one?",
-			body: "`EXISTS (subquery)` is true as soon as the subquery finds **one row**. What it selects does not matter, so people write `SELECT 1`:\n```sql\nSELECT h.name\nFROM heroes h\nWHERE EXISTS (SELECT 1 FROM quest_completions qc\n              WHERE qc.hero_id = h.id);\n```\nThe subquery must be **correlated** (`qc.hero_id = h.id`): without that link it asks *does anyone exist?*, and the answer is yes for every hero.",
+			title: "EXISTS",
+			body: "`EXISTS (subquery)` is true as soon as the subquery finds **one row**. What it selects does not matter, so the convention is `SELECT 1`:\n```sql\nSELECT h.name\nFROM heroes h\nWHERE EXISTS (SELECT 1 FROM quest_completions qc\n              WHERE qc.hero_id = h.id);\n```\nThe subquery must be **correlated** (`qc.hero_id = h.id`): without that link it asks *does any row exist?*, and the answer is yes for every hero.",
 		},
 		{
 			kind: "example",
-			title: "Heroes with a deed to their name",
-			body: "Aldric finished five quests, yet he appears **once**: EXISTS only asks yes or no. This is a **semi-join**.",
+			title: "A semi-join with EXISTS",
+			body: "Aldric has five completions, yet he appears **once**: EXISTS only answers yes or no. This is a **semi-join**.",
 			sql: "SELECT h.id, h.name\nFROM heroes h\nWHERE EXISTS (SELECT 1 FROM quest_completions qc\n              WHERE qc.hero_id = h.id);",
 		},
 		{
 			kind: "explain",
-			title: "Is there none? Anti-joins",
-			body: "To find rows with **no** match, use `NOT EXISTS`, or the LEFT JOIN pattern from the Jump Gates:\n```sql\nFROM quests q\nLEFT JOIN quest_completions qc ON qc.quest_id = q.id\nWHERE qc.quest_id IS NULL\n```\nTest a column that is never NULL in a real match (a key), not a nullable one like `party_size`.",
+			title: "Anti-joins",
+			body: "To find rows with **no** match, use `NOT EXISTS`, or the LEFT JOIN anti-join pattern, covered in *Outer Gates and Mirrors*:\n```sql\nFROM quests q\nLEFT JOIN quest_completions qc ON qc.quest_id = q.id\nWHERE qc.quest_id IS NULL\n```\nTest a column that is never NULL in a real match (a key), not a nullable one like `party_size`.",
 		},
 		{
 			kind: "example",
-			title: "Quests nobody finished",
-			body: "Two quests still wait for a hero brave enough: the Kraken and the Golem.",
+			title: "Quests with no completion",
+			body: "Two quests have no row in `quest_completions`: the Kraken and the Golem.",
 			sql: "SELECT q.id, q.title\nFROM quests q\nWHERE NOT EXISTS (SELECT 1 FROM quest_completions qc\n                  WHERE qc.quest_id = q.id);",
 		},
 		{
 			kind: "quiz",
 			question:
-				"Heroes who mentor nobody: `SELECT name FROM heroes WHERE id NOT IN (SELECT mentor_id FROM heroes);` How many rows?",
+				"Heroes who are nobody's mentor: `SELECT name FROM heroes WHERE id NOT IN (SELECT mentor_id FROM heroes);` How many rows?",
 			choices: [
 				"17, the heroes without apprentices",
 				"30, every hero",
@@ -47,12 +47,12 @@ const chapter: Chapter = {
 			],
 			answerIndex: 2,
 			explanation:
-				"Founders and wanderers have a NULL `mentor_id`. `id NOT IN (2, 5, NULL, ...)` means `id <> 2 AND id <> 5 AND id <> NULL ...`, and `id <> NULL` is unknown, so the whole test is never true. Zero rows, no error.",
+				"Several heroes have a NULL `mentor_id`. `id NOT IN (2, 5, NULL, ...)` means `id <> 2 AND id <> 5 AND id <> NULL ...`, and `id <> NULL` is unknown, so the whole test is never true. Zero rows, no error.",
 		},
 		{
 			kind: "example",
-			title: "The trap, live",
-			body: "Same question, two spells. NOT IN returns nothing; NOT EXISTS finds the 17 heroes without apprentices, because it never compares with the NULLs.",
+			title: "NOT IN versus NOT EXISTS",
+			body: "Same question, two queries. NOT IN returns nothing; NOT EXISTS finds the 17 heroes who mentor nobody, because it never compares with the NULLs.",
 			sql: "SELECT\n  (SELECT count(*) FROM heroes\n   WHERE id NOT IN (SELECT mentor_id FROM heroes)) AS with_not_in,\n  (SELECT count(*) FROM heroes h\n   WHERE NOT EXISTS (SELECT 1 FROM heroes a\n                     WHERE a.mentor_id = h.id)) AS with_not_exists;",
 		},
 		{
@@ -75,7 +75,7 @@ const chapter: Chapter = {
 		},
 		{
 			kind: "try",
-			title: "Your turn: quests with a story",
+			title: "Try it: quests with a completion",
 			prompt:
 				"Return the **id** and **title** of every quest that **at least one hero completed**, each quest once. Use EXISTS.",
 			starterSql:
@@ -92,9 +92,7 @@ const chapter: Chapter = {
 	exercises: [
 		{
 			id: "ch12-ex01",
-			title: "Proven in the field",
-			story:
-				"Morwen is drafting the honor roll: every hero with at least one completed quest, written once.",
+			title: "Heroes with a completion",
 			prompt:
 				"Return the **name** of every hero who completed **at least one** quest, each hero **once**.",
 			difficulty: 1,
@@ -113,9 +111,7 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch12-ex02",
-			title: "Idle swords",
-			story:
-				"The guild master suspects some heroes only polish their armor.",
+			title: "Heroes with no completion",
 			prompt:
 				"Return the **name** of every hero who has **never completed** a quest.",
 			difficulty: 2,
@@ -134,9 +130,7 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch12-ex03",
-			title: "The NOT IN curse",
-			story:
-				"Aldric wants every hero who has **no apprentice**, to pair them with newcomers. The old scribe's query returns an empty scroll, every single time.",
+			title: "Replace NOT IN with NOT EXISTS",
 			prompt:
 				"Fix the query: return the **id** and **name** of every hero who is **nobody's mentor**.",
 			difficulty: 3,
@@ -153,13 +147,11 @@ const chapter: Chapter = {
 				"WHERE NOT EXISTS (SELECT 1 FROM heroes a WHERE a.mentor_id = h.id)",
 			],
 			explanation:
-				"NOT EXISTS only asks whether a matching apprentice exists, and NULL mentor ids simply never match: 17 heroes.\n\n**Pitfall:** NOT IN against a nullable column. It works in your tests, then one NULL arrives and the report goes silently empty.\n\n**Alternative:** keep NOT IN but exclude the NULLs: `NOT IN (SELECT mentor_id FROM heroes WHERE mentor_id IS NOT NULL)`.",
+				"NOT EXISTS only asks whether a hero with this mentor exists, and NULL mentor ids never match: 17 heroes.\n\n**Pitfall:** NOT IN against a nullable column. It works in your tests, then one NULL arrives and the result is silently empty.\n\n**Alternative:** keep NOT IN but exclude the NULLs: `NOT IN (SELECT mentor_id FROM heroes WHERE mentor_id IS NOT NULL)`.",
 		},
 		{
 			id: "ch12-ex04",
-			title: "Unclaimed bounties",
-			story:
-				"The bounty board is getting dusty. Which quests has nobody ever finished?",
+			title: "Quests nobody completed",
 			prompt:
 				"Return the **id** and **title** of every quest that **nobody completed**. Use a **LEFT JOIN**.",
 			difficulty: 2,
@@ -174,11 +166,11 @@ const chapter: Chapter = {
 				"LEFT JOIN quest_completions qc ON qc.quest_id = q.id WHERE qc.quest_id IS NULL",
 			],
 			explanation:
-				"A quest without completion keeps one row with every `qc` column NULL; key columns are never NULL in a real completion, so the test is exact.\n\n**Pitfall:** `WHERE qc.party_size IS NULL` also catches completions where the bard forgot to count, and lists Rats in the Cellar and Festival Escort (twice).",
+				"A quest without completion keeps one row with every `qc` column NULL; key columns are never NULL in a real completion, so the test is exact.\n\n**Pitfall:** `WHERE qc.party_size IS NULL` also catches completions with a NULL `party_size`, and lists Rats in the Cellar and Festival Escort (twice).",
 		},
 		{
 			id: "ch12-ex05",
-			title: "Halls of the mighty",
+			title: "Guilds with a hero of level 15+",
 			prompt:
 				"Return the **name** of every guild that has **at least one hero of level 15 or more**, each guild once.",
 			difficulty: 2,
@@ -197,9 +189,7 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch12-ex06",
-			title: "Beyond Highmoor",
-			story:
-				"Veterans of Highmoor want quests tougher than **anything** their home region offers.",
+			title: "Greater than ALL",
 			prompt:
 				"Return the **id**, **title** and **difficulty** of every quest whose difficulty is **greater than the difficulty of every Highmoor quest**. Use `ALL`.",
 			difficulty: 2,
@@ -218,9 +208,7 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch12-ex07",
-			title: "Scouts wanted",
-			story:
-				"A caravan needs scouts. Hero tags are stored as an array.",
+			title: "Search an array with ANY",
 			prompt:
 				"Return the **id** and **name** of every hero whose **tags** contain `scout`.",
 			difficulty: 2,
@@ -234,15 +222,13 @@ const chapter: Chapter = {
 				"WHERE 'scout' = ANY (tags)",
 			],
 			explanation:
-				"`= ANY` walks the array. Heroes with NULL tags or `{}` simply do not match.\n\n**Pitfall:** `'scout' IN (tags)` compares the text with the **whole array** and fails (malformed array literal). IN wants a list of values, not an array.\n\n**Alternative:** `tags @> ARRAY['scout']` (array contains), coming in the Alchemist's Vault.",
+				"`= ANY` walks the array. Heroes with NULL tags or `{}` do not match.\n\n**Pitfall:** `'scout' IN (tags)` compares the text with the **whole array** and fails (malformed array literal). IN wants a list of values, not an array.\n\n**Alternative:** `tags @> ARRAY['scout']` (array containment, covered in *The Alchemist's Vault*).",
 		},
 		{
 			id: "ch12-ex08",
-			title: "Echoes in the ledger",
-			story:
-				"The Highmoor herald wants every hero who completed a Highmoor quest. The draft lists Aldric five times and Hilde three times.",
+			title: "Remove duplicates with EXISTS",
 			prompt:
-				"Fix the query: return the **name** of every hero who completed **at least one Highmoor quest**, each hero **once**.",
+				"Fix the query: return the **name** of every hero who completed **at least one Highmoor quest**, each hero **once**. The current query returns Aldric five times and Hilde three times.",
 			difficulty: 3,
 			kind: "query",
 			concepts: ["semi-join-exists"],
@@ -257,15 +243,15 @@ const chapter: Chapter = {
 				"WHERE EXISTS (SELECT 1 FROM quest_completions qc JOIN quests q ON q.id = qc.quest_id WHERE qc.hero_id = h.id AND q.region = 'Highmoor')",
 			],
 			explanation:
-				"The subquery may join as much as it likes: EXISTS only reports yes or no for each hero. Eight heroes qualify.\n\n**Pitfall:** `SELECT DISTINCT h.name` also works here, but it removes duplicates you created yourself, and would merge two different heroes who happened to share a name.",
+				"The subquery can contain any joins: EXISTS only reports yes or no for each hero. Eight heroes qualify.\n\n**Pitfall:** `SELECT DISTINCT h.name` also works here, but it removes duplicates the join created, and would merge two different heroes who share a name.",
 		},
 		{
 			id: "ch12-ex09",
 			title: "Boss: Unfinished Business",
 			story:
-				"The secret quests are the guild's pride. Aldric wants to shame the guilds whose members never finished a single one. Empty guilds do not count: they have no members to shame.",
+				"Combines EXISTS, NOT EXISTS over a two-join subquery and a correlated count, where NOT IN would fail on a NULL.",
 			prompt:
-				"Return the **name** and the **number of heroes** of every guild that **has at least one hero** but where **none of its heroes completed a secret quest** (`is_secret` true).",
+				"Return the **name** and the **number of heroes** of every guild that **has at least one hero** but where **none of its heroes completed a secret quest** (`is_secret` true). Guilds with no heroes are excluded.",
 			difficulty: 4,
 			kind: "query",
 			concepts: ["anti-join", "semi-join-exists", "not-in-null-trap"],
@@ -278,14 +264,14 @@ const chapter: Chapter = {
 				"WHERE EXISTS (SELECT 1 FROM heroes h WHERE h.guild_id = g.id) AND NOT EXISTS (SELECT 1 FROM heroes h JOIN quest_completions qc ON qc.hero_id = h.id JOIN quests q ON q.id = qc.quest_id WHERE h.guild_id = g.id AND q.is_secret)",
 			],
 			explanation:
-				"Only the Silver Dragon (5 heroes) and the Iron Anvil (4) never touched a secret. The Quiet Bell is excluded by the EXISTS test.\n\n**Pitfall:** `g.id NOT IN (SELECT h.guild_id FROM heroes h JOIN ... WHERE q.is_secret)` returns **nothing**: Nyx completed two secret quests and has no guild, so the list contains a NULL. Same curse as before, and a nastier one because the NULL hides behind two joins.",
+				"Only the Silver Dragon (5 heroes) and the Iron Anvil (4) have no secret quest completion. The Quiet Bell is excluded by the EXISTS test.\n\n**Pitfall:** `g.id NOT IN (SELECT h.guild_id FROM heroes h JOIN ... WHERE q.is_secret)` returns **nothing**: Nyx completed two secret quests and has no guild, so the list contains a NULL. It is the same NOT IN problem as before, harder to spot because the NULL comes from two joins.",
 			boss: true,
 		},
 	],
 	practice: [
 		{
 			id: "ch12-pr01",
-			title: "Into the Mist",
+			title: "Guilds with a hero who completed quest 8",
 			prompt:
 				"Return the **name** of every guild with at least one hero who completed **quest 8** (Heart of the Mist).",
 			difficulty: 2,
@@ -300,11 +286,11 @@ const chapter: Chapter = {
 				"WHERE EXISTS (SELECT 1 FROM heroes h JOIN quest_completions qc ON qc.hero_id = h.id WHERE h.guild_id = g.id AND qc.quest_id = 8)",
 			],
 			explanation:
-				"Morwen brings in the Moonlit Veil. Nyx also finished the quest, but she belongs to no guild.",
+				"Morwen's completion makes the Moonlit Veil qualify. Nyx also completed the quest, but her guild_id is NULL.",
 		},
 		{
 			id: "ch12-pr02",
-			title: "Empty halls",
+			title: "Guilds with no heroes",
 			prompt: "Return the **name** of every guild that has **no heroes**.",
 			difficulty: 1,
 			kind: "query",
@@ -318,11 +304,11 @@ const chapter: Chapter = {
 				"WHERE NOT EXISTS (SELECT 1 FROM heroes h WHERE h.guild_id = g.id)",
 			],
 			explanation:
-				"The Order of the Quiet Bell is so quiet it has no members yet. Here `id NOT IN (SELECT guild_id FROM heroes)` would return nothing: wanderers have a NULL guild_id.",
+				"The Order of the Quiet Bell has no members. Here `id NOT IN (SELECT guild_id FROM heroes)` would return nothing: some heroes have a NULL guild_id.",
 		},
 		{
 			id: "ch12-pr03",
-			title: "Out of the loop",
+			title: "Heroes never a listener",
 			prompt:
 				"Return the **name** of every hero who was **never told** a rumor (never a `listener_id` in `rumors`).",
 			difficulty: 2,
@@ -337,13 +323,11 @@ const chapter: Chapter = {
 				"WHERE NOT EXISTS (SELECT 1 FROM rumors r WHERE r.listener_id = h.id)",
 			],
 			explanation:
-				"Twenty heroes live in blissful ignorance. Be precise about the role: correlating on `teller_id` would answer *who never spread a rumor* instead.",
+				"Twenty heroes qualify. Be precise about the role: correlating on `teller_id` would answer *who never spread a rumor* instead.",
 		},
 		{
 			id: "ch12-pr04",
-			title: "Dead ends",
-			story:
-				"The scribe wants quests that unlock nothing, but the query returns an empty page.",
+			title: "Quests that are no prerequisite",
 			prompt:
 				"Fix the query: return the **id** and **title** of every quest that is **no other quest's prerequisite**.",
 			difficulty: 3,
@@ -360,13 +344,13 @@ const chapter: Chapter = {
 				"WHERE NOT EXISTS (SELECT 1 FROM quests n WHERE n.prerequisite_quest_id = q.id)",
 			],
 			explanation:
-				"Nine quests unlock nothing. NOT EXISTS ignores the NULL prerequisites instead of being poisoned by them.",
+				"Nine quests unlock nothing. NOT EXISTS ignores the NULL prerequisites instead of being broken by them.",
 		},
 		{
 			id: "ch12-pr05",
-			title: "Predict the curse",
+			title: "Predict a NOT IN result",
 			prompt:
-				"Without trusting your instinct: how many rows does `SELECT id FROM guilds WHERE id NOT IN (SELECT guild_id FROM heroes)` return? Return that **number** as a single value.",
+				"Check, do not guess: how many rows does `SELECT id FROM guilds WHERE id NOT IN (SELECT guild_id FROM heroes)` return? Return that **number** as a single value.",
 			difficulty: 2,
 			kind: "query",
 			concepts: ["not-in-null-trap"],
@@ -374,15 +358,15 @@ const chapter: Chapter = {
 			check: { type: "result" },
 			hints: [
 				"Guild 6 has no heroes, so you might expect 1. Does `heroes.guild_id` contain NULLs?",
-				"Wanderers have no guild: the list contains NULL, so `NOT IN` can never be true.",
+				"Some heroes have no guild: the list contains NULL, so `NOT IN` can never be true.",
 				"SELECT 0;",
 			],
 			explanation:
-				"Zero. Even the empty Quiet Bell is lost, because `6 <> NULL` is unknown. You can check with `SELECT count(*) FROM guilds WHERE id NOT IN (SELECT guild_id FROM heroes)`.",
+				"Zero. Even the Quiet Bell, which has no heroes, is lost, because `6 <> NULL` is unknown. You can check with `SELECT count(*) FROM guilds WHERE id NOT IN (SELECT guild_id FROM heroes)`.",
 		},
 		{
 			id: "ch12-pr06",
-			title: "Not the weakest",
+			title: "Greater than ANY",
 			prompt:
 				"Return the **name** and **level** of every hero whose level is **greater than at least one** level found in **guild 5**. Use `ANY`.",
 			difficulty: 2,
@@ -397,11 +381,11 @@ const chapter: Chapter = {
 				"WHERE level > ANY (SELECT level FROM heroes WHERE guild_id = 5)",
 			],
 			explanation:
-				"`> ANY` is the same as *greater than the smallest*: guild 5's weakest member is Mabel at level 2, so every hero above level 2 qualifies.",
+				"`> ANY` is the same as *greater than the smallest*: the lowest level in guild 5 is Mabel's level 2, so every hero above level 2 qualifies.",
 		},
 		{
 			id: "ch12-pr07",
-			title: "Mist-proof rewards",
+			title: "At least as high as ALL",
 			prompt:
 				"Return the **title** and **reward_gold** of every quest whose reward is **at least as high as every Mistwood quest's reward**. Use `ALL`.",
 			difficulty: 2,
@@ -416,7 +400,7 @@ const chapter: Chapter = {
 				"WHERE reward_gold >= ALL (SELECT reward_gold FROM quests WHERE region = 'Mistwood')",
 			],
 			explanation:
-				"Mistwood's best reward is 900 (Heart of the Mist itself), so four quests qualify, including Heart of the Mist: `>=` lets it equal itself.",
+				"Mistwood's best reward is 900 (Heart of the Mist itself), so four quests qualify, including Heart of the Mist: `>=` accepts a value equal to itself.",
 		},
 	],
 };

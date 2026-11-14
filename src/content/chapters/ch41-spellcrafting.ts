@@ -44,7 +44,7 @@ const chapter: Chapter = {
 	tier: "expert",
 	track: "advanced",
 	title: "Spellcrafting",
-	subtitle: "SQL functions, PL/pgSQL, procedures, dynamic SQL and the injection curse",
+	subtitle: "SQL functions, volatility, PL/pgSQL, procedures, dynamic SQL with format, SQL injection",
 	emoji: "🧙",
 	datasetId: "library",
 	concepts: [
@@ -58,8 +58,8 @@ const chapter: Chapter = {
 	lesson: [
 		{
 			kind: "explain",
-			title: "A query with a name",
-			body: "High in the Astral Spire, the archivists store spells inside the database itself. The simplest spell is a **SQL function**: a query with parameters.\n```sql\nCREATE FUNCTION loans_of(r int) RETURNS bigint\nLANGUAGE sql STABLE\nAS $$ SELECT count(*) FROM loans WHERE reader_id = r $$;\n```\nIt can return one value, `SETOF scrolls` (rows of a table) or `TABLE(col type, ...)`. The label tells the planner how it behaves: **IMMUTABLE** (same input, same output forever), **STABLE** (constant within one query, may read tables), **VOLATILE** (anything goes, the default).",
+			title: "SQL functions",
+			body: "A **SQL function** is a named query with parameters, stored in the database:\n```sql\nCREATE FUNCTION loans_of(r int) RETURNS bigint\nLANGUAGE sql STABLE\nAS $$ SELECT count(*) FROM loans WHERE reader_id = r $$;\n```\nIt can return one value, `SETOF scrolls` (rows of a table) or `TABLE(col type, ...)`. The volatility label tells the planner how it behaves: **IMMUTABLE** (same input, same output forever), **STABLE** (constant within one query, may read tables), **VOLATILE** (no guarantee, the default).",
 		},
 		{
 			kind: "example",
@@ -70,7 +70,7 @@ const chapter: Chapter = {
 		{
 			kind: "quiz",
 			question:
-				"A function computes how many days a loan is late using `now()`. Which volatility label is honest?",
+				"A function computes how many days a loan is late using `now()`. Which volatility label is correct?",
 			choices: [
 				"IMMUTABLE, because it is faster",
 				"STABLE",
@@ -79,32 +79,32 @@ const chapter: Chapter = {
 			],
 			answerIndex: 1,
 			explanation:
-				"`now()` is constant within a transaction but changes between them, and the function reads a table: that is STABLE. IMMUTABLE is a promise the planner trusts: it may precompute the result once, store it in an index, and serve yesterday's answer forever.",
+				"`now()` is constant within a transaction but changes between them, and the function reads a table: that is STABLE. IMMUTABLE is a promise the planner trusts: it may precompute the result once or store it in an index, and then keep returning an outdated answer.",
 		},
 		{
 			kind: "explain",
-			title: "PL/pgSQL: spells with steps",
-			body: "When one query is not enough, use **PL/pgSQL**:\n```sql\nCREATE FUNCTION late_label(days int) RETURNS text\nLANGUAGE plpgsql IMMUTABLE AS $$\nDECLARE label text;\nBEGIN\n  IF days < 0 THEN\n    RAISE EXCEPTION 'negative days: %', days;\n  END IF;\n  label := CASE WHEN days = 0 THEN 'on time' ELSE 'late' END;\n  RETURN label;\nEND $$;\n```\n`RAISE EXCEPTION` aborts with SQLSTATE P0001. `DO $$ ... $$` runs a nameless block once. Prefer one set-based query over a loop whenever you can.",
+			title: "PL/pgSQL",
+			body: "When one query is not enough, use **PL/pgSQL**, which adds variables and control flow:\n```sql\nCREATE FUNCTION late_label(days int) RETURNS text\nLANGUAGE plpgsql IMMUTABLE AS $$\nDECLARE label text;\nBEGIN\n  IF days < 0 THEN\n    RAISE EXCEPTION 'negative days: %', days;\n  END IF;\n  label := CASE WHEN days = 0 THEN 'on time' ELSE 'late' END;\n  RETURN label;\nEND $$;\n```\n`RAISE EXCEPTION` aborts with SQLSTATE P0001. `DO $$ ... $$` runs an anonymous block once. Prefer one set-based query over a loop whenever you can.",
 		},
 		{
 			kind: "explain",
-			title: "Procedures hold the transaction",
+			title: "Procedures and transaction control",
 			body: "A function runs inside the caller's transaction. A **procedure** may end it:\n```sql\nCREATE PROCEDURE nightly() LANGUAGE plpgsql AS $$\nBEGIN\n  INSERT INTO ...;  COMMIT;   -- saved for good\n  UPDATE ...;       ROLLBACK; -- undone\nEND $$;\nCALL nightly();\n```\nYou run it with `CALL`, never inside a SELECT (error 42809). COMMIT inside works only when CALL is sent as its own statement; this app sends each statement separately, so it works here.",
 		},
 		{
 			kind: "explain",
-			title: "The injection curse",
-			body: "Some spells build SQL text from user input:\n```sql\n'SELECT ... WHERE name = ''' || p_name || ''''\n```\nIf a visitor types `nobody' OR '1'='1`, the text becomes\n```sql\nWHERE name = 'nobody' OR '1'='1'\n```\nThe input escaped its quotes and rewrote the query. This is **SQL injection**, the oldest curse of the web.",
+			title: "SQL injection",
+			body: "Some functions build SQL text from user input:\n```sql\n'SELECT ... WHERE name = ''' || p_name || ''''\n```\nIf the input is `nobody' OR '1'='1`, the text becomes\n```sql\nWHERE name = 'nobody' OR '1'='1'\n```\nThe input closed the quote and changed the query. This is **SQL injection**, one of the oldest web vulnerabilities.",
 		},
 		{
 			kind: "example",
-			title: "Watch the curse work",
-			body: "A cursed search function, then a visitor with a crafted name. Run it: instead of nobody, the whole register spills out.",
+			title: "An injectable function",
+			body: "A search function that concatenates its input, called with a crafted name. Run it: instead of no rows, it returns every row of `readers`.",
 			sql: "CREATE FUNCTION find_reader_unsafe(p_name text) RETURNS TABLE (name text, clearance int)\nLANGUAGE plpgsql AS $$\nBEGIN\n  RETURN QUERY EXECUTE\n    'SELECT name, clearance FROM readers WHERE name = ''' || p_name || '''';\nEND $$;\n\nSELECT * FROM find_reader_unsafe($q$nobody' OR '1'='1$q$);",
 		},
 		{
 			kind: "explain",
-			title: "Dynamic SQL, safely",
+			title: "Safe dynamic SQL with format",
 			body: "Sometimes the table or column really is chosen at runtime. Build the text with `format`:\n```sql\nEXECUTE format('SELECT count(*) FROM %I WHERE %I = %L',\n               tbl, col, val)\n   INTO result;\n```\n- `%I` quotes an **identifier** (`\"Night Watch\"`);\n- `%L` quotes a **literal** (`'O''Brien'`);\n- or pass values as parameters: `EXECUTE '... WHERE id = $1' USING some_id`.\n\nOutside PL/pgSQL, `PREPARE` and `EXECUTE` do the same with `$1`.",
 		},
 		{
@@ -118,7 +118,7 @@ const chapter: Chapter = {
 		},
 		{
 			kind: "try",
-			title: "Your turn: count by language",
+			title: "Try it: use a function parameter",
 			prompt:
 				"The function `scroll_count(lang text)` ignores its parameter. Fix it so it counts the scrolls written in `lang`, then call it for `'fr'`.",
 			starterSql:
@@ -135,11 +135,9 @@ const chapter: Chapter = {
 	exercises: [
 		{
 			id: "ch41-ex01",
-			title: "Pages of a lifetime",
-			story:
-				"Elowen wants a spell that tells how many pages an author has written, for the Wall of Scribes.",
+			title: "Write a scalar SQL function",
 			prompt:
-				"Create a function `pages_written(author_name text) RETURNS bigint` that returns the **total page_count** of that author's scrolls, and **0** when the author wrote nothing. The check calls it with several names.",
+				"Create a function `pages_written(author_name text) RETURNS bigint` that returns the **total page_count** of that author's scrolls, and **0** when the author has no scrolls. The check calls it with several names.",
 			difficulty: 2,
 			kind: "ddl",
 			concepts: ["sql-functions"],
@@ -156,13 +154,11 @@ const chapter: Chapter = {
 				"AS $$ SELECT coalesce(sum(page_count), 0) FROM scrolls WHERE author = author_name $$",
 			],
 			explanation:
-				"A SQL function is a named query: the parameter replaces a literal. Elowen totals 96 pages.\n\n**Pitfall:** without `coalesce`, an unknown author gets NULL, and `NULL > 50` silently drops them from any report built on it. **Alternative:** the SQL standard body `RETURN (SELECT coalesce(sum(page_count), 0) FROM scrolls WHERE author = author_name)`.",
+				"A SQL function is a named query: the parameter replaces a literal. Elowen Thrice totals 96 pages.\n\n**Pitfall:** without `coalesce`, an unknown author gets NULL, and `NULL > 50` silently drops that author from any report built on it. **Alternative:** the SQL standard body `RETURN (SELECT coalesce(sum(page_count), 0) FROM scrolls WHERE author = author_name)`.",
 		},
 		{
 			id: "ch41-ex02",
-			title: "A shelf and everything under it",
-			story:
-				"Ines the Head Cataloguer wants to list a whole branch of the shelves, sub-shelves included.",
+			title: "Write a function that returns a table",
 			prompt:
 				"Create `section_scrolls(p ltree) RETURNS TABLE (title text, path ltree)` that returns the **title** of every scroll whose section is **p or below it**, with the section's **path**. The check calls it for several sections.",
 			difficulty: 3,
@@ -181,15 +177,13 @@ const chapter: Chapter = {
 				"... JOIN sections sec ON sec.id = s.section_id WHERE sec.path <@ p",
 			],
 			explanation:
-				"`RETURNS TABLE` declares the output columns, and the function can be queried like a table. `arcana.fire` brings the dragon shelf along.\n\n**Pitfall:** `sec.path = p` only returns the shelf itself and loses every sub-shelf. In a PL/pgSQL version, an output column named `title` would also clash with `scrolls.title` (42702): qualify columns with table aliases.",
+				"`RETURNS TABLE` declares the output columns, and the function can be queried like a table. `arcana.fire` also returns the scrolls of its child section.\n\n**Pitfall:** `sec.path = p` only returns the section itself and loses every subsection. In a PL/pgSQL version, an output column named `title` would also clash with `scrolls.title` (42702): qualify columns with table aliases.",
 		},
 		{
 			id: "ch41-ex03",
-			title: "The spell that lied",
-			story:
-				"An apprentice wrote `days_overdue` and labelled it IMMUTABLE \"for speed\". It reads `now()` and a table: tomorrow it will be wrong, and nobody can test it.",
+			title: "Fix a wrong volatility label",
 			prompt:
-				"Write `days_overdue(p_loan int, as_of date) RETURNS int`: the number of days between the loan's due date (`upper(loan_period)::date`) and `as_of` for a loan that is **not returned**, **0** when it is returned or not yet late. Do **not** label it IMMUTABLE. The check calls it for several loans on `2026-10-31`.",
+				"The starter is labelled IMMUTABLE but reads `now()` and a table. Write `days_overdue(p_loan int, as_of date) RETURNS int`: the number of days between the loan's due date (`upper(loan_period)::date`) and `as_of` for a loan that is **not returned**, **0** when it is returned or not yet late. Do **not** label it IMMUTABLE. The check calls it for several loans on `2026-10-31`.",
 			difficulty: 3,
 			kind: "ddl",
 			concepts: ["sql-functions"],
@@ -208,13 +202,11 @@ const chapter: Chapter = {
 				"CASE WHEN returned_at IS NULL THEN greatest(as_of - upper(loan_period)::date, 0) ELSE 0 END ... LANGUAGE sql STABLE",
 			],
 			explanation:
-				"Passing the date in makes the function testable (2026-10-31 always gives the same answer) and STABLE is the truth: it reads `loans`. Loan 9 is 190 days late, loan 20 is not due yet, loan 2 came back.\n\n**Pitfall:** IMMUTABLE functions can be evaluated once at plan time or stored in an index, so the lie freezes yesterday's answer. With `WHERE returned_at IS NULL` alone, returned loans give NULL instead of 0.",
+				"Passing the date in makes the function testable (2026-10-31 always gives the same answer), and STABLE is the correct label because it reads `loans`. Loan 9 is 190 days late, loan 20 is not due yet, loan 2 was returned.\n\n**Pitfall:** IMMUTABLE functions can be evaluated once at plan time or stored in an index, so a wrong label freezes an outdated answer. With `WHERE returned_at IS NULL` alone, returned loans give NULL instead of 0.",
 		},
 		{
 			id: "ch41-ex04",
-			title: "The fine ledger",
-			story:
-				"Bartholomew sets the rules: half a coin per late day, never more than 20 coins, and a loud error if someone asks about a loan that does not exist.",
+			title: "Write a PL/pgSQL function with an exception",
 			prompt:
 				"Write a **PL/pgSQL** function `fine_for(p_loan int, as_of date) RETURNS numeric`:\n\n- late days = (`returned_at::date`, or `as_of` while the scroll is still out) minus `upper(loan_period)::date`, never below 0;\n- fine = **0.50 per late day**, capped at **20.00**;\n- if the loan does not exist, `RAISE EXCEPTION` (any message).\n\nThe check computes the fine of every loan on `2026-10-31` and asks for loan 999.",
 			difficulty: 4,
@@ -229,17 +221,15 @@ const chapter: Chapter = {
 			},
 			hints: [
 				"`SELECT ... INTO due, back FROM loans WHERE id = p_loan;` then `IF NOT FOUND THEN RAISE EXCEPTION ...`.",
-				"`coalesce(returned_at::date, as_of)` is the day the scroll came back (or today). `greatest(x, 0)` and `least(x, 20.00)` clamp.",
-				"late := greatest(back - due, 0); RETURN least(late * 0.50, 20.00);",
+				"`coalesce(returned_at::date, as_of)` is the day the scroll was returned (or `as_of`). `greatest(x, 0)` and `least(x, 20.00)` clamp.",
+				"`late := greatest(back - due, 0); RETURN least(late * 0.50, 20.00);`",
 			],
 			explanation:
 				"`SELECT INTO` fills variables and sets `FOUND`, so the unknown loan raises P0001 instead of quietly returning NULL. Three overdue loans hit the 20.00 cap.\n\n**Pitfall:** without `IF NOT FOUND`, loan 999 returns NULL and a report summing fines just shrinks. **Alternative:** `SELECT ... INTO STRICT` raises NO_DATA_FOUND by itself, and the whole formula also fits in one SQL expression.",
 		},
 		{
 			id: "ch41-ex05",
-			title: "Owl post",
-			story:
-				"Every night Wisp the courier delivers reminders for overdue scrolls. The job must save its work even if the next step of the night fails.",
+			title: "Write a procedure that commits",
 			prompt:
 				"The table `reminders (loan_id int, sent_on date)` exists. Create a **procedure** `send_reminders(as_of date)` that inserts one reminder (`loan_id`, `as_of`) for every loan **not returned** whose due date (`upper(loan_period)`) is **before** `as_of`, then **COMMIT**s. Then call it for `2026-10-31`.",
 			difficulty: 3,
@@ -254,19 +244,17 @@ const chapter: Chapter = {
 			},
 			hints: [
 				"`CREATE PROCEDURE name(params) LANGUAGE plpgsql AS $$ BEGIN ... END $$;` then `CALL name(...)`.",
-				"One INSERT ... SELECT does all the reminders at once; `COMMIT;` goes after it, inside the body.",
+				"One INSERT ... SELECT creates all the reminders at once; `COMMIT;` goes after it, inside the body.",
 				"INSERT INTO reminders SELECT id, as_of FROM loans WHERE returned_at IS NULL AND upper(loan_period) < as_of; COMMIT;",
 			],
 			explanation:
-				"Four loans are out and past due (9, 13, 16, 19); loan 20 is out but due on 3 November. The COMMIT inside makes the reminders permanent before anything else in the nightly job runs.\n\n**Pitfall:** a function cannot COMMIT (2D000), and a procedure cannot be called in SELECT (42809). COMMIT inside a procedure also fails when CALL is sent in one batch with other statements; this app sends each statement alone.",
+				"Four loans are out and past due (9, 13, 16, 19); loan 20 is out but due on 3 November. The COMMIT inside makes the reminders permanent before any later step of a batch job runs.\n\n**Pitfall:** a function cannot COMMIT (2D000), and a procedure cannot be called in SELECT (42809). COMMIT inside a procedure also fails when CALL is sent in one batch with other statements; this app sends each statement alone.",
 		},
 		{
 			id: "ch41-ex06",
-			title: "The universal counter",
-			story:
-				"Gorrik keeps his own table, `\"Night Watch\"`, with spaces and capitals. He wants one spell that counts matching rows in any table.",
+			title: "Dynamic SQL with %I and %L",
 			prompt:
-				"Create a PL/pgSQL function `count_rows(tbl text, col text, val text) RETURNS bigint` that returns how many rows of table `tbl` have column `col` equal to `val`. Build the query with `EXECUTE format(...)`, quoting names with `%I` and the value with `%L`. The check counts in `scrolls`, `readers`, `\"Night Watch\"`, and tries an injection.",
+				"A table named `\"Night Watch\"` (with a space and capitals) exists. Create a PL/pgSQL function `count_rows(tbl text, col text, val text) RETURNS bigint` that returns how many rows of table `tbl` have column `col` equal to `val`. Build the query with `EXECUTE format(...)`, quoting names with `%I` and the value with `%L`. The check counts in `scrolls`, `readers`, `\"Night Watch\"`, and tries an injection.",
 			difficulty: 3,
 			kind: "ddl",
 			concepts: ["dynamic-sql", "sql-injection"],
@@ -289,11 +277,9 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch41-ex07",
-			title: "Think like the thief",
-			story:
-				"A rival academy wants the full reader register. The library's old `find_reader_unsafe(p_name)` glues its input into SQL and logs every call in `search_log`. To fix a lock, first learn how it breaks.",
+			title: "Exploit an injectable function",
 			prompt:
-				"Call `find_reader_unsafe` with an input that makes it return **every reader**. The check reads the largest `rows_returned` in `search_log`.",
+				"The function `find_reader_unsafe(p_name)` concatenates its input into SQL and logs every call in `search_log`. Call it with an input that makes it return **every reader**. The check reads the largest `rows_returned` in `search_log`.",
 			difficulty: 3,
 			kind: "query",
 			concepts: ["sql-injection"],
@@ -310,13 +296,11 @@ const chapter: Chapter = {
 				"find_reader_unsafe($q$nobody' OR '1'='1$q$) (or 'nobody'' OR ''1''=''1' with doubled quotes)",
 			],
 			explanation:
-				"Your input became code: `WHERE name = 'nobody' OR '1'='1'` is true for every row, so all 13 readers leak.\n\n**Pitfall:** \"we only show one row\" is no defence: attackers add `UNION SELECT email, ...` to read other tables too. The cure is to never let input become SQL text, as the next mission shows.",
+				"Your input became code: `WHERE name = 'nobody' OR '1'='1'` is true for every row, so all 13 readers are returned.\n\n**Pitfall:** \"the page only shows one row\" is no defence: attackers add `UNION SELECT email, ...` to read other tables too. The fix is to never let input become SQL text, as the next exercise shows.",
 		},
 		{
 			id: "ch41-ex08",
-			title: "Seal the lock",
-			story:
-				"Saoirse the Ward Mage rewrites the reader search before the rival academy returns.",
+			title: "Rewrite a function without injection",
 			prompt:
 				"Create a **safe** `find_reader(p_name text) RETURNS TABLE (name text, clearance int)` that returns the reader whose name equals `p_name` exactly. The check tries a normal name, an attack string and a name with an accent.",
 			difficulty: 3,
@@ -337,15 +321,15 @@ const chapter: Chapter = {
 				"LANGUAGE sql AS $$ SELECT r.name, r.clearance FROM readers r WHERE r.name = p_name $$",
 			],
 			explanation:
-				"A parameter is bound as a value: the attack string is just a strange name that matches nobody. Static SQL is the strongest defence because there is no text to inject into.\n\n**Pitfall:** escaping quotes by hand (`replace(p_name, '''', '')`) breaks honest names like O'Brien and misses tricks you did not think of. **Alternative:** keep EXECUTE but write `... WHERE name = $1' USING p_name`, or `format('%L')`.",
+				"A parameter is bound as a value: the attack string is just an unusual name that matches nobody. Static SQL is the strongest defence because there is no text to inject into.\n\n**Pitfall:** escaping quotes by hand (`replace(p_name, '''', '')`) breaks legitimate names like O'Brien and misses cases you did not think of. **Alternative:** keep EXECUTE but write `... WHERE name = $1' USING p_name`, or `format('%L')`.",
 		},
 		{
 			id: "ch41-ex09",
 			title: "Boss: The Grimoire Engine",
 			story:
-				"Elowen commissions the Grimoire Engine: a report of overdue scrolls that the reading-room screen can sort by any column the clerk clicks. The clerk's click arrives as plain text, and the rival academy is listening.",
+				"Combines a PL/pgSQL function, a whitelist check and dynamic ORDER BY with format and %I, safe against injection.",
 			prompt:
-				"Create two functions:\n\n1. `fine_for(p_loan int, as_of date) RETURNS numeric` exactly as in *The fine ledger* (0.50 per late day, cap 20.00, exception for unknown loans);\n2. PL/pgSQL `overdue_report(as_of date, sort_by text) RETURNS TABLE (title text, reader text, fine numeric)` listing every loan **not returned** whose due date is **before** `as_of`: scroll **title**, reader **name**, and its **fine** from `fine_for`. Sort by the column named in `sort_by` (ascending), **ties by title**, using `EXECUTE format(...)` with `%I`. If `sort_by` is not `title`, `reader` or `fine`, `RAISE EXCEPTION`.\n\nThe check reads the report sorted by reader and by fine, and sends an attack as `sort_by`.",
+				"Create two functions:\n\n1. `fine_for(p_loan int, as_of date) RETURNS numeric` exactly as in the PL/pgSQL fine exercise (0.50 per late day, cap 20.00, exception for unknown loans);\n2. PL/pgSQL `overdue_report(as_of date, sort_by text) RETURNS TABLE (title text, reader text, fine numeric)` listing every loan **not returned** whose due date is **before** `as_of`: scroll **title**, reader **name**, and its **fine** from `fine_for`. Sort by the column named in `sort_by` (ascending), **ties by title**, using `EXECUTE format(...)` with `%I`. If `sort_by` is not `title`, `reader` or `fine`, `RAISE EXCEPTION`.\n\nThe check reads the report sorted by reader and by fine, and sends an attack as `sort_by`.",
 			difficulty: 5,
 			kind: "ddl",
 			concepts: ["sql-functions", "plpgsql-basics", "dynamic-sql", "sql-injection"],
@@ -376,19 +360,19 @@ SELECT * FROM overdue_report('2026-10-31', 'fine');`,
 					"SELECT 'reader' AS sorted_by, ord, title, reader, fine::numeric(6,2)\n  FROM overdue_report('2026-10-31', 'reader') WITH ORDINALITY AS r(title, reader, fine, ord)\nUNION ALL\nSELECT 'fine', ord, title, reader, fine::numeric(6,2)\n  FROM overdue_report('2026-10-31', 'fine') WITH ORDINALITY AS r(title, reader, fine, ord)\nUNION ALL\nSELECT 'attack', NULL, sqlstate_of('SELECT * FROM overdue_report(''2026-10-31'', ''fine; DROP TABLE loans'')'), (SELECT count(*)::text FROM loans), NULL\nORDER BY 1, 2;",
 			},
 			hints: [
-				"Start with `fine_for` from the fine ledger. Then write the report as a plain query first, and only make the ORDER BY dynamic.",
+				"Start with `fine_for` from the earlier exercise. Then write the report as a plain query first, and only make the ORDER BY dynamic.",
 				"Whitelist first (`IF sort_by NOT IN (...) THEN RAISE EXCEPTION`), then `RETURN QUERY EXECUTE format('... ORDER BY %I, title', sort_by) USING as_of`.",
 				"Inside the format string, use `$1` for as_of (passed with USING) and alias the columns `AS reader` and `AS fine` so ORDER BY can name them.",
 			],
 			explanation:
-				"Only the sort column is dynamic: it is checked against a whitelist and quoted with `%I`, while the date travels as a `$1` parameter. Four scrolls are overdue, three of them at the 20.00 cap, so the title breaks the ties.\n\n**Pitfall:** `'ORDER BY ' || sort_by` lets `fine; DROP TABLE loans` through as code; `%I` alone would turn it into an unknown column (42703), but the whitelist rejects it before any SQL is built and gives a clear message. **Alternative:** a static query with `ORDER BY CASE sort_by WHEN 'title' THEN title END, ...` needs no dynamic SQL at all.",
+				"Only the sort column is dynamic: it is checked against a whitelist and quoted with `%I`, while the date is passed as a `$1` parameter. Four scrolls are overdue, three of them at the 20.00 cap, so the title breaks the ties.\n\n**Pitfall:** `'ORDER BY ' || sort_by` lets `fine; DROP TABLE loans` through as code; `%I` alone would turn it into an unknown column (42703), but the whitelist rejects it before any SQL is built and gives a clear message. **Alternative:** a static query with `ORDER BY CASE sort_by WHEN 'title' THEN title END, ...` needs no dynamic SQL at all.",
 			boss: true,
 		},
 	],
 	practice: [
 		{
 			id: "ch41-pr01",
-			title: "Initials for the spines",
+			title: "Function with a SQL standard body",
 			prompt:
 				"Create `initials(n text) RETURNS text` with a **SQL standard body** (`RETURN ...`, no `$$`): the first letter of the first word followed by the first letter of the second word (`'Elowen Thrice'` gives `ET`, `'Pim'` gives `P`). Label it IMMUTABLE.",
 			difficulty: 2,
@@ -407,11 +391,11 @@ SELECT * FROM overdue_report('2026-10-31', 'fine');`,
 				"LANGUAGE sql IMMUTABLE RETURN left(n, 1) || left(split_part(n, ' ', 2), 1);",
 			],
 			explanation:
-				"A pure text function is honestly IMMUTABLE. The standard body is parsed when the function is created, so a typo in a column name fails immediately instead of at first call.",
+				"A pure text function is correctly IMMUTABLE. The standard body is parsed when the function is created, so a typo in a column name fails immediately instead of at first call.",
 		},
 		{
 			id: "ch41-pr02",
-			title: "An honest label",
+			title: "IMMUTABLE function of its arguments",
 			prompt:
 				"Create `scroll_age(written date, as_of date) RETURNS int` returning the number of **whole years** from `written` to `as_of` (`extract(year from age(as_of, written))::int`), labelled **IMMUTABLE** (it depends only on its arguments).",
 			difficulty: 2,
@@ -426,7 +410,7 @@ SELECT * FROM overdue_report('2026-10-31', 'fine');`,
 			},
 			hints: [
 				"No table, no clock: only the two arguments.",
-				"Such a function may promise IMMUTABLE.",
+				"Such a function may be labelled IMMUTABLE.",
 				"LANGUAGE sql IMMUTABLE AS $$ SELECT extract(year from age(as_of, written))::int $$",
 			],
 			explanation:
@@ -434,7 +418,7 @@ SELECT * FROM overdue_report('2026-10-31', 'fine');`,
 		},
 		{
 			id: "ch41-pr03",
-			title: "The alarm bell",
+			title: "Raise an exception in a DO block",
 			prompt:
 				"Write a `DO` block that raises an exception (`RAISE EXCEPTION`) when **more than 3** loans are unreturned and past due on `2026-10-31`. (There are 4, so your block must fail.)",
 			difficulty: 2,
@@ -453,7 +437,7 @@ SELECT * FROM overdue_report('2026-10-31', 'fine');`,
 		},
 		{
 			id: "ch41-pr04",
-			title: "Counting forbidden pages",
+			title: "Sum with a FOR loop",
 			prompt:
 				"Create a PL/pgSQL function `forbidden_pages() RETURNS bigint` that adds up the `page_count` of every scroll with `clearance_level = 3` using a **FOR loop** over those scrolls.",
 			difficulty: 2,
@@ -471,13 +455,11 @@ SELECT * FROM overdue_report('2026-10-31', 'fine');`,
 				"FOR s IN SELECT page_count FROM scrolls WHERE clearance_level = 3 LOOP total := total + s.page_count; END LOOP;",
 			],
 			explanation:
-				"183 pages. The loop works, but `SELECT sum(page_count) ...` does the same in one set-based step: loops are for logic SQL cannot express.",
+				"183 pages. The loop works, but `SELECT sum(page_count) ...` does the same in one set-based step: use loops for logic SQL cannot express.",
 		},
 		{
 			id: "ch41-pr05",
-			title: "Half a night's work",
-			story:
-				"Hakon's enrolment job must keep its log line even when the enrolment itself is cancelled.",
+			title: "COMMIT and ROLLBACK in a procedure",
 			prompt:
 				"The table `ward_log (msg text)` exists. Create a **procedure** `try_enrol()` that inserts `'attempt'` into `ward_log` and **COMMIT**s, then inserts a reader (`'Test Reader'`, `'test@aethel.lib'`, `'x'`, clearance 1, `joined_at` `'2026-10-31'`) and **ROLLBACK**s. Then CALL it.",
 			difficulty: 3,
@@ -497,11 +479,11 @@ SELECT * FROM overdue_report('2026-10-31', 'fine');`,
 				"INSERT INTO ward_log ...; COMMIT; INSERT INTO readers ...; ROLLBACK;",
 			],
 			explanation:
-				"The log line survives (it was committed) and the reader vanishes (rolled back): still 13 readers. A function could do neither.",
+				"The log row remains (it was committed) and the reader is gone (rolled back): still 13 readers. A function could do neither.",
 		},
 		{
 			id: "ch41-pr06",
-			title: "Predict the quoting",
+			title: "Predict format quoting",
 			prompt:
 				"Return **one row** with three values: `format('%I', 'Night Watch')`, `format('%L', 'O''Brien')` and `format('%I', 'scrolls')`.",
 			difficulty: 1,
@@ -520,7 +502,7 @@ SELECT * FROM overdue_report('2026-10-31', 'fine');`,
 		},
 		{
 			id: "ch41-pr07",
-			title: "The largest of anything",
+			title: "Dynamic column and table names",
 			prompt:
 				"Create a PL/pgSQL function `max_of(tbl text, col text) RETURNS text` returning `max(col)::text` of table `tbl`, with `EXECUTE format` and `%I` for both names.",
 			difficulty: 2,
@@ -543,7 +525,7 @@ SELECT * FROM overdue_report('2026-10-31', 'fine');`,
 		},
 		{
 			id: "ch41-pr08",
-			title: "A prepared question",
+			title: "PREPARE and EXECUTE",
 			prompt:
 				"Prepare a statement `reader_by_name(text)` that returns the **name** and **clearance** of the reader whose name equals `$1`, then **execute** it for `'Bram Tolliver'`.",
 			difficulty: 2,
@@ -558,11 +540,11 @@ SELECT * FROM overdue_report('2026-10-31', 'fine');`,
 				"PREPARE reader_by_name(text) AS SELECT name, clearance FROM readers WHERE name = $1; EXECUTE reader_by_name('Bram Tolliver');",
 			],
 			explanation:
-				"The query is parsed once with a placeholder; the value arrives later and can never change its shape. Application drivers do this for you when you pass parameters.",
+				"The query is parsed once with a placeholder; the value arrives later and can never change the query's structure. Application drivers do this for you when you pass parameters.",
 		},
 		{
 			id: "ch41-pr09",
-			title: "Defused",
+			title: "quote_literal and quote_ident",
 			prompt:
 				"Return **one row** with `quote_literal($q$x' OR '1'='1$q$)` and `quote_ident('Night Watch')`.",
 			difficulty: 1,

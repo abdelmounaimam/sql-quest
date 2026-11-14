@@ -8,7 +8,7 @@ const chapter: Chapter = {
 	tier: "apprentice",
 	track: "mutation",
 	title: "Market Day",
-	subtitle: "Change the ledgers: INSERT, UPDATE, DELETE, jsonb and vectors",
+	subtitle: "INSERT, UPDATE, DELETE, RETURNING, jsonb, vectors and transactions",
 	emoji: "⚖️",
 	datasetId: "_sample-starport",
 	concepts: [
@@ -24,18 +24,18 @@ const chapter: Chapter = {
 	lesson: [
 		{
 			kind: "explain",
-			title: "Writing to the ledgers",
+			title: "Statements that change data",
 			body: "Three verbs change data:\n\n- `INSERT INTO t (cols) VALUES (...)` adds rows\n- `UPDATE t SET col = ... WHERE ...` changes rows\n- `DELETE FROM t WHERE ...` removes rows\n\nAdd `RETURNING` to see what changed.",
 		},
 		{
 			kind: "example",
 			title: "UPDATE with RETURNING",
-			body: "Double the price of ration packs and get the new rows back. Your sandbox is reset after every run, so experiment freely.",
+			body: "This doubles the price of the `Ration Pack` row and returns the changed row. The database is reset after every run, so you can experiment freely.",
 			sql: "UPDATE items SET price = price * 2 WHERE name = 'Ration Pack' RETURNING name, price;",
 		},
 		{
 			kind: "example",
-			title: "Reading jsonb",
+			title: "Read jsonb fields",
 			body: "`->>` extracts a field as text, `@>` tests containment.",
 			sql: "SELECT name, specs->>'fuel' AS fuel FROM items WHERE specs ? 'fuel';",
 		},
@@ -50,17 +50,17 @@ const chapter: Chapter = {
 			],
 			answerIndex: 2,
 			explanation:
-				"Without WHERE, UPDATE touches every row. Write the WHERE before anything else.",
+				"Without WHERE, UPDATE changes every row. Write the WHERE clause first.",
 		},
 		{
 			kind: "explain",
-			title: "Similar items with vectors",
+			title: "Nearest neighbours with vectors",
 			body: "Each item has an `embedding` vector. `a <-> b` is the distance between two vectors, so\n\n```sql\nORDER BY embedding <-> '[0.9,0.1,0]' LIMIT 3\n```\n\nreturns the three most similar items.",
 		},
 		{
 			kind: "try",
-			title: "Your turn: a tip for Gnib",
-			prompt: "Give **Gnib** 50 more credits.",
+			title: "Add 50 credits to one trader",
+			prompt: "Add 50 to the `credits` of the trader named **Gnib**.",
 			starterSql: "UPDATE traders\nSET credits = \nWHERE ",
 			solutionSql:
 				"UPDATE traders SET credits = credits + 50 WHERE name = 'Gnib';",
@@ -77,8 +77,7 @@ const chapter: Chapter = {
 	exercises: [
 		{
 			id: "_s2-ex01",
-			title: "A new world",
-			story: "Scouts just charted a new planet and the registry needs it.",
+			title: "Insert a planet",
 			prompt:
 				"Insert planet **9**, named `Brightwater`, in sector `Outer Rim`, with gravity `0.90`.",
 			difficulty: 1,
@@ -96,13 +95,11 @@ const chapter: Chapter = {
 				"Text values need single quotes.",
 			],
 			explanation:
-				"Listing the columns explicitly keeps the INSERT readable and safe if the table gains columns later.",
+				"Listing the columns explicitly keeps the INSERT readable, and it keeps working if the table gets new columns later.",
 		},
 		{
 			id: "_s2-ex02",
-			title: "Inflation strikes",
-			story:
-				"The guild raises rare item prices by 10% and wants the new tags printed.",
+			title: "Raise rare item prices",
 			prompt:
 				"Increase the price of every `rare` item by 10%, and return the **name** and new **price** of the changed items.",
 			difficulty: 2,
@@ -120,13 +117,11 @@ const chapter: Chapter = {
 				"Finish with RETURNING name, price.",
 			],
 			explanation:
-				"RETURNING gives you the post-update values in the same round trip. The checker verifies both the returned rows and the final table.",
+				"RETURNING gives you the updated values in the same round trip. The checker verifies both the returned rows and the final table.",
 		},
 		{
 			id: "_s2-ex03",
-			title: "Fuel inspection",
-			story:
-				"Lumen customs caps item power at 100. Find every item over the limit.",
+			title: "Filter on a jsonb number",
 			prompt:
 				"Return the **name** of items whose `specs` contain a `power` greater than 100.",
 			difficulty: 3,
@@ -143,8 +138,7 @@ const chapter: Chapter = {
 		},
 		{
 			id: "_s2-ex04",
-			title: "Test the guard",
-			story: "The registry claims item names are unique. Prove it.",
+			title: "Trigger a unique violation",
 			prompt:
 				"Try to insert a new item (id 99) named `Plasma Torch` (category `tool`, rarity `common`, price 10). The database must refuse it with a **unique violation**.",
 			difficulty: 2,
@@ -154,7 +148,7 @@ const chapter: Chapter = {
 				"INSERT INTO items (id, name, category, rarity, price) VALUES (99, 'Plasma Torch', 'tool', 'common', 10);",
 			check: { type: "error", sqlstate: "23505" },
 			hints: [
-				"Just write the INSERT: the constraint does the rest.",
+				"Write the INSERT: the constraint raises the error.",
 				"The UNIQUE constraint on name raises SQLSTATE 23505.",
 			],
 			explanation:
@@ -162,10 +156,9 @@ const chapter: Chapter = {
 		},
 		{
 			id: "_s2-ex05",
-			title: "Expired bounties",
-			story: "The bounty board is cluttered with old notices.",
+			title: "Delete rows before a date",
 			prompt:
-				"A `bounties` table was pinned up for this mission. Delete every bounty whose `expires_at` is before `2024-06-01`.",
+				"This exercise adds a `bounties` table. Delete every bounty whose `expires_at` is before `2024-06-01`.",
 			difficulty: 2,
 			kind: "mutation",
 			concepts: ["_update-delete"],
@@ -185,8 +178,7 @@ const chapter: Chapter = {
 		},
 		{
 			id: "_s2-ex06",
-			title: "Similar gadgets",
-			story: "A buyer loved the Plasma Torch. Suggest similar items.",
+			title: "Three nearest items",
 			prompt:
 				"Return the **name** of the 3 items closest to the vector `[0.9,0.1,0.1]` (Euclidean distance), closest first.",
 			difficulty: 3,
@@ -206,9 +198,9 @@ const chapter: Chapter = {
 			id: "_s2-boss",
 			title: "Boss: The Great Spice Deal",
 			story:
-				"Rexa Voll sells 2 Spice Crates to Gnib for 120 credits each. Half a trade would start a war: it must be all or nothing.",
+				"Combines UPDATE and INSERT statements in one atomic transaction.",
 			prompt:
-				"In **one transaction**:\n1. remove 2 units of item 7 from Rexa's (trader 1) inventory,\n2. add 2 units of item 7 to Gnib's (trader 2) inventory (he has none yet),\n3. move 240 credits from Gnib to Rexa,\n4. record trade **13** (seller 1, buyer 2, item 7, quantity 2, unit price 120) at `2024-09-01 12:00+00`.",
+				"In **one transaction**:\n1. remove 2 units of item 7 from the inventory of trader 1 (Rexa Voll),\n2. add 2 units of item 7 to the inventory of trader 2 (Gnib), who has no row for item 7 yet,\n3. move 240 credits from trader 2 to trader 1,\n4. record trade **13** (seller 1, buyer 2, item 7, quantity 2, unit price 120) at `2024-09-01 12:00+00`.",
 			difficulty: 5,
 			kind: "transaction",
 			concepts: ["_transactions", "_update-delete", "_insert-rows"],
@@ -227,7 +219,7 @@ COMMIT;`,
 			},
 			hints: [
 				"Wrap everything between BEGIN; and COMMIT;",
-				"Gnib has no row for item 7 yet: INSERT it rather than UPDATE.",
+				"Trader 2 has no inventory row for item 7 yet: INSERT it rather than UPDATE.",
 				"Two UPDATEs on traders: one minus 240, one plus 240.",
 			],
 			explanation:
@@ -238,7 +230,7 @@ COMMIT;`,
 	practice: [
 		{
 			id: "_s2-pr01",
-			title: "New trader",
+			title: "Insert a trader with a default",
 			prompt:
 				"Insert trader **13** named `Nova`, species `human`, home planet 8, 100 credits, joined at `2024-09-01 00:00+00`. Leave tags at their default.",
 			difficulty: 2,
@@ -256,7 +248,7 @@ COMMIT;`,
 		},
 		{
 			id: "_s2-pr02",
-			title: "Clear empty stock",
+			title: "Delete zero quantity rows",
 			prompt: "Delete every inventory row whose quantity is 0.",
 			difficulty: 1,
 			kind: "mutation",
@@ -272,7 +264,7 @@ COMMIT;`,
 		},
 		{
 			id: "_s2-pr03",
-			title: "Sale receipt",
+			title: "DELETE with RETURNING",
 			prompt:
 				"Delete the trades made before `2024-04-01` and return their **id**s.",
 			difficulty: 2,
@@ -289,7 +281,7 @@ COMMIT;`,
 		},
 		{
 			id: "_s2-pr04",
-			title: "Ghost trader",
+			title: "Trigger a foreign key violation",
 			prompt:
 				"Try to give trader **404** (who does not exist) 1 unit of item 1 in the inventory. The database must refuse it with a **foreign key violation**.",
 			difficulty: 2,
@@ -304,7 +296,7 @@ COMMIT;`,
 		},
 		{
 			id: "_s2-pr05",
-			title: "Vegan menu",
+			title: "jsonb containment",
 			prompt:
 				'Return the **name** of items whose specs contain `"vegan": true`.',
 			difficulty: 2,
@@ -317,7 +309,7 @@ COMMIT;`,
 		},
 		{
 			id: "_s2-pr06",
-			title: "Origin story",
+			title: "Read a nested jsonb path",
 			prompt:
 				"Return the **name** and origin planet (`specs -> origin -> planet`, as text) of items that have one.",
 			difficulty: 3,
@@ -332,7 +324,7 @@ COMMIT;`,
 		},
 		{
 			id: "_s2-pr07",
-			title: "Mysterious neighbours",
+			title: "Two nearest items",
 			prompt:
 				"Return the **name** of the 2 items closest to `[0.1,0.1,1.0]`, closest first.",
 			difficulty: 2,
@@ -346,7 +338,7 @@ COMMIT;`,
 		},
 		{
 			id: "_s2-pr08",
-			title: "Atomic gift",
+			title: "Transfer credits in a transaction",
 			prompt:
 				"In one transaction, move 100 credits from Sena Okoro (trader 8) to Zul the Quiet (trader 9).",
 			difficulty: 3,

@@ -7,7 +7,7 @@ const chapter: Chapter = {
 	tier: "apprentice",
 	track: "query",
 	title: "Tally the Loot",
-	subtitle: "Count, sum and group: from one big total to one row per group",
+	subtitle: "Aggregate functions, count variants, GROUP BY, HAVING, FILTER and string_agg",
 	emoji: "💰",
 	datasetId: "starport",
 	concepts: [
@@ -23,65 +23,65 @@ const chapter: Chapter = {
 	lesson: [
 		{
 			kind: "explain",
-			title: "Many rows in, one row out",
-			body: "Time to count the loot. **Aggregate functions** squash a whole column into one value:\n\n- `count(*)`: how many rows;\n- `sum(x)`, `avg(x)`: total and mean;\n- `min(x)`, `max(x)`: smallest and largest (numbers, text, dates).\n\nA query with aggregates and no GROUP BY returns **exactly one row**, even from an empty table.",
+			title: "Aggregate functions",
+			body: "**Aggregate functions** reduce a whole column to one value:\n\n- `count(*)`: how many rows;\n- `sum(x)`, `avg(x)`: total and mean;\n- `min(x)`, `max(x)`: smallest and largest (numbers, text, dates).\n\nA query with aggregates and no GROUP BY returns **exactly one row**, even from an empty table.",
 		},
 		{
 			kind: "example",
-			title: "The whole ledger in one row",
-			body: "Forty trades, one line. Notice the long tail of decimals on `avg`, and that it averages **39** prices, not 40: trade 37's unknown price is skipped.",
+			title: "Aggregating the trades table",
+			body: "40 rows in, one row out. Note the long tail of decimals on `avg`, and that it averages **39** prices, not 40: trade 37 has a NULL `unit_price`, which is skipped.",
 			sql: "SELECT count(*) AS trades, sum(qty) AS units,\n       avg(unit_price) AS avg_price,\n       min(traded_at) AS first, max(traded_at) AS last\nFROM trades;",
 		},
 		{
 			kind: "explain",
-			title: "Three ways to count",
+			title: "count(*), count(column), count(DISTINCT column)",
 			body: "```sql\ncount(*)                  -- rows\ncount(callsign)           -- non-NULL callsigns\ncount(DISTINCT faction_id) -- different non-NULL factions\n```\n\nEvery aggregate **ignores NULLs**, except `count(*)`, which counts rows whatever they contain. And over zero rows, `sum` and `avg` return NULL, not 0.",
 		},
 		{
 			kind: "quiz",
 			question:
-				"The Starport has 24 pilots and 3 of them have no callsign. What does `SELECT count(callsign) FROM pilots;` return?",
+				"The `pilots` table has 24 rows and 3 of them have a NULL `callsign`. What does `SELECT count(callsign) FROM pilots;` return?",
 			choices: ["24", "21", "3", "An error: callsign is text"],
 			answerIndex: 1,
 			explanation:
-				"`count(column)` counts the **non-NULL** values, so the three pilots without a callsign are left out: 21. `count(*)` would return 24. Counting works on any type.",
+				"`count(column)` counts the **non-NULL** values, so the three NULL callsigns are left out: 21. `count(*)` would return 24. `count` works on any type.",
 		},
 		{
 			kind: "explain",
 			title: "GROUP BY: one row per group",
-			body: "`GROUP BY side` splits the rows into piles, one per value of `side`, and the aggregates run **per pile**.\n\nRule: every column in SELECT is either **in the GROUP BY** or **inside an aggregate**. Otherwise Postgres cannot know which row's value to show:\n\n```sql\nSELECT side, ship_id, count(*) FROM trades GROUP BY side;\n-- error 42803: ship_id must appear in GROUP BY\n```\n\nNULLs form a group of their own.",
+			body: "`GROUP BY side` splits the rows into groups, one per value of `side`, and the aggregates run **once per group**.\n\nRule: every column in SELECT is either **in the GROUP BY** or **inside an aggregate**. Otherwise Postgres cannot know which row's value to return:\n\n```sql\nSELECT side, ship_id, count(*) FROM trades GROUP BY side;\n-- error 42803: ship_id must appear in GROUP BY\n```\n\nNULLs form a group of their own.",
 		},
 		{
 			kind: "example",
-			title: "Buys versus sells",
-			body: "Two piles, two rows, each with its own count and total.",
+			title: "Grouping by side",
+			body: "Two groups, two rows, each with its own count and total.",
 			sql: "SELECT side, count(*) AS trades, sum(qty) AS units\nFROM trades\nGROUP BY side;",
 		},
 		{
 			kind: "explain",
-			title: "The order the database really follows",
-			body: "You **write** SELECT first, but Postgres **runs** the clauses in this order:\n\n`FROM` → `WHERE` → `GROUP BY` → `HAVING` → `SELECT` → `DISTINCT` → `ORDER BY` → `LIMIT`\n\nSo WHERE filters **rows** before any group exists: no aggregates there (42803), and no SELECT aliases (42703). **HAVING** filters **groups** after aggregation. ORDER BY runs after SELECT, so aliases work there.",
+			title: "Logical processing order",
+			body: "You **write** SELECT first, but Postgres **evaluates** the clauses in this order:\n\n`FROM` → `WHERE` → `GROUP BY` → `HAVING` → `SELECT` → `DISTINCT` → `ORDER BY` → `LIMIT`\n\nSo WHERE filters **rows** before any group exists: no aggregates there (42803), and no SELECT aliases (42703). **HAVING** filters **groups** after aggregation. ORDER BY runs after SELECT, so aliases work there.",
 		},
 		{
 			kind: "example",
-			title: "HAVING keeps the big haulers",
-			body: "Only ships that moved more than 500 units in total. The alias `units` works in ORDER BY, but HAVING must repeat `sum(qty)`.",
+			title: "Filtering groups with HAVING",
+			body: "Only the ships whose total `qty` is above 500. The alias `units` works in ORDER BY, but HAVING must repeat `sum(qty)`.",
 			sql: "SELECT ship_id, count(*) AS trades, sum(qty) AS units\nFROM trades\nGROUP BY ship_id\nHAVING sum(qty) > 500\nORDER BY units DESC;",
 		},
 		{
 			kind: "explain",
 			title: "Conditional and collection aggregates",
-			body: "```sql\ncount(*) FILTER (WHERE side = 'sell')        -- count some rows only\nstring_agg(callsign, ', ' ORDER BY callsign) -- 'Halo, Nova, ...'\narray_agg(name)                              -- {Ada,Bram,...}\nbool_or(NOT legal)                           -- any contraband?\n```\n\n`FILTER` gives several conditional totals in one pass. The `ORDER BY` **inside** `string_agg` orders the pieces; without it their order is anyone's guess.",
+			body: "```sql\ncount(*) FILTER (WHERE side = 'sell')        -- count some rows only\nstring_agg(callsign, ', ' ORDER BY callsign) -- 'Halo, Nova, ...'\narray_agg(name)                              -- {Ada,Bram,...}\nbool_or(NOT legal)                           -- any contraband?\n```\n\n`FILTER` gives several conditional totals in one pass. The `ORDER BY` **inside** `string_agg` orders the pieces; without it their order is not guaranteed.",
 		},
 		{
 			kind: "try",
-			title: "Your turn: species census",
+			title: "Try it: pilots per species",
 			prompt: "Return each **species** and the **number of pilots** of that species.",
 			starterSql: "SELECT species, count(*)\nFROM pilots;",
 			solutionSql: "SELECT species, count(*) FROM pilots GROUP BY species;",
 			check: { type: "result" },
 			hints: [
-				"Run the starter: error 42803. Postgres does not know you want one row per species.",
+				"Run the starter: error 42803. Without GROUP BY, Postgres cannot return one row per species.",
 				"Add GROUP BY species at the end.",
 			],
 		},
@@ -89,8 +89,7 @@ const chapter: Chapter = {
 	exercises: [
 		{
 			id: "ch08-ex01",
-			title: "The grand total",
-			story: "The Counting House closes its books on two years of trading.",
+			title: "Count and sum the whole table",
 			prompt:
 				"Return **one row** with two columns: the **number of trades** and the **total quantity** traded (the sum of `qty`).",
 			difficulty: 1,
@@ -104,14 +103,13 @@ const chapter: Chapter = {
 				"SELECT count(*), sum(qty) FROM trades;",
 			],
 			explanation:
-				"Without GROUP BY, aggregates collapse the whole table into one row: 40 trades, 4443 units.\n\n**Pitfall:** `count(unit_price)` returns 39, because the flare-damaged trade has no price. When the question is *how many rows*, use `count(*)`.",
+				"Without GROUP BY, aggregates collapse the whole table into one row: 40 trades, 4443 units.\n\n**Pitfall:** `count(unit_price)` returns 39, because trade 37 has a NULL price. When the question is *how many rows*, use `count(*)`.",
 		},
 		{
 			id: "ch08-ex02",
-			title: "Census of the pilots",
-			story: "The Census Bureau's form has three boxes, and each one counts something different.",
+			title: "Three kinds of count",
 			prompt:
-				"Return **one row** with three columns, in this order: the **number of pilots**, the number of pilots **with a callsign**, and the number of **different factions** pilots belong to (freelancers do not count as a faction).",
+				"Return **one row** with three columns, in this order: the **number of pilots**, the number of pilots **with a callsign**, and the number of **different factions** pilots belong to (a NULL faction_id does not count as a faction).",
 			difficulty: 2,
 			kind: "query",
 			concepts: ["count-variants"],
@@ -119,17 +117,16 @@ const chapter: Chapter = {
 				"SELECT count(*) AS pilots, count(callsign) AS with_callsign, count(DISTINCT faction_id) AS factions FROM pilots;",
 			check: { type: "result" },
 			hints: [
-				"Three variants of count, one per box.",
+				"Three variants of count, one per column.",
 				"`count(col)` skips NULLs; `count(DISTINCT col)` also removes repeats.",
 				"count(*), count(callsign), count(DISTINCT faction_id)",
 			],
 			explanation:
-				"24 rows, 21 non-NULL callsigns, 5 distinct non-NULL factions. `count(DISTINCT ...)` ignores NULL too, so the freelancers are not a sixth faction.\n\n**Pitfall:** `count(faction_id)` returns 20: it counts pilots who have a faction, not factions.",
+				"24 rows, 21 non-NULL callsigns, 5 distinct non-NULL factions. `count(DISTINCT ...)` ignores NULL too, so pilots with no faction do not form a sixth faction.\n\n**Pitfall:** `count(faction_id)` returns 20: it counts pilots who have a faction, not factions.",
 		},
 		{
 			id: "ch08-ex03",
-			title: "Buy side, sell side",
-			story: "The treasurer wants a two-line summary pinned above her desk.",
+			title: "Totals per side",
 			prompt:
 				"For each **side** (`buy` and `sell`), return four columns: the **side**, the **number of trades**, the **total value** (sum of `qty * unit_price`), and the **average unit price** rounded to **2 decimals**. Unknown prices are simply left out of the total and the average.",
 			difficulty: 2,
@@ -144,12 +141,11 @@ const chapter: Chapter = {
 				"SELECT side, count(*), sum(qty * unit_price), round(avg(unit_price), 2) FROM trades GROUP BY side;",
 			],
 			explanation:
-				"Each aggregate runs once per side. The NULL price of trade 37 is skipped by `sum` and `avg`, but the trade is still counted by `count(*)`.\n\n**Pitfall:** `avg(COALESCE(unit_price, 0))` counts the lost price as a real 0 and drags the sell average down to 547.51. **Alternative:** `GROUP BY 1` refers to the first selected column.",
+				"Each aggregate runs once per side. The NULL price of trade 37 is skipped by `sum` and `avg`, but the row is still counted by `count(*)`.\n\n**Pitfall:** `avg(COALESCE(unit_price, 0))` counts the missing price as a real 0 and drags the sell average down to 547.51. **Alternative:** `GROUP BY 1` refers to the first selected column.",
 		},
 		{
 			id: "ch08-ex04",
-			title: "Faction purses",
-			story: "Each faction wants to know its headcount and its combined wealth. The freelancers want their own line too.",
+			title: "Pilots and credits per faction",
 			prompt:
 				"For each **faction_id**, including the pilots with **no faction** (who form their own group), return the **faction_id**, the **number of pilots** and their **total credits**.",
 			difficulty: 2,
@@ -164,12 +160,11 @@ const chapter: Chapter = {
 				"SELECT faction_id, count(*), sum(credits) FROM pilots GROUP BY faction_id;",
 			],
 			explanation:
-				"GROUP BY treats all NULL faction ids as one group: the four freelancers. Lumen's frozen credits are skipped by `sum`, but Lumen still counts as a pilot.\n\n**Pitfall:** `count(credits)` would say the freelancers are 3, because it skips Lumen's NULL wallet.",
+				"GROUP BY treats all NULL faction ids as one group: the four pilots with no faction. Lumen's NULL credits are skipped by `sum`, but Lumen still counts as a pilot.\n\n**Pitfall:** `count(credits)` would return 3 for the NULL group, because it skips Lumen's NULL credits.",
 		},
 		{
 			id: "ch08-ex05",
-			title: "Best sellers",
-			story: "The market board only lists commodities that changed hands often.",
+			title: "Commodities traded more than 3 times",
 			prompt:
 				"Return the **commodity_id** and the **number of trades** of every commodity traded **more than 3 times**.",
 			difficulty: 2,
@@ -188,9 +183,7 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch08-ex06",
-			title: "Respected species",
-			story:
-				"The diplomatic corps wants the species that are both numerous and well regarded. The clerk's query fails before it even starts.",
+			title: "Move group conditions to HAVING",
 			prompt:
 				"Fix the query: return each **species** that has **more than 2 pilots** and an **average reputation above 100**, with its **number of pilots**.",
 			difficulty: 3,
@@ -207,12 +200,11 @@ const chapter: Chapter = {
 				"Move them to HAVING, written with the aggregates themselves: HAVING count(*) > 2 AND avg(reputation) > 100",
 			],
 			explanation:
-				"WHERE runs before GROUP BY and before SELECT, so it knows neither the alias `n` nor any aggregate. HAVING runs after grouping and sees `count(*)` and `avg(...)`: Humans, Synths and Zorblax qualify, Vulpines (average -108) do not.\n\n**Pitfall:** `WHERE reputation > 100 ... HAVING count(*) > 2` answers another question: it drops individual pilots first, then counts the survivors.",
+				"WHERE runs before GROUP BY and before SELECT, so it knows neither the alias `n` nor any aggregate. HAVING runs after grouping and sees `count(*)` and `avg(...)`: Humans, Synths and Zorblax qualify, Vulpines (average -108) do not.\n\n**Pitfall:** `WHERE reputation > 100 ... HAVING count(*) > 2` answers another question: it removes individual pilots first, then counts the remaining ones.",
 		},
 		{
 			id: "ch08-ex07",
-			title: "Buyers and sellers",
-			story: "The harbor wants to know whether each ship mostly buys or mostly sells.",
+			title: "Buys and sells per ship",
 			prompt:
 				"For every ship that **has trades**, return three columns: the **ship_id**, its number of **buys** and its number of **sells**.",
 			difficulty: 3,
@@ -227,12 +219,11 @@ const chapter: Chapter = {
 				"count(*) FILTER (WHERE side = 'buy'), count(*) FILTER (WHERE side = 'sell')",
 			],
 			explanation:
-				"FILTER applies a condition to one aggregate only, so the two counts live side by side on one row. Ship 9 shows 0 buys: a FILTERed count of nothing is 0.\n\n**Pitfall:** `count(side = 'buy')` counts every row, because `false` is a value too (only NULL is skipped). A `WHERE side = 'buy'` would remove the sells from every group. **Alternative:** `sum(CASE WHEN side = 'buy' THEN 1 ELSE 0 END)`.",
+				"FILTER applies a condition to one aggregate only, so the two counts sit side by side on one row. Ship 9 shows 0 buys: a FILTERed count of nothing is 0.\n\n**Pitfall:** `count(side = 'buy')` counts every row, because `false` is a value too (only NULL is skipped). A `WHERE side = 'buy'` would remove the sells from every group. **Alternative:** `sum(CASE WHEN side = 'buy' THEN 1 ELSE 0 END)`.",
 		},
 		{
 			id: "ch08-ex08",
-			title: "Roll call",
-			story: "The radio officer wants one line per species with every callsign on it.",
+			title: "Callsigns per species as one text",
 			prompt:
 				"For each **species**, return the species and the **list of its callsigns** in one text, separated by a comma and a space (`, `), sorted the way `ORDER BY callsign` sorts them in this database (capitals first). Pilots without a callsign are left out of the list.",
 			difficulty: 3,
@@ -242,18 +233,18 @@ const chapter: Chapter = {
 				"SELECT species, string_agg(callsign, ', ' ORDER BY callsign) AS callsigns FROM pilots GROUP BY species;",
 			check: { type: "result" },
 			hints: [
-				"One aggregate glues text values together with a separator.",
+				"One aggregate concatenates text values with a separator.",
 				"`string_agg(value, separator ORDER BY ...)`. NULL values are skipped for you.",
 				"string_agg(callsign, ', ' ORDER BY callsign)",
 			],
 			explanation:
-				"`string_agg` concatenates the group's values, and the `ORDER BY` **inside** the call sorts them before gluing: `Thorn, shadow_99, viper` for the Vulpines (byte order puts capitals first).\n\n**Pitfall:** an `ORDER BY` at the end of the query sorts the result rows, not the names inside each list. **Alternative:** `array_agg(callsign ORDER BY callsign)` builds an array instead of a text.",
+				"`string_agg` concatenates the group's values, and the `ORDER BY` **inside** the call sorts them before concatenating: `Thorn, shadow_99, viper` for the Vulpines (byte order puts capitals first).\n\n**Pitfall:** an `ORDER BY` at the end of the query sorts the result rows, not the names inside each list. **Alternative:** `array_agg(callsign ORDER BY callsign)` builds an array instead of a text.",
 		},
 		{
 			id: "ch08-ex09",
 			title: "Boss: Audit of the Counting House",
 			story:
-				"The Grand Auditor arrives. She wants a monthly report, but only for the busy months, and she reads it in calendar order.",
+				"Combines GROUP BY on a date_trunc expression, HAVING, an aggregate with FILTER and an ordered result.",
 			prompt:
 				"For every **calendar month** with **at least 3 trades**, return four columns, sorted by **month** from oldest to newest:\n\n1. the **month**, as the first instant of the month (`date_trunc('month', traded_at)`);\n2. the **number of trades** of that month (buys and sells);\n3. the **total sell value**: the sum of `qty * unit_price` over the **sells** only (unknown prices ignored);\n4. the **largest quantity** of a single trade that month.",
 			difficulty: 5,
@@ -268,14 +259,14 @@ const chapter: Chapter = {
 				"GROUP BY date_trunc('month', traded_at) HAVING count(*) >= 3 ORDER BY 1, with sum(qty * unit_price) FILTER (WHERE side = 'sell')",
 			],
 			explanation:
-				"GROUP BY works on any expression, so `date_trunc` turns 40 instants into monthly piles. FILTER restricts only the sell total, HAVING keeps the busy months, and ORDER BY (which runs last) can use the alias `month`. Four months survive: January, February, March and July 2076.\n\n**Pitfall:** `WHERE side = 'sell'` before grouping removes the buys from every count, and no month has 3 sells: the report comes back empty. `HAVING count(*) > 3` keeps January alone. **Alternative:** `sum(CASE WHEN side = 'sell' THEN qty * unit_price END)`.",
+				"GROUP BY works on any expression, so `date_trunc` turns 40 instants into monthly groups. FILTER restricts only the sell total, HAVING keeps the months with at least 3 trades, and ORDER BY (which runs last) can use the alias `month`. Four months remain: January, February, March and July 2076.\n\n**Pitfall:** `WHERE side = 'sell'` before grouping removes the buys from every count, and no month has 3 sells: the report comes back empty. `HAVING count(*) > 3` keeps January alone. **Alternative:** `sum(CASE WHEN side = 'sell' THEN qty * unit_price END)`.",
 			boss: true,
 		},
 	],
 	practice: [
 		{
 			id: "ch08-pr01",
-			title: "Price range",
+			title: "Lowest and highest price",
 			prompt:
 				"Return **one row** with the **lowest** and the **highest** base_price among commodities, in that order.",
 			difficulty: 1,
@@ -289,7 +280,7 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch08-pr02",
-			title: "Average hull",
+			title: "Average of a nullable column",
 			prompt:
 				"Return **one row**: the **average hull_integrity** of the ships whose hull **was inspected**, rounded to **2 decimals**.",
 			difficulty: 2,
@@ -307,7 +298,7 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch08-pr03",
-			title: "Counted worlds",
+			title: "Rows versus non-NULL values",
 			prompt:
 				"Return **one row** with two columns: the **number of planets**, and the number of planets whose **population is known**.",
 			difficulty: 1,
@@ -325,7 +316,7 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch08-pr04",
-			title: "How many models?",
+			title: "Count distinct models",
 			prompt: "Return **one row**: the number of **different** ship models on record (an unknown model is not a model).",
 			difficulty: 2,
 			kind: "query",
@@ -338,11 +329,11 @@ const chapter: Chapter = {
 				"SELECT count(DISTINCT model) FROM ships;",
 			],
 			explanation:
-				"`count(DISTINCT model)` counts 8 different non-NULL models. **Pitfall:** `count(model)` returns 20, one per registered ship.",
+				"`count(DISTINCT model)` counts 8 different non-NULL models. **Pitfall:** `count(model)` returns 20, one per ship with a known model.",
 		},
 		{
 			id: "ch08-pr05",
-			title: "Fleet by model",
+			title: "Ships per model",
 			prompt:
 				"Return each **model** and the **number of ships** of that model, including the group of ships with an **unknown** model.",
 			difficulty: 2,
@@ -356,11 +347,11 @@ const chapter: Chapter = {
 				"SELECT model, count(*) FROM ships GROUP BY model;",
 			],
 			explanation:
-				"The Ghost Ship forms a NULL group of its own, counted by `count(*)`.\n\n**Pitfall:** `count(model)` would show 0 for that group, since its only model is NULL.",
+				"The Ghost Ship has a NULL model and forms a group of its own, counted by `count(*)`.\n\n**Pitfall:** `count(model)` would show 0 for that group, since its only model is NULL.",
 		},
 		{
 			id: "ch08-pr06",
-			title: "Crowded sectors",
+			title: "Sectors with more than 2 planets",
 			prompt:
 				"Return each **sector** and its **number of planets**, for the sectors with **more than 2** planets.",
 			difficulty: 2,
@@ -378,9 +369,7 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch08-pr07",
-			title: "The alias that was not there yet",
-			story:
-				"A clerk lists the rich pilots in thousands of credits. Postgres claims the column `kilo` does not exist, yet it is right there in the SELECT.",
+			title: "Alias not visible in WHERE",
 			prompt:
 				"Fix the query: return the **name** and the **credits divided by 1000** (titled `kilo`) of every pilot with **more than 20** thousand credits, largest first, ties by **name A to Z**.",
 			difficulty: 2,
@@ -397,11 +386,11 @@ const chapter: Chapter = {
 				"Repeat the expression in WHERE: WHERE credits / 1000 > 20 (or credits > 20000).",
 			],
 			explanation:
-				"The alias is born in SELECT, which runs after WHERE but before ORDER BY. So `ORDER BY kilo` is fine, and only the WHERE needs the full expression.\n\n**Alternative:** `WHERE credits > 20000` says the same thing without division.",
+				"The alias is created in SELECT, which runs after WHERE but before ORDER BY. So `ORDER BY kilo` is fine, and only the WHERE needs the full expression.\n\n**Alternative:** `WHERE credits > 20000` says the same thing without division.",
 		},
 		{
 			id: "ch08-pr08",
-			title: "Legal and not",
+			title: "Two conditional counts",
 			prompt:
 				"Return **one row** with two columns: the number of **legal** commodities and the number of **illegal** ones.",
 			difficulty: 2,
@@ -420,7 +409,7 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch08-pr09",
-			title: "Any contraband?",
+			title: "Any illegal commodity per category",
 			prompt:
 				"Return each **category** of commodity (the uncategorised ones form their own group) and a **boolean** that is true when **at least one** commodity of the category is **not legal**.",
 			difficulty: 3,
@@ -434,11 +423,11 @@ const chapter: Chapter = {
 				"bool_or(NOT legal)",
 			],
 			explanation:
-				"`bool_or` is the aggregate version of OR: fuel is flagged because of Antimatter Pods. Its sibling `bool_and` is the aggregate AND.\n\n**Pitfall:** `max(NOT legal)` fails with 42883: there is no max for booleans.",
+				"`bool_or` is the aggregate version of OR: the fuel category is true because of Antimatter Pods. Its counterpart `bool_and` is the aggregate AND.\n\n**Pitfall:** `max(NOT legal)` fails with 42883: there is no max for booleans.",
 		},
 		{
 			id: "ch08-pr10",
-			title: "Ranks by headcount",
+			title: "Pilots per rank, sorted",
 			prompt:
 				"Return each **rank** and its **number of pilots**, the most crowded rank first, ties by **rank A to Z**.",
 			difficulty: 2,
@@ -452,7 +441,7 @@ const chapter: Chapter = {
 				"ORDER BY count(*) DESC, rank",
 			],
 			explanation:
-				"Captains and lieutenants tie at 6, cadets and commanders at 3: the second key settles them.\n\n**Pitfall:** believing GROUP BY returns groups in order. It does not promise any order.",
+				"Captains and lieutenants tie at 6, cadets and commanders at 3: the second key breaks the ties.\n\n**Pitfall:** believing GROUP BY returns groups in order. It does not promise any order.",
 		},
 	],
 };

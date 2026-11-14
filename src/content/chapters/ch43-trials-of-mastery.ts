@@ -45,7 +45,7 @@ const chapter: Chapter = {
 	tier: "master",
 	track: "advanced",
 	title: "Trials of Mastery",
-	subtitle: "Side quest: no new syntax, every technique, and a peek behind the server",
+	subtitle: "Review exercises across all techniques, plus an overview of server operations: settings, sizes, backups",
 	emoji: "👑",
 	datasetId: "guild",
 	concepts: ["operations-overview"],
@@ -53,24 +53,24 @@ const chapter: Chapter = {
 	lesson: [
 		{
 			kind: "explain",
-			title: "Beyond the sandbox",
-			body: "You are back in the Guild of the Silver Dragon, where it all began. Aldric has one last lesson: a real PostgreSQL server needs care your browser sandbox never did.\n\n- **Backups**: `pg_dump` for logical copies; base backups plus WAL archives for point-in-time recovery.\n- **Replication**: standby servers that follow the primary.\n- **Connection pooling** (PgBouncer): a few hundred connections, not thousands.\n- **Configuration** in `postgresql.conf`, and **upgrades** with `pg_upgrade`.",
+			title: "Operating a real server",
+			body: "This chapter uses the `guild` dataset again. A real PostgreSQL server needs maintenance that the browser sandbox does not:\n\n- **Backups**: `pg_dump` for logical copies; base backups plus WAL archives for point-in-time recovery.\n- **Replication**: standby servers that follow the primary.\n- **Connection pooling** (PgBouncer): a few hundred connections, not thousands.\n- **Configuration** in `postgresql.conf`, and **upgrades** with `pg_upgrade`.",
 		},
 		{
 			kind: "example",
-			title: "Read the dials",
-			body: "Every setting lives in `pg_settings`. The `context` column says how it can change. These values are PGlite's, not a production server's: read them, never copy them.",
+			title: "Reading pg_settings",
+			body: "Every setting is listed in `pg_settings`. The `context` column says how it can be changed. These values are PGlite's, not a production server's: read them, never copy them.",
 			sql: "SELECT name, setting, unit, context\nFROM pg_settings\nWHERE name IN ('shared_buffers', 'work_mem', 'max_connections', 'wal_level')\nORDER BY name;",
 		},
 		{
 			kind: "explain",
 			title: "Measure before you tune",
-			body: "Tuning by folklore makes servers slower. Measure first:\n\n- sizes: `pg_database_size(current_database())`, `pg_total_relation_size('heroes')` (table + indexes + TOAST);\n- activity: `pg_stat_user_tables`, `pg_stat_statements` on a real server;\n- plans: `EXPLAIN (ANALYZE, BUFFERS)`.\n\nThen change one knob at a time. `context` tells the cost: **postmaster** needs a restart, **sighup** a reload, **user** a simple `SET`.",
+			body: "Tuning based on rules of thumb alone can make servers slower. Measure first:\n\n- sizes: `pg_database_size(current_database())`, `pg_total_relation_size('heroes')` (table + indexes + TOAST);\n- activity: `pg_stat_user_tables`, `pg_stat_statements` on a real server;\n- plans: `EXPLAIN (ANALYZE, BUFFERS)`.\n\nThen change one setting at a time. `context` tells the cost: **postmaster** needs a restart, **sighup** a reload, **user** a simple `SET`.",
 		},
 		{
 			kind: "example",
-			title: "The weight of a table",
-			body: "Surprise: the six-row `guilds` table weighs as much as the busiest ones. Storage comes in 8 kB pages, and each index (primary key, unique name) has pages of its own.",
+			title: "Table sizes",
+			body: "Note that the six-row `guilds` table takes as much space as the busiest ones. Storage is allocated in 8 kB pages, and each index (primary key, unique name) has pages of its own.",
 			sql: "SELECT relname, n_live_tup AS rows, pg_total_relation_size(relid) AS bytes,\n       pg_size_pretty(pg_total_relation_size(relid)) AS pretty\nFROM pg_stat_user_tables\nORDER BY bytes DESC, relname\nLIMIT 6;",
 		},
 		{
@@ -85,16 +85,16 @@ const chapter: Chapter = {
 			],
 			answerIndex: 1,
 			explanation:
-				"Replication copies every change, including the disasters. A backup lets you go back in time: keep base backups and WAL archives (point-in-time recovery), and test restoring them.",
+				"Replication copies every change, including mistakes. A backup lets you go back in time: keep base backups and WAL archives (point-in-time recovery), and test restoring them.",
 		},
 		{
 			kind: "explain",
-			title: "The rules of the Trials",
-			body: "The Trials are the guild's post-game:\n\n- each trial mixes techniques from several worlds;\n- any technique is allowed: windows or LATERAL, NOT EXISTS or EXCEPT, MERGE or ON CONFLICT;\n- the hints are there, but true masters try twice before opening them.\n\nThe final boss, **The Astral Throne**, builds a small multi-tenant guild application inside the database.",
+			title: "How the review exercises work",
+			body: "The exercises in this chapter introduce no new syntax:\n\n- each one combines techniques from several earlier chapters;\n- any technique is allowed: window functions or LATERAL, NOT EXISTS or EXCEPT, MERGE or ON CONFLICT;\n- hints are available, but try twice before opening them.\n\nThe final boss, **The Astral Throne**, builds a small multi-tenant application inside the database.",
 		},
 		{
 			kind: "try",
-			title: "Your turn: restart or not?",
+			title: "Try it: read a setting's context",
 			prompt:
 				"Return the **context** of the setting `shared_buffers`, which tells whether changing it needs a restart.",
 			starterSql: "SELECT setting\nFROM pg_settings\nWHERE name = 'shared_buffers';",
@@ -109,11 +109,9 @@ const chapter: Chapter = {
 	exercises: [
 		{
 			id: "ch43-ex01",
-			title: "Trial of the Podiums",
-			story:
-				"Morwen the Grey wants a podium per guild for the midwinter feast: the three heroes with the most experience. The herald's query put four heroes on the Ember Fang podium.",
+			title: "Top 3 per group with a tie breaker",
 			prompt:
-				"For each guild, return the **guild name**, the **hero name** and the **xp** of its **3** heroes with the most xp, ties broken by hero name (A to Z). Heroes without a guild are not on any podium.",
+				"For each guild, return the **guild name**, the **hero name** and the **xp** of its **3** heroes with the most xp, ties broken by hero name (A to Z). Heroes without a guild are excluded.",
 			difficulty: 3,
 			kind: "query",
 			concepts: ["top-n-per-group", "ranking-functions"],
@@ -128,13 +126,11 @@ const chapter: Chapter = {
 				"row_number() OVER (PARTITION BY g.id ORDER BY h.xp DESC, h.name) ... WHERE rn <= 3",
 			],
 			explanation:
-				"`row_number` with a tie breaker gives exactly three per guild: Lyra Dawnsong takes Ember Fang's third step over Rowan Ashby (both 36000 xp).\n\n**Pitfall:** `rank()` gives both of them 3 and the podium gets four heroes. **Alternative:** `CROSS JOIN LATERAL (SELECT ... ORDER BY xp DESC, name LIMIT 3)` per guild.",
+				"`row_number` with a tie breaker gives exactly three rows per guild: Lyra Dawnsong takes Ember Fang's third place over Rowan Ashby (both 36000 xp).\n\n**Pitfall:** `rank()` gives both of them 3 and the guild gets four rows. **Alternative:** `CROSS JOIN LATERAL (SELECT ... ORDER BY xp DESC, name LIMIT 3)` per guild.",
 		},
 		{
 			id: "ch43-ex02",
-			title: "Trial of the Home Region",
-			story:
-				"A hero who has completed every quest of their guild hall's region earns the title *Warden of the Hall*.",
+			title: "Relational division with NOT EXISTS",
 			prompt:
 				"Return the **name** of every hero who belongs to a guild and has completed **every** quest whose region is the **hall_region** of their guild.",
 			difficulty: 4,
@@ -149,15 +145,13 @@ const chapter: Chapter = {
 				"WHERE NOT EXISTS (SELECT 1 FROM quests q WHERE q.region = g.hall_region AND NOT EXISTS (SELECT 1 FROM quest_completions c WHERE c.hero_id = h.id AND c.quest_id = q.id))",
 			],
 			explanation:
-				"Relational division: Aldric cleared all five Highmoor quests, Morwen the three of Mistwood, Ulfric the three of Ashlands.\n\n**Pitfall:** counting all of a hero's completions instead of only those in the hall region rewards busy heroes who never cleared home. **Alternative:** `GROUP BY h.id HAVING count(*) = (SELECT count(*) FROM quests WHERE region = g.hall_region)` on completions joined to quests of that region.",
+				"Relational division: Aldric completed all five Highmoor quests, Morwen the three of Mistwood, Ulfric the three of Ashlands.\n\n**Pitfall:** counting all of a hero's completions instead of only those in the hall region selects heroes with many completions elsewhere. **Alternative:** `GROUP BY h.id HAVING count(*) = (SELECT count(*) FROM quests WHERE region = g.hall_region)` on completions joined to quests of that region.",
 		},
 		{
 			id: "ch43-ex03",
-			title: "Trial of the Lineages",
-			story:
-				"The guild's genealogist traces every hero back to the founder of their teaching line.",
+			title: "Root and depth in a recursive tree",
 			prompt:
-				"For **every** hero, return the hero's **name**, the **name of the root** of their mentor tree (the ancestor who has no mentor; a hero without a mentor is their own root) and their **depth** (0 for a root, 1 for a root's apprentice, and so on).",
+				"For **every** hero, return the hero's **name**, the **name of the root** of their mentor tree (the ancestor who has no mentor; a hero without a mentor is their own root) and their **depth** (0 for a root, 1 for a root's direct mentee, and so on).",
 			difficulty: 4,
 			kind: "query",
 			concepts: ["recursive-cte"],
@@ -165,18 +159,16 @@ const chapter: Chapter = {
 				"WITH RECURSIVE lineage AS (\n  SELECT id, name, name AS root, 0 AS depth\n  FROM heroes WHERE mentor_id IS NULL\n  UNION ALL\n  SELECT h.id, h.name, l.root, l.depth + 1\n  FROM heroes h\n  JOIN lineage l ON h.mentor_id = l.id\n)\nSELECT name, root, depth FROM lineage;",
 			check: { type: "result" },
 			hints: [
-				"Start from the roots (`mentor_id IS NULL`) and walk down to the apprentices.",
+				"Start from the roots (`mentor_id IS NULL`) and walk down to their mentees.",
 				"Carry the root's name and a depth counter through the recursion.",
 				"Anchor: SELECT id, name, name AS root, 0 ... Recursive member: SELECT h.id, h.name, l.root, l.depth + 1 FROM heroes h JOIN lineage l ON h.mentor_id = l.id",
 			],
 			explanation:
-				"Walking downward lets each row inherit its root from the parent: Mabel Crumb is four steps below Aldric.\n\n**Pitfall:** starting from every hero and walking up gives the right roots but needs a final filter to keep only the top row per hero; returning the direct mentor instead of the root answers another question.",
+				"Walking downward lets each row inherit its root from the parent: Mabel Crumb is four levels below Aldric.\n\n**Pitfall:** starting from every hero and walking up gives the right roots but needs a final filter to keep only the top row per hero; returning the direct mentor instead of the root answers another question.",
 		},
 		{
 			id: "ch43-ex04",
-			title: "Trial of the Potion Bags",
-			story:
-				"The quartermaster is tired of two spellings. Every `healing potion` in the bags must become a `Healing Potion`, and when a bag holds both, their quantities must merge into one line.",
+			title: "Rewrite and merge jsonb array elements",
 			prompt:
 				"Update `inventories` so that, inside every bag, items named `healing potion` are renamed `Healing Potion`, and two `Healing Potion` lines in the **same bag** become **one** line `{\"item\": \"Healing Potion\", \"qty\": <sum>}`. Every other item, bag, coin and note stays as it is.",
 			difficulty: 5,
@@ -186,19 +178,18 @@ const chapter: Chapter = {
 				"UPDATE inventories i\nSET doc = jsonb_set(i.doc, '{bags}', (\n  SELECT jsonb_agg(\n           jsonb_set(b.bag, '{items}', (\n             SELECT coalesce(jsonb_agg(x.item ORDER BY x.pos), '[]'::jsonb)\n             FROM (\n               SELECT min(e.pos) AS pos,\n                      CASE WHEN count(*) = 1\n                           THEN (array_agg(e.it))[1] || jsonb_build_object('item', e.canon)\n                           ELSE jsonb_build_object('item', e.canon, 'qty', sum((e.it->>'qty')::int))\n                      END AS item\n               FROM (\n                 SELECT t.it, t.pos,\n                        CASE WHEN t.it->>'item' = 'healing potion' THEN 'Healing Potion' ELSE t.it->>'item' END AS canon\n                 FROM jsonb_array_elements(b.bag->'items') WITH ORDINALITY AS t(it, pos)\n               ) e\n               GROUP BY e.canon\n             ) x))\n         ORDER BY b.idx)\n  FROM jsonb_array_elements(i.doc->'bags') WITH ORDINALITY AS b(bag, idx)))\nWHERE i.doc @? '$.bags[*].items[*] ? (@.item == \"healing potion\")';",
 			check: { type: "state", verifySql: INVENTORY_ROWS },
 			hints: [
-				"Only two heroes carry the lower-case potion. Rebuild their `bags` array: explode bags, explode items, fix, aggregate back.",
-				"Per bag, group items by their canonical name (a CASE). A group of one keeps its object (with the new name); a group of two becomes a fresh object with `sum(qty)`.",
+				"Only two heroes have the lowercase item name. Rebuild their `bags` array: expand bags, expand items, fix, aggregate back.",
+				"Per bag, group items by their canonical name (a CASE). A group of one keeps its object (with the new name); a group of two becomes a new object with `sum(qty)`.",
 				"jsonb_set(doc, '{bags}', (SELECT jsonb_agg(jsonb_set(bag, '{items}', <rebuilt items>) ORDER BY idx) FROM jsonb_array_elements(doc->'bags') WITH ORDINALITY b(bag, idx)))",
 			],
 			explanation:
-				"Decompose with `jsonb_array_elements ... WITH ORDINALITY`, fix rows with plain SQL (CASE, GROUP BY, sum), then recompose with `jsonb_agg` and `jsonb_set`. Hilde's bag now holds 12 Healing Potions in one line; Aldric's 3 are simply renamed.\n\n**Pitfall:** a text `replace(doc::text, 'healing potion', 'Healing Potion')` renames but leaves two lines in Hilde's bag; updating every row with `jsonb_set(doc, '{bags}', NULL)` wipes documents without bags. **Alternative:** JSON_TABLE to explode, then the same aggregation.",
+				"Decompose with `jsonb_array_elements ... WITH ORDINALITY`, fix rows with plain SQL (CASE, GROUP BY, sum), then recompose with `jsonb_agg` and `jsonb_set`. Hilde's bag now holds 12 Healing Potions in one line; Aldric's 3 are simply renamed.\n\n**Pitfall:** a text `replace(doc::text, 'healing potion', 'Healing Potion')` renames but leaves two lines in Hilde's bag; updating every row with `jsonb_set(doc, '{bags}', NULL)` wipes documents without bags. **Alternative:** JSON_TABLE to expand, then the same aggregation.",
 		},
 		{
 			id: "ch43-ex05",
-			title: "Trial of the Heavy Tomes",
-			story: "The guild's server is running out of disk. Where does the space go?",
+			title: "Largest tables by total size",
 			prompt:
-				"Return the **name** and the **total size in bytes** (`pg_total_relation_size`: table plus indexes) of the **3** largest tables of the guild database, largest first, ties by name (A to Z).",
+				"Return the **name** and the **total size in bytes** (`pg_total_relation_size`: table plus indexes) of the **3** largest tables of the database, largest first, ties by name (A to Z).",
 			difficulty: 2,
 			kind: "query",
 			concepts: ["operations-overview", "catalog-introspection"],
@@ -211,15 +202,13 @@ const chapter: Chapter = {
 				"ORDER BY pg_total_relation_size(relid) DESC, relname LIMIT 3",
 			],
 			explanation:
-				"Three small tables tie at the top because of their indexes: guilds (primary key and unique name), items and skill_tree. On a real server this is the first query before buying disks.\n\n**Pitfall:** `pg_relation_size` measures the heap only and hides index bloat, often the real culprit.",
+				"Three small tables tie at the top because of their indexes: guilds (primary key and unique name), items and skill_tree. On a real server this is the first query to run before adding disk space.\n\n**Pitfall:** `pg_relation_size` measures the heap only and hides index bloat, often the real cause.",
 		},
 		{
 			id: "ch43-ex06",
-			title: "Trial of the Portals",
-			story:
-				"Zoë must carry a message from Highmoor to Frostspire and pay as little toll as possible.",
+			title: "Cheapest path in a graph",
 			prompt:
-				"Return the **path** (an array of region names, from `Highmoor` to `Frostspire`) and the **total toll** of the cheapest portal route from Highmoor to Frostspire. Never visit a region twice.",
+				"Return the **path** (an array of region names, from `Highmoor` to `Frostspire`) and the **total toll** of the cheapest route through `portals` from Highmoor to Frostspire. Never visit a region twice.",
 			difficulty: 4,
 			kind: "query",
 			concepts: ["recursive-graph-walks"],
@@ -227,20 +216,20 @@ const chapter: Chapter = {
 				"WITH RECURSIVE route AS (\n  SELECT to_region, ARRAY['Highmoor', to_region] AS path, toll AS total\n  FROM portals WHERE from_region = 'Highmoor'\n  UNION ALL\n  SELECT p.to_region, r.path || p.to_region, r.total + p.toll\n  FROM route r\n  JOIN portals p ON p.from_region = r.to_region\n  WHERE p.to_region <> ALL (r.path)\n)\nSELECT path, total\nFROM route\nWHERE to_region = 'Frostspire'\nORDER BY total\nLIMIT 1;",
 			check: { type: "result" },
 			hints: [
-				"Walk the portals recursively from Highmoor, carrying the path and the running toll.",
+				"Walk `portals` recursively from Highmoor, carrying the path and the running toll.",
 				"Guard against cycles: do not step into a region already in the path (`<> ALL (path)` or the CYCLE clause).",
 				"... WHERE p.to_region <> ALL (r.path) ... SELECT path, total FROM route WHERE to_region = 'Frostspire' ORDER BY total LIMIT 1",
 			],
 			explanation:
-				"Highmoor, Mistwood, Saltmarsh, Frostspire costs 48; the direct-looking route through Deepforge costs 55.\n\n**Pitfall:** the fewest hops is not the cheapest; without the path guard the Highmoor and Mistwood loop never ends.",
+				"Highmoor, Mistwood, Saltmarsh, Frostspire costs 48; the shorter looking route through Deepforge costs 55.\n\n**Pitfall:** the fewest hops is not the cheapest; without the path guard the Highmoor and Mistwood loop never ends.",
 		},
 		{
 			id: "ch43-ex07",
 			title: "Boss: The Astral Throne",
 			story:
-				"Aldric hands you the keys of the guild's new treasury: each guild master will log in and see only their own heroes, every gold movement must be traceable, rewards must be paid exactly once even if the payout runs twice, and the feast needs a leaderboard. The table `gold_rewards (reward_id, hero_id, amount)` and the role `guild_master_1` (allowed to read heroes and guilds) exist.",
+				"Combines an idempotent payout with ON CONFLICT and a data modifying CTE, an audit trigger, row-level security and a ranked view.",
 			prompt:
-				"In one script:\n\n1. create `reward_ledger (reward_id int PRIMARY KEY, hero_id int NOT NULL, amount numeric(10,2) NOT NULL)`;\n2. create `gold_audit (hero_id int, old_gold numeric(10,2), new_gold numeric(10,2))` and an AFTER UPDATE trigger on `heroes` that logs a row **only when gold actually changes**;\n3. write a **payout** that records every reward of `gold_rewards` in the ledger and adds it to the hero's gold (unknown gold counts as 0), paying each reward **once**: run the payout **twice**;\n4. enable RLS on `heroes` so `guild_master_1` sees only heroes of **guild 1**;\n5. create the view `guild_leaderboard (guild, hero, xp, place)`: guild name, hero name, xp and `dense_rank` of xp (highest first) within the guild, guild members only.",
+				"The table `gold_rewards (reward_id, hero_id, amount)` and the role `guild_master_1` (allowed to read heroes and guilds) exist. In one script:\n\n1. create `reward_ledger (reward_id int PRIMARY KEY, hero_id int NOT NULL, amount numeric(10,2) NOT NULL)`;\n2. create `gold_audit (hero_id int, old_gold numeric(10,2), new_gold numeric(10,2))` and an AFTER UPDATE trigger on `heroes` that logs a row **only when gold actually changes**;\n3. write a **payout** that records every reward of `gold_rewards` in the ledger and adds it to the hero's gold (unknown gold counts as 0), paying each reward **once**: run the payout **twice**;\n4. enable RLS on `heroes` so `guild_master_1` sees only heroes of **guild 1**;\n5. create the view `guild_leaderboard (guild, hero, xp, place)`: guild name, hero name, xp and `dense_rank` of xp (highest first) within the guild, guild members only.",
 			difficulty: 5,
 			kind: "ddl",
 			concepts: [
@@ -288,18 +277,18 @@ JOIN guilds g ON g.id = h.guild_id;`,
 			},
 			hints: [
 				"Build in order: tables, trigger (with `WHEN (OLD.gold IS DISTINCT FROM NEW.gold)`), payout, RLS, view. Paste the payout twice.",
-				"Payout as one data-modifying CTE: `INSERT INTO reward_ledger ... ON CONFLICT (reward_id) DO NOTHING RETURNING hero_id, amount`, then UPDATE heroes from the **summed** returned rows. Aldric has two rewards: `UPDATE ... FROM` applies only one matching row per hero, so group first.",
+				"Payout as one data modifying CTE: `INSERT INTO reward_ledger ... ON CONFLICT (reward_id) DO NOTHING RETURNING hero_id, amount`, then UPDATE heroes from the **summed** returned rows. Hero 1 has two rewards: `UPDATE ... FROM` applies only one matching row per hero, so group first.",
 				"UPDATE heroes h SET gold = coalesce(h.gold, 0) + p.total FROM (SELECT hero_id, sum(amount) AS total FROM paid GROUP BY hero_id) p WHERE h.id = p.hero_id;",
 			],
 			explanation:
-				"The ledger's primary key is the memory of the payout: the second run inserts nothing, so it pays nothing and the audit stays quiet. Aldric gains 110 in one audited change, Xander's unknown purse becomes 25.00, and the guild master sees only the five heroes of the Silver Dragon.\n\n**Pitfall:** `UPDATE heroes SET gold = gold + r.amount FROM gold_rewards r` pays Aldric only one of his two rewards, pays everybody again on the second run, and leaves Xander at NULL (`NULL + 25` is NULL). **Alternative:** MERGE into the ledger with `RETURNING merge_action()` feeding the same update.",
+				"The ledger's primary key records which rewards were paid: the second run inserts nothing, so it pays nothing and writes no audit row. Hero 1 (Aldric) gains 110 in one audited change, hero 22 (Xander) goes from NULL gold to 25.00, and `guild_master_1` sees only the five heroes of guild 1.\n\n**Pitfall:** `UPDATE heroes SET gold = gold + r.amount FROM gold_rewards r` pays hero 1 only one of the two rewards, pays everybody again on the second run, and leaves hero 22 at NULL (`NULL + 25` is NULL). **Alternative:** MERGE into the ledger with `RETURNING merge_action()` feeding the same update.",
 			boss: true,
 		},
 	],
 	practice: [
 		{
 			id: "ch43-pr01",
-			title: "The memory dial",
+			title: "Read work_mem from pg_settings",
 			prompt: "Return the **context** and the **unit** of the setting `work_mem`.",
 			difficulty: 1,
 			kind: "query",
@@ -307,16 +296,16 @@ JOIN guilds g ON g.id = h.guild_id;`,
 			solutionSql: "SELECT context, unit FROM pg_settings WHERE name = 'work_mem';",
 			check: { type: "result" },
 			hints: [
-				"Settings live in `pg_settings`.",
+				"Settings are listed in `pg_settings`.",
 				"Filter on `name`.",
 				"SELECT context, unit FROM pg_settings WHERE name = 'work_mem';",
 			],
 			explanation:
-				"`user` and `kB`: any session can `SET work_mem` for one big sort, without touching the server-wide default.",
+				"`user` and `kB`: any session can `SET work_mem` for one large sort, without touching the server-wide default.",
 		},
 		{
 			id: "ch43-pr02",
-			title: "Is anybody home?",
+			title: "Database size",
 			prompt:
 				"Return **one boolean**: is the size of the current database (`pg_database_size(current_database())`) greater than 0?",
 			difficulty: 1,
@@ -330,11 +319,11 @@ JOIN guilds g ON g.id = h.guild_id;`,
 				"SELECT pg_database_size(current_database()) > 0;",
 			],
 			explanation:
-				"true. Exact sizes depend on the engine and version, so monitoring compares sizes over time on the same server rather than with numbers from a blog.",
+				"true. Exact sizes depend on the engine and version, so monitoring compares sizes over time on the same server rather than with published numbers.",
 		},
 		{
 			id: "ch43-pr03",
-			title: "Restart required",
+			title: "Settings that need a restart",
 			prompt:
 				"Among `shared_buffers`, `work_mem`, `max_connections`, `wal_level` and `TimeZone`, return the **name** of every setting that needs a server **restart** to change (`context = 'postmaster'`).",
 			difficulty: 2,

@@ -16,7 +16,7 @@ const chapter: Chapter = {
 	track: "types",
 	title: "Words of Power",
 	subtitle:
-		"Full-text search in two languages, ranking, highlighting and forgiving typos",
+		"Full-text search, ranking, highlighting, GIN indexes, trigrams and fuzzy matching",
 	emoji: "🪄",
 	datasetId: "library",
 	concepts: [
@@ -30,8 +30,8 @@ const chapter: Chapter = {
 	lesson: [
 		{
 			kind: "explain",
-			title: "The poor man's search engine",
-			body: "Head Librarian Elowen wants a search box. Your first idea is `body ILIKE '%war%'`. It has three curses:\n\n- it matches pieces of words: the night **war**den is not about war;\n- it knows nothing about grammar: *burn*, *burned*, *burning* are three different strings;\n- it cannot rank results, and a B-tree index cannot help a leading `%`.\n\nPostgreSQL ships a real search engine: **full-text search**.",
+			title: "Why LIKE is not a search engine",
+			body: "A first attempt at text search is often `body ILIKE '%war%'`. It has three problems:\n\n- it matches parts of words: **war**den matches, but is not about war;\n- it knows nothing about grammar: *burn*, *burned*, *burning* are three different strings;\n- it cannot rank results, and a B-tree index cannot help a leading `%`.\n\nPostgreSQL has a built-in search engine: **full-text search** (FTS).",
 		},
 		{
 			kind: "example",
@@ -42,7 +42,7 @@ const chapter: Chapter = {
 		{
 			kind: "explain",
 			title: "Matching with @@",
-			body: "`tsvector @@ tsquery` is true when the document satisfies the query:\n```sql\nWHERE to_tsvector('english', body)\n   @@ to_tsquery('english', 'dragon & !frost')\n```\nQuery operators: `&` and, `|` or, `!` not, `<->` followed by.\n\nThe **config** (`english`, `french`, `simple`) decides how words are stemmed. This library's default is english, but always write the config yourself: document and query must use the same one.",
+			body: "`tsvector @@ tsquery` is true when the document satisfies the query:\n```sql\nWHERE to_tsvector('english', body)\n   @@ to_tsquery('english', 'dragon & !frost')\n```\nQuery operators: `&` and, `|` or, `!` not, `<->` followed by.\n\nThe **config** (`english`, `french`, `simple`) decides how words are stemmed. This database's default is english, but always write the config yourself: document and query must use the same one.",
 		},
 		{
 			kind: "quiz",
@@ -56,7 +56,7 @@ const chapter: Chapter = {
 			],
 			answerIndex: 1,
 			explanation:
-				"The english config stems *dragons* to `dragon` in the document, but the `simple` config keeps `dragons` in the query. No lexeme matches and no error warns you. Use the same config on both sides.",
+				"The english config stems *dragons* to `dragon` in the document, but the `simple` config keeps `dragons` in the query. No lexeme matches and no error is raised. Use the same config on both sides.",
 		},
 		{
 			kind: "explain",
@@ -66,7 +66,7 @@ const chapter: Chapter = {
 		{
 			kind: "example",
 			title: "A ranked search",
-			body: "Filter with `@@` first, then rank. Without the filter, every scroll would get a rank of 0 and clutter the list.",
+			body: "Filter with `@@` first, then rank. Without the filter, every scroll would get a rank of 0 and fill the list.",
 			sql: "SELECT title, round(ts_rank(to_tsvector('english', body), q)::numeric, 4) AS rank\nFROM scrolls, websearch_to_tsquery('english', 'dragon fire') AS q\nWHERE language = 'en'\n  AND to_tsvector('english', body) @@ q\nORDER BY rank DESC;",
 		},
 		{
@@ -76,18 +76,18 @@ const chapter: Chapter = {
 		},
 		{
 			kind: "explain",
-			title: "Forgiving typos",
-			body: "FTS needs correctly spelled words. For names and typos, use the fuzzy extensions:\n\n- **pg_trgm**: `similarity(a, b)` (0 to 1, shared 3-letter chunks), `a % b` (similar above 0.3), `a <-> b` (distance, great in ORDER BY).\n- **fuzzystrmatch**: `levenshtein(a, b)` (number of edits), `soundex(a)` and `dmetaphone(a)` (how a name sounds).\n- **unaccent**: `unaccent('Céleste')` is `Celeste`.",
+			title: "Fuzzy matching for typos",
+			body: "FTS needs correctly spelled words. For names and typos, use the fuzzy extensions:\n\n- **pg_trgm**: `similarity(a, b)` (0 to 1, shared 3-letter chunks), `a % b` (similar above 0.3), `a <-> b` (distance, useful in ORDER BY).\n- **fuzzystrmatch**: `levenshtein(a, b)` (number of edits), `soundex(a)` and `dmetaphone(a)` (how a name sounds).\n- **unaccent**: `unaccent('Céleste')` is `Celeste`.",
 		},
 		{
 			kind: "example",
-			title: "Fuzzy surprises",
+			title: "Trigrams, edits, sound and stems",
 			body: "Ysolde and Isolde differ by one letter but share only 40% of their trigrams. Stephen and Steven sound alike. And stemming is not a dictionary: `mice` never matches `mouse`.",
 			sql: "SELECT similarity('Ysolde', 'Isolde') AS trigram_similarity,\n       levenshtein('Ysolde', 'Isolde') AS edits,\n       soundex('Stephen') = soundex('Steven') AS sounds_alike,\n       to_tsvector('english', 'mice') @@ to_tsquery('english', 'mouse') AS mice_are_mice;",
 		},
 		{
 			kind: "try",
-			title: "Your turn: here be krakens",
+			title: "Search one word with FTS",
 			prompt:
 				"Return the **id** and **title** of every **English** scroll whose body mentions the **kraken**. Use full-text search with the english config.",
 			starterSql:
@@ -104,9 +104,7 @@ const chapter: Chapter = {
 	exercises: [
 		{
 			id: "ch35-ex01",
-			title: "Fire and scales",
-			story:
-				"Elowen is writing a treatise on fire-breathing. She wants every English scroll that speaks of both dragons and fire, in any grammatical form.",
+			title: "Match two words with &",
 			prompt:
 				"Return the **id** and **title** of every **English** scroll whose body matches both **dragon** and **fire**, using full-text search with the **english** config.",
 			difficulty: 2,
@@ -121,13 +119,11 @@ const chapter: Chapter = {
 				"to_tsvector('english', body) @@ to_tsquery('english', 'dragon & fire')",
 			],
 			explanation:
-				"`to_tsquery('english', 'dragon & fire')` holds the lexemes `dragon` and `fire`, so *Dragons* and *dragon* both match after stemming.\n\n**Pitfall:** `dragon | fire` means *or* and drags in every scroll about fire mages. **Alternative:** `plainto_tsquery('english', 'dragon fire')` puts `&` between words for you.",
+				"`to_tsquery('english', 'dragon & fire')` holds the lexemes `dragon` and `fire`, so *Dragons* and *dragon* both match after stemming.\n\n**Pitfall:** `dragon | fire` means *or* and also returns every scroll that only mentions fire. **Alternative:** `plainto_tsquery('english', 'dragon fire')` puts `&` between words for you.",
 		},
 		{
 			id: "ch35-ex02",
-			title: "The warden is not a war",
-			story:
-				"The archive's search box runs `body ILIKE '%war%'`. A historian searching for wars got a scroll about the night warden and mice.",
+			title: "Whole words instead of substrings",
 			prompt:
 				"Return the **id** and **title** of every **English** scroll about **war** (the word war in any form, like *wars*), using full-text search with the english config.",
 			difficulty: 2,
@@ -148,11 +144,9 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch35-ex03",
-			title: "No accents on the keyboard",
-			story:
-				"Amélie the translator receives a request from a reader whose keyboard lost its accents. The reader typed **reveiller** (to wake) and wants every French scroll about waking.",
+			title: "Search without accents",
 			prompt:
-				"Return the **id** and **title** of every **French** scroll matching the word **reveiller**. Use the **french** config and apply `unaccent` to both the body and the search word.",
+				"Return the **id** and **title** of every **French** scroll matching the word **reveiller** (to wake). Use the **french** config and apply `unaccent` to both the body and the search word.",
 			difficulty: 3,
 			kind: "query",
 			concepts: ["full-text-search", "fuzzy-string-matching"],
@@ -167,13 +161,11 @@ const chapter: Chapter = {
 				"to_tsvector('french', unaccent(body)) @@ to_tsquery('french', unaccent('reveiller'))",
 			],
 			explanation:
-				"The french config stems *réveille* and *réveiller* to `réveil`; `unaccent` turns both the document and the input into plain `reveil`, so the stems meet.\n\n**Pitfall:** the english config does not know French conjugations and finds nothing here. **Alternative:** in production, build a custom text search config with the unaccent dictionary so the index does it for you.",
+				"The french config stems *réveille* and *réveiller* to `réveil`; `unaccent` turns both the document and the input into plain `reveil`, so the stems match.\n\n**Pitfall:** the english config does not know French conjugations and finds nothing here. **Alternative:** in production, build a custom text search config with the unaccent dictionary so the index does it for you.",
 		},
 		{
 			id: "ch35-ex04",
-			title: "The most relevant first",
-			story:
-				"A visitor types `dragon fire` in the search box and expects the best scroll at the top, like any web search.",
+			title: "Rank results with ts_rank",
 			prompt:
 				"Return the **title** and the **rank** (`ts_rank` of the English body against `websearch_to_tsquery('english', 'dragon fire')`, rounded to 4 decimals) of every **English** scroll that matches the search, **highest rank first**.",
 			difficulty: 3,
@@ -192,9 +184,7 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch35-ex05",
-			title: "Mark the words",
-			story:
-				"The reading-room screen shows a snippet under each result with the search word in brackets, so readers see why a scroll was found.",
+			title: "Highlight matches with ts_headline",
 			prompt:
 				"Return the **title** and the snippet `ts_headline('english', body, q, 'StartSel=[,StopSel=]')` of every **English** scroll whose body matches `to_tsquery('english', 'kraken')`.",
 			difficulty: 3,
@@ -213,9 +203,7 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch35-ex06",
-			title: "Carve the index",
-			story:
-				"Bartholomew, Master of Scrolls, refuses to let every search re-read every scroll. He wants the search vector stored and indexed, with titles counting more than bodies.",
+			title: "Stored tsvector column with a GIN index",
 			prompt:
 				"Add to `scrolls` a **stored generated column** named **search** equal to `setweight(to_tsvector('english', title), 'A') || setweight(to_tsvector('english', body), 'B')`, then create a **GIN index** on it.",
 			difficulty: 3,
@@ -234,13 +222,11 @@ const chapter: Chapter = {
 				"ALTER TABLE scrolls ADD COLUMN search tsvector GENERATED ALWAYS AS (setweight(...title..., 'A') || setweight(...body..., 'B')) STORED; CREATE INDEX ON scrolls USING gin (search);",
 			],
 			explanation:
-				"The generated column is recomputed on every INSERT and UPDATE, so it can never drift from the text, and GIN indexes each lexeme. Weight A makes a title hit count more than a body hit in `ts_rank`.\n\n**Pitfall:** the query must use the same config as the column (english); a search with `to_tsquery('simple', ...)` would silently miss stemmed words. **Alternative:** an expression index `USING gin (to_tsvector('english', body))` works too, but every query must repeat the exact same expression.",
+				"The generated column is recomputed on every INSERT and UPDATE, so it always matches the text, and GIN indexes each lexeme. Weight A makes a title hit count more than a body hit in `ts_rank`.\n\n**Pitfall:** the query must use the same config as the column (english); a search with `to_tsquery('simple', ...)` would silently miss stemmed words. **Alternative:** an expression index `USING gin (to_tsvector('english', body))` works too, but every query must repeat the exact same expression.",
 		},
 		{
 			id: "ch35-ex07",
-			title: "Isolde or Ysolde?",
-			story:
-				"A courier hands Wisp a parcel for \"Isolde Maro\". There is no such reader, but the twins Isolde and Ysolde Marrow both look plausible.",
+			title: "Trigram similarity above a threshold",
 			prompt:
 				"Return the **name** and the **similarity** with `'Isolde Maro'` (pg_trgm `similarity`, rounded to 3 decimals) of every reader whose similarity is **above 0.3**, most similar first.",
 			difficulty: 3,
@@ -255,13 +241,11 @@ const chapter: Chapter = {
 				"WHERE similarity(name, 'Isolde Maro') > 0.3 ORDER BY similarity(name, 'Isolde Maro') DESC",
 			],
 			explanation:
-				"Trigrams survive typos: *Maro* still shares most of its chunks with *Marrow*. Isolde scores 0.625 and her twin Ysolde 0.368, so the courier should ask before delivering.\n\n**Pitfall:** `name LIKE 'Isolde%'` finds one twin and hides the ambiguity. **Alternative:** `ORDER BY name <-> 'Isolde Maro' LIMIT 3` gives the closest names, and a GiST trigram index can serve it.",
+				"Trigrams tolerate typos: *Maro* still shares most of its chunks with *Marrow*. Isolde Marrow scores 0.625 and Ysolde Marrow 0.368, so the input is ambiguous between two readers.\n\n**Pitfall:** `name LIKE 'Isolde%'` finds only one of them and hides the ambiguity. **Alternative:** `ORDER BY name <-> 'Isolde Maro' LIMIT 3` gives the closest names, and a GiST trigram index can serve it.",
 		},
 		{
 			id: "ch35-ex08",
-			title: "It sounded like Steven",
-			story:
-				"Gorrik the night warden took two messages by ear: one for a *Steven*, one for a *Catherine*. Neither name is in the register as spoken.",
+			title: "Match names by sound and edit distance",
 			prompt:
 				"Return the **name** of every reader whose **first name** (the part before the first space) either has the same `soundex` code as **Steven**, or is at most **2 edits** away from **catherine** (`levenshtein` on the lower-case first name).",
 			difficulty: 3,
@@ -282,7 +266,7 @@ const chapter: Chapter = {
 			id: "ch35-ex09",
 			title: "Boss: The Librarian's Oracle",
 			story:
-				"Elowen unveils the Oracle, a single search box for the whole library. A visitor types **dragons** and also mumbles that the scroll was by \"Ellowen Thrise\", hoping the Oracle forgives the spelling.",
+				"Combines per row text search configs, weighted ranking and a trigram fallback on the author in one search query.",
 			prompt:
 				"Search **every** scroll (English and French) and return **id**, **title**, **language** and **rank**:\n\n- each scroll is searched with its own config: `english` for `'en'`, `french` for `'fr'`, on the document `setweight(to_tsvector(cfg, title), 'A') || setweight(to_tsvector(cfg, body), 'B')` and the query `websearch_to_tsquery(cfg, 'dragons')`;\n- a matching scroll's rank is `ts_rank` of that document and query, rounded to 4 decimals;\n- also return scrolls whose **author** has a trigram `similarity` **above 0.4** with `'Ellowen Thrise'`: if they do not match the search, their rank is **0**;\n- each scroll appears once; sort by rank **highest first**, ties by **id**.",
 			difficulty: 5,
@@ -301,14 +285,14 @@ const chapter: Chapter = {
 				"round(CASE WHEN doc @@ q THEN ts_rank(doc, q) ELSE 0 END::numeric, 4) ... WHERE doc @@ q OR similarity(author, 'Ellowen Thrise') > 0.4 ORDER BY rank DESC, id",
 			],
 			explanation:
-				"Each language gets its own stemmer, titles weigh more than bodies (the four scrolls with *Dragon* in the title lead), and the trigram branch rescues Elowen's *On Forbidden Knowledge* even though it never mentions dragons. A scroll found both ways appears once because both tests live in one WHERE.\n\n**Pitfall:** a UNION ALL of the search hits and the author hits lists *On the Nesting of Dragons* twice; ranking the body alone drops the title boost and reshuffles the top. **Alternative:** `UNION` of the two branches followed by `max(rank)` per id.",
+				"Each language gets its own stemmer, titles weigh more than bodies (the four scrolls with *Dragon* in the title come first), and the trigram condition adds *On Forbidden Knowledge* by Elowen Thrise even though it never mentions dragons. A scroll found both ways appears once because both tests are in one WHERE.\n\n**Pitfall:** a UNION ALL of the search hits and the author hits lists *On the Nesting of Dragons* twice; ranking the body alone drops the title boost and changes the order at the top. **Alternative:** `UNION` of the two branches followed by `max(rank)` per id.",
 			boss: true,
 		},
 	],
 	practice: [
 		{
 			id: "ch35-pr01",
-			title: "Monsters of the deep",
+			title: "Count matches for either word",
 			prompt:
 				"Return **one number**: how many **English** scrolls match **kraken** or **serpent** (english config).",
 			difficulty: 1,
@@ -323,11 +307,11 @@ const chapter: Chapter = {
 				"to_tsquery('english', 'kraken | serpent')",
 			],
 			explanation:
-				"Three scrolls: two krakens and the scroll of sea serpents, whose plural is stemmed to `serpent`.",
+				"Three scrolls: two about krakens and one about sea serpents, whose plural is stemmed to `serpent`.",
 		},
 		{
 			id: "ch35-pr02",
-			title: "Every kind of burn",
+			title: "Match every form of a word",
 			prompt:
 				"Return the **id** and **title** of every **English** scroll whose body contains any form of **burn** (burn, burns, burned, burning), using full-text search with the english config.",
 			difficulty: 2,
@@ -348,7 +332,7 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch35-pr03",
-			title: "Densest frost",
+			title: "Top 2 by ts_rank_cd",
 			prompt:
 				"Return the **id** and **title** of the **2** English scrolls with the highest `ts_rank_cd` for `to_tsquery('english', 'frost')`, highest first, ties by id.",
 			difficulty: 2,
@@ -367,7 +351,7 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch35-pr04",
-			title: "Short snippets",
+			title: "Short snippets with ts_headline",
 			prompt:
 				"Return the **title** and `ts_headline('english', body, q, 'StartSel=<<, StopSel=>>, MaxWords=8, MinWords=4')` of every English scroll matching `to_tsquery('english', 'frost')`.",
 			difficulty: 2,
@@ -386,11 +370,9 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch35-pr05",
-			title: "An index that refuses",
-			story:
-				"Hakon tried to index the bodies and got error 42P17. Fix his statement so the planner can use the index for English searches.",
+			title: "Fix a non IMMUTABLE index expression",
 			prompt:
-				"Create a **GIN expression index** on `scrolls` that serves `WHERE to_tsvector('english', body) @@ ...`.",
+				"The starter fails with error 42P17. Fix it: create a **GIN expression index** on `scrolls` that serves `WHERE to_tsvector('english', body) @@ ...`.",
 			difficulty: 2,
 			kind: "ddl",
 			concepts: ["fts-indexing"],
@@ -414,7 +396,7 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch35-pr06",
-			title: "Close enough",
+			title: "Similar names with %",
 			prompt:
 				"Return the **name** of every reader whose name is trigram-similar to `'Isold'` using the `%` operator (default threshold 0.3).",
 			difficulty: 2,
@@ -428,11 +410,11 @@ const chapter: Chapter = {
 				"WHERE name % 'Isold'",
 			],
 			explanation:
-				"Only Isolde Marrow passes: Ysolde starts with a different letter, which costs her the leading trigrams.",
+				"Only Isolde Marrow passes: Ysolde starts with a different letter, which costs it the leading trigrams.",
 		},
 		{
 			id: "ch35-pr07",
-			title: "Predict the trigrams",
+			title: "Compute a trigram similarity",
 			prompt:
 				"Return **one value**: `similarity('Ysolde', 'Isolde')`, rounded to 2 decimals.",
 			difficulty: 1,
@@ -450,7 +432,7 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch35-pr08",
-			title: "The twins",
+			title: "Names within one edit",
 			prompt:
 				"Return the **name** of every reader whose **first name** is at most **1 edit** away from **Isolde** (`levenshtein`).",
 			difficulty: 2,
@@ -465,11 +447,11 @@ const chapter: Chapter = {
 				"WHERE levenshtein(split_part(name, ' ', 1), 'Isolde') <= 1",
 			],
 			explanation:
-				"Both twins: Isolde (0 edits) and Ysolde (1 substitution). Edit distance sees them as close, trigrams much less.",
+				"Isolde (0 edits) and Ysolde (1 substitution). Edit distance sees them as close, trigrams much less.",
 		},
 		{
 			id: "ch35-pr09",
-			title: "Céleste without the accent",
+			title: "Compare without accents",
 			prompt:
 				"Return the **name** of every reader whose name, **with accents removed**, starts with `Celeste`.",
 			difficulty: 1,

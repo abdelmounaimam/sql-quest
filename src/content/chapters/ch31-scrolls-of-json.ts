@@ -7,7 +7,7 @@ const chapter: Chapter = {
 	tier: "adept",
 	track: "types",
 	title: "Scrolls of JSON",
-	subtitle: "Read, build, unnest and rewrite the heroes' loot bags",
+	subtitle: "json vs jsonb, operators, building, unnesting and updating documents",
 	emoji: "📦",
 	datasetId: "guild",
 	concepts: [
@@ -21,23 +21,23 @@ const chapter: Chapter = {
 	lesson: [
 		{
 			kind: "explain",
-			title: "Two kinds of scroll",
-			body: "Postgres has two JSON types:\n\n- **json** keeps the text exactly as typed: spaces, key order, even duplicate keys. It has no `=` operator and no index support.\n- **jsonb** parses the document into a binary tree: keys are sorted, duplicates keep the **last** value, whitespace vanishes. It compares, indexes and queries fast.\n\nUse **jsonb** unless you must keep the original text byte for byte.",
+			title: "json and jsonb",
+			body: "Postgres has two JSON types:\n\n- **json** keeps the text exactly as typed: spaces, key order, even duplicate keys. It has no `=` operator and no index support.\n- **jsonb** parses the document into a binary tree: keys are sorted, duplicates keep the **last** value, whitespace is dropped. It supports comparison, indexes and fast queries.\n\nUse **jsonb** unless you must keep the original text byte for byte.",
 		},
 		{
 			kind: "example",
-			title: "The twin keys",
+			title: "Duplicate keys in json and jsonb",
 			body: "The same text, stored both ways. The json copy keeps both `a` keys and the original order; the jsonb copy keeps only the last `a` and sorts the keys.",
 			sql: "SELECT '{\"b\": 1, \"a\": 2, \"a\": 3}'::json::text AS as_json,\n       '{\"b\": 1, \"a\": 2, \"a\": 3}'::jsonb::text AS as_jsonb;",
 		},
 		{
 			kind: "explain",
-			title: "Reaching inside",
-			body: "| operator | returns |\n|---|---|\n| `doc -> 'coins'` | jsonb |\n| `doc ->> 'notes'` | **text** |\n| `doc #> '{coins,gold}'` | jsonb at a path |\n| `doc #>> '{coins,gold}'` | text at a path |\n\nArrays take an index from **0**: `doc -> 'bags' -> 0`. Subscripts work too: `doc['coins']['gold']`. Chain `->` while walking, finish with `->>` to get text.",
+			title: "Extraction operators",
+			body: "| operator | returns |\n|---|---|\n| `doc -> 'coins'` | jsonb |\n| `doc ->> 'notes'` | **text** |\n| `doc #> '{coins,gold}'` | jsonb at a path |\n| `doc #>> '{coins,gold}'` | text at a path |\n\nArrays take an index from **0**: `doc -> 'bags' -> 0`. Subscripts work too: `doc['coins']['gold']`. Chain `->` to walk down, and finish with `->>` to get text.",
 		},
 		{
 			kind: "example",
-			title: "Gold in the purse",
+			title: "Extract a nested value",
 			body: "Each inventory's gold, as text. Hero 8 has only silver, hero 24 only copper: the key is missing, so the result is NULL.",
 			sql: "SELECT hero_id, doc -> 'coins' ->> 'gold' AS gold\nFROM inventories;",
 		},
@@ -53,39 +53,39 @@ const chapter: Chapter = {
 			],
 			answerIndex: 1,
 			explanation:
-				"`->` gives a jsonb value. Take the text with `->>` and cast it: `(attributes ->> 'heal')::int > 10`. Comparing `->>` text with `'10'` would run but sort like words, so `'2' > '10'`.",
+				"`->` returns a jsonb value. Take the text with `->>` and cast it: `(attributes ->> 'heal')::int > 10`. Comparing `->>` text with `'10'` would run but compare as strings, so `'2' > '10'`.",
 		},
 		{
 			kind: "explain",
 			title: "Containment and keys",
-			body: "- `attributes @> '{\"set\": \"Nightshade\"}'`: the document **contains** this piece\n- `attributes ? 'charges'`: the top-level key exists\n- `?|` any of these keys, `?&` all of them\n\nMind the two kinds of *nothing*: a **missing key** gives SQL NULL, while `\"notes\": null` is a key holding JSON `null`. `->>` turns both into SQL NULL; `?` and `jsonb_typeof` tell them apart.",
+			body: "- `attributes @> '{\"set\": \"Nightshade\"}'`: the document **contains** this fragment\n- `attributes ? 'charges'`: the top-level key exists\n- `?|` any of these keys, `?&` all of them\n\nThere are two kinds of *nothing*: a **missing key** gives SQL NULL, while `\"notes\": null` is a key holding JSON `null`. `->>` turns both into SQL NULL; `?` and `jsonb_typeof` tell them apart.",
 		},
 		{
 			kind: "explain",
 			title: "Building JSON",
-			body: "```sql\njsonb_build_object('name', name, 'gold', gold)\njsonb_build_array(1, 'two', true)\nto_jsonb(h)            -- a whole row\njsonb_agg(name ORDER BY name)\njsonb_object_agg(key, value)\n```\nTrap: `jsonb_agg` over **zero rows** returns NULL, not `[]`. Wrap it: `coalesce(jsonb_agg(...), '[]')`.",
+			body: "```sql\njsonb_build_object('name', name, 'gold', gold)\njsonb_build_array(1, 'two', true)\nto_jsonb(h)            -- a whole row\njsonb_agg(name ORDER BY name)\njsonb_object_agg(key, value)\n```\nPitfall: `jsonb_agg` over **zero rows** returns NULL, not `[]`. Wrap it: `coalesce(jsonb_agg(...), '[]')`.",
 		},
 		{
 			kind: "example",
-			title: "Unpacking the bags",
-			body: "`jsonb_array_elements` turns an array into rows. Used twice in FROM (an implicit LATERAL join), it walks bags, then the items of each bag. Hero 7's empty bag list and hero 24's missing one produce no rows.",
+			title: "Unnest nested arrays",
+			body: "`jsonb_array_elements` turns an array into rows. Used twice in FROM (an implicit LATERAL join), it walks the bags, then the items of each bag. Hero 7's empty `bags` array and hero 24's missing one produce no rows.",
 			sql: "SELECT i.hero_id, b ->> 'slot' AS slot, it ->> 'item' AS item\nFROM inventories i,\n     jsonb_array_elements(i.doc -> 'bags') AS b,\n     jsonb_array_elements(b -> 'items') AS it\nWHERE i.hero_id IN (1, 7, 24);",
 		},
 		{
 			kind: "explain",
-			title: "Rewriting a scroll",
-			body: "jsonb values are immutable: you compute a new document and UPDATE it in.\n\n- `jsonb_set(doc, '{coins,gold}', '50')`: replace at a path (the new value is **jsonb**)\n- `doc || '{\"lucky\": true}'`: **shallow** merge, top-level keys only\n- `doc - 'notes'`: remove a key\n- `doc #- '{coins,silver}'`: remove at a path",
+			title: "Modifying a document",
+			body: "jsonb values are immutable: you compute a new document and write it back with UPDATE.\n\n- `jsonb_set(doc, '{coins,gold}', '50')`: replace at a path (the new value is **jsonb**)\n- `doc || '{\"lucky\": true}'`: **shallow** merge, top-level keys only\n- `doc - 'notes'`: remove a key\n- `doc #- '{coins,silver}'`: remove at a path",
 		},
 		{
 			kind: "try",
-			title: "Your turn: silver coins",
+			title: "Extract silver as an integer",
 			prompt:
 				"Return each inventory's **hero_id** and its **silver** coins as an **integer** (NULL when there is no silver).",
 			starterSql: "SELECT hero_id, (doc ->> 'silver')::int AS silver\nFROM inventories;",
 			solutionSql: "SELECT hero_id, (doc -> 'coins' ->> 'silver')::int AS silver FROM inventories;",
 			check: { type: "result" },
 			hints: [
-				"Run the starter: every value is NULL. Where does silver live?",
+				"Run the starter: every value is NULL. Where is the `silver` key?",
 				"Go through `coins` first: `doc -> 'coins' ->> 'silver'`, then cast.",
 			],
 		},
@@ -93,9 +93,7 @@ const chapter: Chapter = {
 	exercises: [
 		{
 			id: "ch31-ex01",
-			title: "Same potion, different handwriting",
-			story:
-				"The quartermaster copied a potion recipe with its keys in a different order and wants every item that matches it exactly.",
+			title: "jsonb equality ignores key order",
 			prompt:
 				"Return the **name** of every item whose `attributes` document is **equal** to `{\"slots\": [\"belt\"], \"consumable\": true, \"heal\": 30}`.",
 			difficulty: 1,
@@ -114,8 +112,7 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch31-ex02",
-			title: "The richest purses",
-			story: "The tax collector of Highmoor ranks purses by gold.",
+			title: "Sort by a JSON number",
 			prompt:
 				"Return the **hero_id** and **gold** (as an **integer**) of every inventory that has a gold entry, **richest first**.",
 			difficulty: 2,
@@ -126,16 +123,15 @@ const chapter: Chapter = {
 			check: { type: "result", orderMatters: true, strictTypes: true },
 			hints: [
 				"Filter out inventories without a `gold` key, then sort.",
-				"`->>` gives text: cast to int **before** sorting, or '980' beats '3000'.",
+				"`->>` gives text: cast to int **before** sorting, or '980' sorts above '3000'.",
 				"(doc -> 'coins' ->> 'gold')::int ... ORDER BY 2 DESC",
 			],
 			explanation:
-				"Cast first, sort second: Nyx's 3000 leads, Cedric's 0 closes the list.\n\n**Pitfall:** `ORDER BY doc -> 'coins' ->> 'gold' DESC` sorts text, so 980 ranks above 3000 and 2100.\n\n**Alternative:** `WHERE doc #>> '{coins,gold}' IS NOT NULL` as the filter.",
+				"Cast first, sort second: Nyx's 3000 comes first, Cedric's 0 comes last.\n\n**Pitfall:** `ORDER BY doc -> 'coins' ->> 'gold' DESC` sorts text, so 980 ranks above 3000 and 2100.\n\n**Alternative:** `WHERE doc #>> '{coins,gold}' IS NOT NULL` as the filter.",
 		},
 		{
 			id: "ch31-ex03",
-			title: "Strong medicine",
-			story: "Hilde wants potions that heal more than a scratch.",
+			title: "Compare a JSON value as a number",
 			prompt: "Return the **name** of every item whose `heal` attribute is **greater than 10**.",
 			difficulty: 2,
 			kind: "query",
@@ -149,12 +145,11 @@ const chapter: Chapter = {
 				"(attributes ->> 'heal')::int > 10",
 			],
 			explanation:
-				"`->>` returns text and the cast turns it into an int that compares like a number. Items without `heal` give NULL and drop out.\n\n**Pitfall:** `attributes ->> 'heal' > '10'` runs but compares text: `'2' > '10'`, so the Bread Loaf sneaks in.\n\n**Alternative:** `attributes -> 'heal' > '10'::jsonb` compares two jsonb numbers numerically.",
+				"`->>` returns text and the cast turns it into an int that compares like a number. Items without `heal` give NULL and are filtered out.\n\n**Pitfall:** `attributes ->> 'heal' > '10'` runs but compares text: `'2' > '10'`, so the Bread Loaf is wrongly included.\n\n**Alternative:** `attributes -> 'heal' > '10'::jsonb` compares two jsonb numbers numerically.",
 		},
 		{
 			id: "ch31-ex04",
-			title: "The Nightshade set",
-			story: "Vesper is collecting the Nightshade set, piece by piece.",
+			title: "Filter with containment",
 			prompt: "Return the **name** of every item whose `set` is **Nightshade**, using **containment** (`@>`).",
 			difficulty: 2,
 			kind: "query",
@@ -162,8 +157,8 @@ const chapter: Chapter = {
 			solutionSql: "SELECT name FROM items WHERE attributes @> '{\"set\": \"Nightshade\"}';",
 			check: { type: "result" },
 			hints: [
-				"`@>` takes a jsonb piece that must appear in the document.",
-				"The piece is itself a JSON object with one key.",
+				"`@>` takes a jsonb fragment that must appear in the document.",
+				"The fragment is itself a JSON object with one key.",
 				"WHERE attributes @> '{\"set\": \"Nightshade\"}'",
 			],
 			explanation:
@@ -171,9 +166,7 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch31-ex05",
-			title: "Notes left blank",
-			story:
-				"Some heroes have a `notes` entry that someone cleared to `null`; others never had one. The archivist only wants the cleared ones.",
+			title: "JSON null versus missing key",
 			prompt:
 				"Return the **hero_id** of every inventory whose `notes` key is **present** but holds JSON **null**.",
 			difficulty: 3,
@@ -191,8 +184,7 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch31-ex06",
-			title: "Guild charters as JSON",
-			story: "The realm's courier wants each guild as a ready-to-send JSON document.",
+			title: "Build a JSON object per guild",
 			prompt:
 				"For every guild return its **id** and a jsonb document `{\"guild\": <name>, \"heroes\": [<hero names>]}`, hero names sorted A to Z (byte order). A guild without members must get an **empty array**, not NULL.",
 			difficulty: 3,
@@ -211,8 +203,7 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch31-ex07",
-			title: "Inventory, line by line",
-			story: "The quartermaster wants the bags flattened into a plain list.",
+			title: "Flatten nested JSON arrays",
 			prompt:
 				"Return the **hero_id**, **item** name (text) and **qty** (integer) of every item in every bag of every inventory.",
 			difficulty: 3,
@@ -227,13 +218,11 @@ const chapter: Chapter = {
 				"FROM inventories i, jsonb_array_elements(i.doc -> 'bags') b, jsonb_array_elements(b -> 'items') it",
 			],
 			explanation:
-				"Each set returning function in FROM can see the columns to its left (implicit LATERAL), so the walk goes inventory, bag, item: 25 lines.\n\n**Pitfall:** `jsonb_array_elements(doc -> 'bags' -> 0 -> 'items')` reads only the first bag and misses Aldric's rope and Nyx's egg.\n\n**Alternative:** `jsonb_path_query(doc, '$.bags[*].items[*]')` does both levels in one call (next chapter).",
+				"Each set returning function in FROM can see the columns to its left (implicit LATERAL), so the walk goes inventory, bag, item: 25 rows.\n\n**Pitfall:** `jsonb_array_elements(doc -> 'bags' -> 0 -> 'items')` reads only the first bag and misses Aldric's rope and Nyx's egg.\n\n**Alternative:** `jsonb_path_query(doc, '$.bags[*].items[*]')` does both levels in one call (next chapter).",
 		},
 		{
 			id: "ch31-ex08",
-			title: "Brynja's market day",
-			story:
-				"Brynja (hero 2) sold some bread: she now has exactly 25 gold. She also wants her empty `notes` entry gone.",
+			title: "Set a value and remove a key",
 			prompt:
 				"Update inventory **2**: set `coins.gold` to the **number** 25 and **remove** the `notes` key. Every other key stays as it is.",
 			difficulty: 3,
@@ -254,7 +243,7 @@ const chapter: Chapter = {
 			id: "ch31-ex09",
 			title: "Boss: The Quartermaster's Audit",
 			story:
-				"Before the winter campaign the quartermaster audits every inventory, including the ones with empty or missing bags.",
+				"Combines unnesting nested JSON arrays with LEFT JOIN LATERAL, aggregation and building a jsonb array with empty defaults.",
 			prompt:
 				"For **every** inventory return:\n\n- the hero's **name** (join `heroes`)\n- **total_qty**: the total quantity of items across all bags (**0** when there are none)\n- **items**: a jsonb array of the **distinct** item names carried, sorted A to Z (byte order), `[]` when there are none\n\nOrder by total_qty descending, then name.",
 			difficulty: 4,
@@ -264,7 +253,7 @@ const chapter: Chapter = {
 				"SELECT h.name,\n       coalesce(sum((it ->> 'qty')::int), 0) AS total_qty,\n       coalesce(jsonb_agg(DISTINCT it ->> 'item' ORDER BY it ->> 'item')\n                FILTER (WHERE it IS NOT NULL), '[]') AS items\nFROM inventories i\nJOIN heroes h ON h.id = i.hero_id\nLEFT JOIN LATERAL jsonb_array_elements(i.doc -> 'bags') AS b ON true\nLEFT JOIN LATERAL jsonb_array_elements(b -> 'items') AS it ON true\nGROUP BY h.name\nORDER BY total_qty DESC, h.name;",
 			check: { type: "result", orderMatters: true },
 			hints: [
-				"Unnest bags and items, then group per hero. Séraphine (empty bags) and Bors (no bags key) must survive.",
+				"Unnest bags and items, then group per hero. Séraphine (empty bags) and Bors (no bags key) must still appear.",
 				"A comma join with a set returning function drops rows that produce nothing: use `LEFT JOIN LATERAL ... ON true`. Then guard the aggregates against all-NULL groups.",
 				"coalesce(sum(...), 0) and coalesce(jsonb_agg(DISTINCT it ->> 'item' ORDER BY it ->> 'item') FILTER (WHERE it IS NOT NULL), '[]')",
 			],
@@ -276,7 +265,7 @@ const chapter: Chapter = {
 	practice: [
 		{
 			id: "ch31-pr01",
-			title: "Two copies of a scroll",
+			title: "Cast one literal to json and jsonb",
 			prompt:
 				"Return one row with the text of `'{\"b\": 1, \"a\": 2, \"a\": 3}'` cast to **json** then text, and the same literal cast to **jsonb** then text (in that order).",
 			difficulty: 1,
@@ -295,7 +284,7 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch31-pr02",
-			title: "Heroes only",
+			title: "Filter on a nested path",
 			prompt: "Return the **name** of every item that requires a **level of 10 or more** (`requires.level`).",
 			difficulty: 2,
 			kind: "query",
@@ -311,7 +300,7 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch31-pr03",
-			title: "Charged items",
+			title: "Test that a key exists",
 			prompt: "Return the **name** of every item that has a `charges` key, even if its value is null.",
 			difficulty: 1,
 			kind: "query",
@@ -327,7 +316,7 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch31-pr04",
-			title: "Legendary labels",
+			title: "Build a JSON object per row",
 			prompt:
 				"For every **legendary** item, return a jsonb object with two keys: `name` (the item name) and `rarity` (its rarity).",
 			difficulty: 1,
@@ -340,11 +329,11 @@ const chapter: Chapter = {
 				"The enum becomes a JSON string automatically.",
 				"jsonb_build_object('name', name, 'rarity', rarity)",
 			],
-			explanation: "Three labels: Dragonbone Sword, Phoenix Feather and Ice Crown.",
+			explanation: "Three objects: Dragonbone Sword, Phoenix Feather and Ice Crown.",
 		},
 		{
 			id: "ch31-pr05",
-			title: "What is in a sword?",
+			title: "List the keys of a document",
 			prompt: "Return the top-level **keys** of the attributes of item **2**, one per row.",
 			difficulty: 2,
 			kind: "query",
@@ -360,7 +349,7 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch31-pr06",
-			title: "Slots per item",
+			title: "Length of a JSON array",
 			prompt:
 				"Return the **name** of every item and the **number of slots** listed in its `slots` array (NULL when there is no `slots` key).",
 			difficulty: 2,
@@ -373,11 +362,11 @@ const chapter: Chapter = {
 				"`jsonb_array_length` works on the jsonb value, so use `->`.",
 				"jsonb_array_length(attributes -> 'slots')",
 			],
-			explanation: "The Elven Bow takes 2 hands, the Map of Mistwood has an empty list (0), and items without the key give NULL.",
+			explanation: "The Elven Bow lists 2 slots, the Map of Mistwood has an empty list (0), and items without the key give NULL.",
 		},
 		{
 			id: "ch31-pr07",
-			title: "Enchant the shield",
+			title: "Add a key with ||",
 			prompt: "Add the key `\"enchanted\": true` to the attributes of item **17**, keeping its other keys.",
 			difficulty: 2,
 			kind: "mutation",
@@ -393,7 +382,7 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch31-pr08",
-			title: "Quench the sword",
+			title: "Remove a nested key",
 			prompt: "Remove the `fire` entry from the `damage` object of item **2**, keeping its `slash` damage and every other key.",
 			difficulty: 2,
 			kind: "mutation",

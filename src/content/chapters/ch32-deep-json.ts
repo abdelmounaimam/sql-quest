@@ -10,7 +10,7 @@ const chapter: Chapter = {
 	tier: "expert",
 	track: "types",
 	title: "Deep JSON",
-	subtitle: "jsonpath, JSON_TABLE, GIN indexes and the old hstore",
+	subtitle: "jsonpath, SQL/JSON functions, JSON_TABLE, GIN indexes and hstore",
 	emoji: "🔮",
 	datasetId: "guild",
 	concepts: ["sql-json-path", "json-table", "jsonb-indexing", "hstore"],
@@ -18,13 +18,13 @@ const chapter: Chapter = {
 	lesson: [
 		{
 			kind: "explain",
-			title: "jsonpath: a map of the scroll",
+			title: "jsonpath expressions",
 			body: "A **jsonpath** walks a document in one string:\n\n- `$` the root, `.bags` a key, `[*]` every array element\n- `? (@.qty > 5)` a **filter**: `@` is the current item\n- inside paths, equality is `==`, strings use double quotes: `@.item == \"Torch\"`\n\n`jsonb_path_query(doc, path)` returns every match as a row, `doc @? path` asks *is there at least one match?*",
 		},
 		{
 			kind: "example",
-			title: "Big stacks",
-			body: "Every item carried more than 5 times, with its owner. `#>> '{}'` turns the jsonb string into plain text.",
+			title: "Filter inside a path",
+			body: "Every item with a `qty` above 5, with its `hero_id`. `#>> '{}'` turns the jsonb string into plain text.",
 			sql: "SELECT hero_id,\n       jsonb_path_query(doc, '$.bags[*].items[*] ? (@.qty > 5).item') #>> '{}' AS item\nFROM inventories;",
 		},
 		{
@@ -43,7 +43,7 @@ const chapter: Chapter = {
 		{
 			kind: "explain",
 			title: "SQL/JSON functions",
-			body: "The SQL standard functions (PG17) read like English:\n```sql\njson_exists(doc, '$.notes')\njson_value(doc, '$.coins.gold' RETURNING int)\njson_query(doc, '$.coins')\ndoc IS JSON OBJECT\n```\n`json_value` returns one scalar (typed with RETURNING), `json_query` a piece of JSON. On a missing path they return NULL. Paths are **lax** by default: small structural mismatches are forgiven instead of raising errors.",
+			body: "The SQL standard functions (PG17) have readable names:\n```sql\njson_exists(doc, '$.notes')\njson_value(doc, '$.coins.gold' RETURNING int)\njson_query(doc, '$.coins')\ndoc IS JSON OBJECT\n```\n`json_value` returns one scalar (typed with RETURNING), `json_query` a piece of JSON. On a missing path they return NULL. Paths are **lax** by default: small structural mismatches are ignored instead of raising errors.",
 		},
 		{
 			kind: "explain",
@@ -52,8 +52,8 @@ const chapter: Chapter = {
 		},
 		{
 			kind: "example",
-			title: "Finn's bags as a table",
-			body: "Finn (hero 8) has a lute in bag 1 and an empty bag 2. JSON_TABLE keeps the empty bag as a row of NULLs.",
+			title: "JSON_TABLE with an empty nested array",
+			body: "Hero 8 has one item in bag 1 and an empty bag 2. JSON_TABLE keeps the empty bag as a row of NULLs.",
 			sql: "SELECT jt.*\nFROM inventories i,\n     JSON_TABLE(i.doc, '$.bags[*]'\n       COLUMNS (slot int PATH '$.slot',\n                NESTED PATH '$.items[*]'\n                  COLUMNS (item text PATH '$.item', qty int PATH '$.qty'))) AS jt\nWHERE i.hero_id = 8;",
 		},
 		{
@@ -63,18 +63,18 @@ const chapter: Chapter = {
 		},
 		{
 			kind: "example",
-			title: "Watch the index kick in",
-			body: "The items table is tiny, so the planner would rather scan it. `SET enable_seqscan = off` forbids the shortcut and reveals what the GIN index can do: a **Bitmap Index Scan**.",
+			title: "A GIN index in the plan",
+			body: "The `items` table is tiny, so the planner prefers a sequential scan. `SET enable_seqscan = off` disables that option and shows what the GIN index can do: a **Bitmap Index Scan**.",
 			sql: "CREATE INDEX items_attr_gin ON items USING gin (attributes);\nSET enable_seqscan = off;\nEXPLAIN (COSTS OFF)\nSELECT name FROM items WHERE attributes @> '{\"set\": \"Dragonbone\"}';",
 		},
 		{
 			kind: "explain",
-			title: "hstore, the elder map",
-			body: "**hstore** (an extension) stores a flat map of text keys to text values, older than jsonb:\n\n- `titles -> 'since'` gives a value (always **text**, or NULL)\n- `titles ? 'granted_by'` tests a key; `?&` all keys, `?|` any key\n- `each(titles)` unrolls key and value pairs; `hstore_to_jsonb(titles)` converts\n\nNo nesting, no numbers, no booleans: prefer jsonb for new designs.",
+			title: "hstore: a flat key/value type",
+			body: "**hstore** (an extension) stores a flat map of text keys to text values. It predates jsonb:\n\n- `titles -> 'since'` gives a value (always **text**, or NULL)\n- `titles ? 'granted_by'` tests a key; `?&` all keys, `?|` any key\n- `each(titles)` unrolls key and value pairs; `hstore_to_jsonb(titles)` converts\n\nNo nesting, no numbers, no booleans: prefer jsonb for new designs.",
 		},
 		{
 			kind: "try",
-			title: "Your turn: honorary titles",
+			title: "Read an hstore value",
 			prompt: "Return each row of `hero_titles` as **hero_id** and the value of its `title` key.",
 			starterSql: "SELECT hero_id, titles ->> 'title'\nFROM hero_titles;",
 			solutionSql: "SELECT hero_id, titles -> 'title' AS title FROM hero_titles;",
@@ -88,8 +88,7 @@ const chapter: Chapter = {
 	exercises: [
 		{
 			id: "ch32-ex01",
-			title: "The heavy haulers",
-			story: "The quartermaster suspects hoarding: who carries more than two of anything?",
+			title: "Filter array items with jsonpath",
 			prompt:
 				"Return the **hero_id** and the **item** name (as text) of every item carried with a **qty greater than 2**. Use a jsonpath.",
 			difficulty: 2,
@@ -108,8 +107,7 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch32-ex02",
-			title: "Fire in the bags",
-			story: "A fire elemental is loose. Morwen needs to know which heroes carry fire enchanted gear.",
+			title: "Test a path with @?",
 			prompt: "Return the **hero_id** of every inventory holding at least one item whose `enchant` has a **fire** key.",
 			difficulty: 2,
 			kind: "query",
@@ -122,12 +120,11 @@ const chapter: Chapter = {
 				"WHERE doc @? '$.bags[*].items[*].enchant.fire'",
 			],
 			explanation:
-				"`@?` answers *does this path lead anywhere?* for every bag and item at once: Aldric, Morwen and Vesper.\n\n**Pitfall:** `doc -> 'bags' -> 0 -> 'items' -> 0 -> 'enchant' ? 'fire'` inspects one item only and misses Vesper's dagger.\n\n**Alternative:** `jsonb_path_exists(doc, '$.bags[*].items[*].enchant.fire')`.",
+				"`@?` answers *does this path match anything?* for every bag and item at once: Aldric, Morwen and Vesper.\n\n**Pitfall:** `doc -> 'bags' -> 0 -> 'items' -> 0 -> 'enchant' ? 'fire'` inspects one item only and misses Vesper's dagger.\n\n**Alternative:** `jsonb_path_exists(doc, '$.bags[*].items[*].enchant.fire')`.",
 		},
 		{
 			id: "ch32-ex03",
-			title: "Who has a torch?",
-			story: "The dungeon ahead is dark. The scribe's search for torches crashes.",
+			title: "Fix equality inside a jsonpath",
 			prompt: "Return the **hero_id** of every inventory carrying an item named **Torch**.",
 			difficulty: 2,
 			kind: "query",
@@ -145,8 +142,7 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch32-ex04",
-			title: "The bags, tabulated",
-			story: "The quartermaster wants the bags as a proper table, empty bags included so she can refill them.",
+			title: "Nested arrays with JSON_TABLE",
 			prompt:
 				"With **JSON_TABLE**, return **hero_id**, **slot** (int), **item** (text) and **qty** (int) for every bag of every inventory. A bag with no items appears **once** with NULL item and qty; inventories without bags produce no rows.",
 			difficulty: 3,
@@ -161,13 +157,11 @@ const chapter: Chapter = {
 				"JSON_TABLE(i.doc, '$.bags[*]' COLUMNS (slot int PATH '$.slot', NESTED PATH '$.items[*]' COLUMNS (item text PATH '$.item', qty int PATH '$.qty')))",
 			],
 			explanation:
-				"The outer path makes one row per bag; NESTED joins each bag to its items like a LEFT JOIN, so Finn's empty bag 2 shows up with NULLs.\n\n**Pitfall:** a row path of `'$.bags[*].items[*]'` cannot reach the slot (it lives one level up) and drops the empty bag.\n\n**Alternative:** `LEFT JOIN LATERAL jsonb_array_elements(b -> 'items') ON true` after unnesting the bags.",
+				"The outer path makes one row per bag; NESTED joins each bag to its items like a LEFT JOIN, so hero 8's empty bag 2 shows up with NULLs.\n\n**Pitfall:** a row path of `'$.bags[*].items[*]'` cannot reach the slot (it lives one level up) and drops the empty bag.\n\n**Alternative:** `LEFT JOIN LATERAL jsonb_array_elements(b -> 'items') ON true` after unnesting the bags.",
 		},
 		{
 			id: "ch32-ex05",
-			title: "An index for the armory",
-			story:
-				"The armory will soon hold thousands of items, and the smiths search them by containment all day long.",
+			title: "A GIN index for containment",
 			setupSql: PLAN_OF,
 			prompt:
 				"Create an index that lets `SELECT name FROM items WHERE attributes @> '{\"set\": \"Dragonbone\"}'` be answered with an **index scan** on `items.attributes`.",
@@ -190,8 +184,7 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch32-ex06",
-			title: "Granted by whom?",
-			story: "The herald must thank whoever granted each title, but only where a name was recorded.",
+			title: "hstore keys with a non NULL value",
 			prompt:
 				"Return the **hero_id** and **title** of every row of `hero_titles` that has a `granted_by` key with a **non NULL** value.",
 			difficulty: 2,
@@ -205,12 +198,11 @@ const chapter: Chapter = {
 				"WHERE titles -> 'granted_by' IS NOT NULL",
 			],
 			explanation:
-				"A missing key and a NULL value both give NULL through `->`, so `IS NOT NULL` keeps only Aldric's Queen Maelis.\n\n**Pitfall:** `titles ? 'granted_by'` also returns Ulfric, whose key exists with a NULL value.\n\n**Alternative:** `defined(titles, 'granted_by')` is hstore's own *key exists with a non NULL value* test.",
+				"A missing key and a NULL value both give NULL through `->`, so `IS NOT NULL` keeps only Aldric's row (granted by Queen Maelis).\n\n**Pitfall:** `titles ? 'granted_by'` also returns Ulfric, whose key exists with a NULL value.\n\n**Alternative:** `defined(titles, 'granted_by')` is hstore's own *key exists with a non NULL value* test.",
 		},
 		{
 			id: "ch32-ex07",
-			title: "Every honour, unrolled",
-			story: "The herald copies every honour into her book, one line each.",
+			title: "Expand hstore pairs into rows",
 			prompt:
 				"Return **hero_id**, **key** and **value** of every pair in `hero_titles.titles`, sorted by hero_id then key (byte order).",
 			difficulty: 2,
@@ -231,7 +223,7 @@ const chapter: Chapter = {
 			id: "ch32-ex08",
 			title: "Boss: The Philosopher's Inventory",
 			story:
-				"The Philosopher of the Vault weighs every inventory for magic: enchantments, their power, legendary sets and the owner's honours.",
+				"Combines jsonpath filters and wildcards, JSON_TABLE joined to a table, and an hstore lookup in one report.",
 			prompt:
 				"For **every** inventory return:\n\n- **name** of the hero\n- **title**: the `title` from `hero_titles` (NULL when the hero has none)\n- **enchanted**: the number of carried items that have an `enchant` object\n- **power**: the sum of **all** enchant values of all items (0 when none)\n- **set_piece**: true when the hero carries at least one item whose catalogue entry in `items` (matched on the exact name) has a `set` key\n\nOrder by power descending, then name.",
 			difficulty: 5,
@@ -246,14 +238,14 @@ const chapter: Chapter = {
 				"(SELECT coalesce(sum(v::int), 0) FROM jsonb_path_query(i.doc, '$.bags[*].items[*].enchant.*') v)",
 			],
 			explanation:
-				"Each column reads the document its own way: a filtered path for counting, a `.*` wildcard for summing every enchant, JSON_TABLE for a relational join with the catalogue, `->` on the hstore for the title. Vesper leads with 6 power; Ulfric's Dragonbone Helm makes him a set bearer with no enchantment at all.\n\n**Pitfall:** unnesting items in the main FROM with an inner join drops Séraphine and Bors and multiplies the titles; counting all items instead of enchanted ones inflates `enchanted`.\n\n**Alternative:** one LATERAL JSON_TABLE with an `enchant jsonb PATH '$.enchant'` column, then aggregate with `jsonb_each_text`.",
+				"Each column reads the document its own way: a filtered path for counting, a `.*` wildcard for summing every enchant, JSON_TABLE for a relational join with `items`, `->` on the hstore for the title. Vesper has the highest power (6); Ulfric's Dragonbone Helm makes his `set_piece` true with no enchantment at all.\n\n**Pitfall:** unnesting items in the main FROM with an inner join drops Séraphine and Bors and multiplies the titles; counting all items instead of enchanted ones inflates `enchanted`.\n\n**Alternative:** one LATERAL JSON_TABLE with an `enchant jsonb PATH '$.enchant'` column, then aggregate with `jsonb_each_text`.",
 			boss: true,
 		},
 	],
 	practice: [
 		{
 			id: "ch32-pr01",
-			title: "Morwen's packing list",
+			title: "Collect path matches into an array",
 			prompt: "Return, as **one jsonb array**, the names of all items carried by hero **3**, in bag order.",
 			difficulty: 2,
 			kind: "query",
@@ -269,7 +261,7 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch32-pr02",
-			title: "Gold, the standard way",
+			title: "Extract a scalar with json_value",
 			prompt:
 				"Return every inventory's **hero_id** and its gold as an **int** using `json_value` (NULL when there is no gold).",
 			difficulty: 2,
@@ -286,7 +278,7 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch32-pr03",
-			title: "The sword's spec sheet",
+			title: "JSON_TABLE over one document",
 			prompt:
 				"With **JSON_TABLE** over the attributes of item **2**, return one row with columns **set** (text), **level** (int, from `requires.level`) and **slots** (jsonb).",
 			difficulty: 2,
@@ -304,7 +296,7 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch32-pr04",
-			title: "Empty bags count too",
+			title: "Keep empty nested arrays",
 			prompt:
 				"With **JSON_TABLE**, return **slot** and **item** for every bag of hero **8**, keeping empty bags as a row with a NULL item.",
 			difficulty: 2,
@@ -322,7 +314,7 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch32-pr05",
-			title: "A lean index",
+			title: "GIN index with jsonb_path_ops",
 			prompt:
 				"Create a GIN index on `inventories.doc` using the **jsonb_path_ops** operator class.",
 			difficulty: 2,
@@ -343,7 +335,7 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch32-pr06",
-			title: "Sort by set",
+			title: "B-tree index on a JSON field",
 			prompt: "Create a **B-tree** expression index on `items` over the text value of the `set` key (`attributes ->> 'set'`).",
 			difficulty: 2,
 			kind: "ddl",
@@ -363,7 +355,7 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch32-pr07",
-			title: "Nyx as JSON",
+			title: "Convert hstore to jsonb",
 			prompt: "Return the titles of hero **25** converted to **jsonb**.",
 			difficulty: 1,
 			kind: "query",
@@ -375,11 +367,11 @@ const chapter: Chapter = {
 				"hstore_to_jsonb(...)",
 				"SELECT hstore_to_jsonb(titles) FROM hero_titles WHERE hero_id = 25;",
 			],
-			explanation: "Every value becomes a JSON **string**, even the bounty `\"5000\"`: hstore never knew it was a number.",
+			explanation: "Every value becomes a JSON **string**, even the bounty `\"5000\"`: hstore stores every value as text.",
 		},
 		{
 			id: "ch32-pr08",
-			title: "Dated titles",
+			title: "hstore rows with all keys",
 			prompt: "Return the **hero_id** of every row whose titles have **both** a `title` and a `since` key.",
 			difficulty: 1,
 			kind: "query",
@@ -391,7 +383,7 @@ const chapter: Chapter = {
 				"`?&` takes a text array.",
 				"WHERE titles ?& ARRAY['title', 'since']",
 			],
-			explanation: "Everyone but Vesper, who only has an alias. `?|` would mean *any of these keys*.",
+			explanation: "Every row except Vesper's, which only has an alias. `?|` would mean *any of these keys*.",
 		},
 	],
 };

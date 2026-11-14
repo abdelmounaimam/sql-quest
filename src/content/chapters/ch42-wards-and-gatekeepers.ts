@@ -76,7 +76,7 @@ const chapter: Chapter = {
 	track: "advanced",
 	title: "Wards and Gatekeepers",
 	subtitle:
-		"Triggers, audit trails, notifications, privileges, row-level security and safe imports",
+		"Triggers, audit tables, LISTEN/NOTIFY, GRANT and REVOKE, row-level security, idempotent upserts",
 	emoji: "🛡️",
 	datasetId: "library",
 	concepts: [
@@ -96,35 +96,35 @@ const chapter: Chapter = {
 	lesson: [
 		{
 			kind: "explain",
-			title: "Spells that cast themselves",
+			title: "Triggers",
 			body: "A **trigger** runs a function automatically when rows change:\n```sql\nCREATE FUNCTION f() RETURNS trigger LANGUAGE plpgsql AS $$\nBEGIN\n  NEW.email := lower(NEW.email);\n  RETURN NEW;\nEND $$;\nCREATE TRIGGER t BEFORE INSERT OR UPDATE ON readers\n  FOR EACH ROW EXECUTE FUNCTION f();\n```\n- **BEFORE** can change `NEW`; **AFTER** sees the final row.\n- `OLD` is the row before, `NEW` after; `TG_OP` says INSERT, UPDATE or DELETE.\n- A BEFORE row trigger that returns **NULL** silently skips the row.",
 		},
 		{
 			kind: "example",
-			title: "NULL into a NOT NULL column?",
-			body: "`loan_period` is NOT NULL, yet this insert passes: the BEFORE trigger runs first and fills in a 14-day period. Constraints are checked after BEFORE triggers.",
+			title: "A BEFORE trigger runs before constraints",
+			body: "`loan_period` is NOT NULL, yet this insert succeeds: the BEFORE trigger runs first and fills in a 14-day period. Constraints are checked after BEFORE triggers.",
 			sql: "CREATE FUNCTION default_period() RETURNS trigger LANGUAGE plpgsql AS $$\nBEGIN\n  IF NEW.loan_period IS NULL THEN\n    NEW.loan_period := tstzrange(now(), now() + interval '14 days');\n  END IF;\n  RETURN NEW;\nEND $$;\nCREATE TRIGGER loans_default_period BEFORE INSERT ON loans\n  FOR EACH ROW EXECUTE FUNCTION default_period();\n\nINSERT INTO loans (scroll_id, reader_id, loan_period) VALUES (12, 3, NULL)\nRETURNING id, upper(loan_period) - lower(loan_period) AS lasts;",
 		},
 		{
 			kind: "explain",
-			title: "Who changed what, and when",
-			body: "An **audit trail** is an AFTER trigger that copies every change into a history table:\n```sql\nINSERT INTO loan_audit (op, loan_id, old_row, new_row)\nVALUES (TG_OP, coalesce(NEW.id, OLD.id),\n        to_jsonb(OLD), to_jsonb(NEW));\n```\n`to_jsonb(OLD)` stores the whole row as a document, so the history survives schema changes. Add `current_user` and `now()` (as column defaults) to know who and when. On INSERT `OLD` is NULL; on DELETE `NEW` is.",
+			title: "Audit tables",
+			body: "An **audit trail** is an AFTER trigger that copies every change into a history table:\n```sql\nINSERT INTO loan_audit (op, loan_id, old_row, new_row)\nVALUES (TG_OP, coalesce(NEW.id, OLD.id),\n        to_jsonb(OLD), to_jsonb(NEW));\n```\n`to_jsonb(OLD)` stores the whole row as a document, so the history survives schema changes. Add `current_user` and `now()` (as column defaults) to record who and when. On INSERT `OLD` is NULL; on DELETE `NEW` is.",
 		},
 		{
 			kind: "explain",
-			title: "Ringing the bell: LISTEN and NOTIFY",
-			body: "Other programs can wait for news:\n```sql\nLISTEN returns;                       -- a client subscribes\nSELECT pg_notify('returns', '13');    -- someone rings\n```\nThe message is delivered **at COMMIT**, never before, and never if the transaction rolls back. A listener that is offline misses it forever, so serious systems also write an **outbox** row in the same transaction: the bell wakes the worker, the outbox remembers the job.",
+			title: "LISTEN and NOTIFY",
+			body: "Client programs can wait for notifications:\n```sql\nLISTEN returns;                       -- a client subscribes\nSELECT pg_notify('returns', '13');    -- a session notifies\n```\nThe message is delivered **at COMMIT**, never before, and never if the transaction rolls back. A listener that is offline misses it permanently, so robust systems also write an **outbox** row in the same transaction: the notification wakes the worker, the outbox row stores the job.",
 		},
 		{
 			kind: "example",
-			title: "Who may do what",
-			body: "Roles receive privileges with `GRANT ... ON table TO role` and lose them with `REVOKE ... FROM role`. Give each role only what it needs (least privilege). `has_table_privilege` reads the answer from the catalog: the apprentice may read scrolls but not loans.",
+			title: "GRANT, REVOKE and has_table_privilege",
+			body: "Roles receive privileges with `GRANT ... ON table TO role` and lose them with `REVOKE ... FROM role`. Give each role only what it needs (least privilege). `has_table_privilege` reads the answer from the catalog: `apprentice_reader` may read `scrolls` but not `loans`.",
 			sql: "SELECT r AS role, t AS tbl,\n       has_table_privilege(r, t, 'SELECT') AS can_read,\n       has_table_privilege(r, t, 'UPDATE') AS can_update\nFROM unnest(ARRAY['apprentice_reader', 'archivist']) AS r,\n     unnest(ARRAY['scrolls', 'loans', 'readers']) AS t\nORDER BY r, t;",
 		},
 		{
 			kind: "quiz",
 			question:
-				"You enable row-level security on `scrolls`, create a policy that hides forbidden scrolls, run `SELECT count(*) FROM scrolls` and still get 30. Why?",
+				"You enable row-level security on `scrolls`, create a policy that hides high clearance scrolls, run `SELECT count(*) FROM scrolls` and still get 30. Why?",
 			choices: [
 				"Policies only apply after a server restart",
 				"You are the superuser `postgres`, and superusers bypass row-level security",
@@ -138,23 +138,23 @@ const chapter: Chapter = {
 		{
 			kind: "explain",
 			title: "Row-level security",
-			body: "Privileges decide *which tables*; **policies** decide *which rows*:\n```sql\nALTER TABLE scrolls ENABLE ROW LEVEL SECURITY;\nCREATE POLICY public_only ON scrolls\n  FOR SELECT TO apprentice_reader\n  USING (clearance_level = 1);\n```\n- `USING` filters the rows a role can see or touch.\n- `WITH CHECK` validates rows a role writes (INSERT, UPDATE).\n- RLS enabled with **no** policy for a role means it sees **nothing**.",
+			body: "Privileges decide *which tables*; **policies** decide *which rows*:\n```sql\nALTER TABLE scrolls ENABLE ROW LEVEL SECURITY;\nCREATE POLICY public_only ON scrolls\n  FOR SELECT TO apprentice_reader\n  USING (clearance_level = 1);\n```\n- `USING` filters the rows a role can see or modify.\n- `WITH CHECK` validates rows a role writes (INSERT, UPDATE).\n- RLS enabled with **no** policy for a role means it sees **nothing**.",
 		},
 		{
 			kind: "explain",
-			title: "Imports you can run twice",
-			body: "Imports crash halfway, cron jobs fire twice. Make them **idempotent**: running again changes nothing.\n```sql\nINSERT INTO readers (...)\nSELECT ... FROM reader_import\nON CONFLICT (email) DO UPDATE\n  SET name = EXCLUDED.name;\n```\nLoad raw rows into a **staging** table, then upsert on a natural key (or MERGE). Counters too: `ON CONFLICT (k) DO UPDATE SET n = t.n + 1` is atomic, while read-then-write races.",
+			title: "Idempotent imports",
+			body: "Imports can fail halfway, and scheduled jobs can run twice. Make them **idempotent**: running again changes nothing.\n```sql\nINSERT INTO readers (...)\nSELECT ... FROM reader_import\nON CONFLICT (email) DO UPDATE\n  SET name = EXCLUDED.name;\n```\nLoad raw rows into a **staging** table, then upsert on a natural key (or MERGE). Counters too: `ON CONFLICT (k) DO UPDATE SET n = t.n + 1` is atomic, while read then write is subject to race conditions.",
 		},
 		{
 			kind: "explain",
 			title: "Where should a rule live?",
-			body: "Elowen's rule of thumb:\n\n1. **Constraints first**: `CHECK`, `UNIQUE`, `FOREIGN KEY` are declarative, visible and always on.\n2. **Functions** next: explicit logic that callers choose to run.\n3. **Triggers last**: for side effects like audit trails, never for rules a CHECK can state.\n\nTriggers are invisible in queries: hide too much in them and nobody knows why a row changed or vanished.",
+			body: "A rule of thumb:\n\n1. **Constraints first**: `CHECK`, `UNIQUE`, `FOREIGN KEY` are declarative, visible and always enforced.\n2. **Functions** next: explicit logic that callers choose to run.\n3. **Triggers last**: for side effects like audit trails, never for rules a CHECK can express.\n\nTriggers are invisible in queries: if too much logic lives in them, nobody can tell why a row changed or disappeared.",
 		},
 		{
 			kind: "try",
-			title: "Your turn: open the ledger",
+			title: "Try it: grant SELECT",
 			prompt:
-				"Head Librarian Elowen lets apprentices read the loans ledger. Grant **SELECT** on `loans` to `apprentice_reader` (and nothing more).",
+				"Grant **SELECT** on `loans` to `apprentice_reader` (and nothing more).",
 			starterSql: "GRANT SELECT ON scrolls TO apprentice_reader;",
 			solutionSql: "GRANT SELECT ON loans TO apprentice_reader;",
 			check: {
@@ -163,7 +163,7 @@ const chapter: Chapter = {
 					"SELECT has_table_privilege('apprentice_reader', 'loans', 'SELECT') AS can_read,\n       has_table_privilege('apprentice_reader', 'loans', 'UPDATE') AS can_update;",
 			},
 			hints: [
-				"The starter grants a privilege the apprentice already has, on the wrong table.",
+				"The starter grants a privilege the role already has, on the wrong table.",
 				"GRANT SELECT ON loans TO apprentice_reader;",
 			],
 		},
@@ -171,9 +171,7 @@ const chapter: Chapter = {
 	exercises: [
 		{
 			id: "ch42-ex01",
-			title: "One spelling per address",
-			story:
-				"Wisp the courier keeps mixing `Garrick.Holt@Aethel.LIB` and `garrick.holt@aethel.lib`. Ines wants every email stored in lower case, whoever writes it.",
+			title: "BEFORE trigger that normalizes a column",
 			prompt:
 				"Create a **BEFORE INSERT OR UPDATE** row trigger on `readers` that stores `lower(email)` in `email`. The check updates reader 5 and inserts a new reader.",
 			difficulty: 2,
@@ -192,15 +190,13 @@ const chapter: Chapter = {
 				"NEW.email := lower(NEW.email); RETURN NEW; ... BEFORE INSERT OR UPDATE ON readers FOR EACH ROW",
 			],
 			explanation:
-				"Every write passes through the trigger, so even an update that never mentions the email cleans Garrick's address.\n\n**Pitfall:** an AFTER trigger can assign `NEW.email` but the row is already stored: nothing changes. And a CHECK (`email = lower(email)`) would only reject bad rows: often that is the better rule, since it stays visible.",
+				"Every write passes through the trigger, so even an update that never mentions the email lowercases reader 5's address.\n\n**Pitfall:** an AFTER trigger can assign `NEW.email` but the row is already stored: nothing changes. A CHECK (`email = lower(email)`) would only reject bad rows: often that is the better rule, since it stays visible.",
 		},
 		{
 			id: "ch42-ex02",
-			title: "The trigger that ate the loans",
-			story:
-				"Morgana installed a ward on `loans`: readers may not borrow scrolls above their clearance. Since then, **every** loan disappears without an error.",
+			title: "Fix a trigger that returns NULL",
 			prompt:
-				"The trigger function `check_clearance()` ends with `RETURN NULL`. Fix it (`CREATE OR REPLACE FUNCTION`) so that allowed loans are stored and forbidden ones still raise an exception. The check inserts one allowed and one forbidden loan.",
+				"A BEFORE INSERT trigger on `loans` should reject loans of scrolls above the reader's clearance, but its function `check_clearance()` ends with `RETURN NULL`, so every loan disappears without an error. Fix it (`CREATE OR REPLACE FUNCTION`) so that allowed loans are stored and forbidden ones still raise an exception. The check inserts one allowed and one forbidden loan.",
 			difficulty: 3,
 			kind: "ddl",
 			concepts: ["triggers"],
@@ -217,15 +213,13 @@ const chapter: Chapter = {
 				"Replace `RETURN NULL;` with `RETURN NEW;`",
 			],
 			explanation:
-				"In a BEFORE row trigger, the returned row is the row that gets written; NULL means *skip it*. The INSERT reports success with 0 rows, which is why nobody noticed.\n\n**Pitfall:** dropping the trigger also stores the loan, but Bram (clearance 1) could then borrow *The Pale Ledger*. In AFTER triggers the return value is ignored, so `RETURN NULL` is the usual ending there.",
+				"In a BEFORE row trigger, the returned row is the row that gets written; NULL means *skip it*. The INSERT reports success with 0 rows, which is why the problem went unnoticed.\n\n**Pitfall:** dropping the trigger also stores the loan, but then reader 3 (clearance 1) could borrow *The Pale Ledger*. In AFTER triggers the return value is ignored, so `RETURN NULL` is the usual ending there.",
 		},
 		{
 			id: "ch42-ex03",
-			title: "The ledger remembers",
-			story:
-				"After the vanishing loans, Elowen wants a full history: every insert, change and deletion on `loans`, with the row before and after.",
+			title: "Audit trigger with to_jsonb",
 			prompt:
-				"The table `loan_audit (id, op, loan_id, old_row jsonb, new_row jsonb, changed_by, changed_at)` exists (the last two have defaults). Create an **AFTER INSERT OR UPDATE OR DELETE** row trigger on `loans` that inserts `TG_OP`, the loan id, `to_jsonb(OLD)` and `to_jsonb(NEW)`. Then record Garrick's return: set `returned_at` of loan **9** to `'2026-10-31 12:00+00'`. The check also deletes and inserts a loan.",
+				"The table `loan_audit (id, op, loan_id, old_row jsonb, new_row jsonb, changed_by, changed_at)` exists (the last two have defaults). Create an **AFTER INSERT OR UPDATE OR DELETE** row trigger on `loans` that inserts `TG_OP`, the loan id, `to_jsonb(OLD)` and `to_jsonb(NEW)`. Then set `returned_at` of loan **9** to `'2026-10-31 12:00+00'`. The check also deletes and inserts a loan.",
 			difficulty: 4,
 			kind: "ddl",
 			concepts: ["audit-history", "triggers"],
@@ -243,15 +237,13 @@ const chapter: Chapter = {
 				"INSERT INTO loan_audit (op, loan_id, old_row, new_row) VALUES (TG_OP, coalesce(NEW.id, OLD.id), to_jsonb(OLD), to_jsonb(NEW)); RETURN NULL;",
 			],
 			explanation:
-				"Whole rows as jsonb make the history self-describing: you can replay any change, and a new column in `loans` needs no audit change. The defaults capture who and when.\n\n**Pitfall:** auditing only UPDATE misses the deleted loan 21, and storing only `NEW` loses what the value was before. **Alternative:** `RETURNING old.*, new.*` (PostgreSQL 18) shows both sides for one statement, but only a trigger catches every writer.",
+				"Whole rows as jsonb make the history self-describing: you can replay any change, and a new column in `loans` needs no change to the audit. The defaults capture who and when.\n\n**Pitfall:** auditing only UPDATE misses the deleted loan 21, and storing only `NEW` loses the previous value. **Alternative:** `RETURNING old.*, new.*` (PostgreSQL 18) shows both sides for one statement, but only a trigger catches every writer.",
 		},
 		{
 			id: "ch42-ex04",
-			title: "The returns bell",
-			story:
-				"The restorers want to know the moment a long-overdue scroll comes home, so they can check it for damage. A worker listens on channel `returns`, and reads the `outbox` table when it wakes up.",
+			title: "Notify and write an outbox row",
 			prompt:
-				"The table `outbox (id, channel, payload)` exists. Create an **AFTER UPDATE** row trigger on `loans` that, when `returned_at` goes from **NULL to a value**, calls `pg_notify('returns', <loan id as text>)` **and** inserts the same channel and payload into `outbox`. Then return loans **13** and **16** (`returned_at = '2026-10-31 12:00+00'`). The check also makes updates that must not ring.",
+				"The table `outbox (id, channel, payload)` exists. Create an **AFTER UPDATE** row trigger on `loans` that, when `returned_at` goes from **NULL to a value**, calls `pg_notify('returns', <loan id as text>)` **and** inserts the same channel and payload into `outbox`. Then set `returned_at = '2026-10-31 12:00+00'` on loans **13** and **16**. The check also runs updates that must not notify.",
 			difficulty: 3,
 			kind: "ddl",
 			concepts: ["listen-notify", "triggers"],
@@ -270,13 +262,11 @@ const chapter: Chapter = {
 				"IF OLD.returned_at IS NULL AND NEW.returned_at IS NOT NULL THEN PERFORM pg_notify('returns', NEW.id::text); INSERT INTO outbox ...; END IF;",
 			],
 			explanation:
-				"The notification and the outbox row are part of the same transaction: both appear at COMMIT, or neither does. Fixing the date of loan 1 or touching loan 19 rings nothing.\n\n**Pitfall:** notifying on every update floods the restorers; expecting the listener to hear the bell before COMMIT is the classic misunderstanding. Payloads must stay under 8000 bytes: send an id, not the scroll.",
+				"The notification and the outbox row are part of the same transaction: both appear at COMMIT, or neither does. Changing the date of loan 1 or updating loan 19 sends nothing.\n\n**Pitfall:** notifying on every update floods the listeners; expecting a listener to receive the notification before COMMIT is a common misunderstanding. Payloads must stay under 8000 bytes: send an id, not the whole row.",
 		},
 		{
 			id: "ch42-ex05",
-			title: "Keys to the right doors",
-			story:
-				"The archivists must be able to purge cancelled loans. Meanwhile, the apprentices have been gossiping about who cites whom; Morgana wants citations closed to them.",
+			title: "GRANT one privilege and REVOKE another",
 			prompt:
 				"Give `archivist` the **DELETE** privilege on `loans`, and remove **SELECT** on `citations` from `apprentice_reader`. Grant nothing else.",
 			difficulty: 2,
@@ -296,13 +286,11 @@ const chapter: Chapter = {
 				"GRANT DELETE ON loans TO archivist; REVOKE SELECT ON citations FROM apprentice_reader;",
 			],
 			explanation:
-				"Privileges are per table and per action. Now an apprentice reading citations gets 42501 *permission denied*, while scrolls stay open.\n\n**Pitfall:** `GRANT ALL` would also hand over TRUNCATE, REFERENCES and TRIGGER. In a real server, also check schema `USAGE` and sequence privileges, or inserts fail on the identity column.",
+				"Privileges are per table and per action. Now `apprentice_reader` reading `citations` gets 42501 *permission denied*, while `scrolls` stays readable.\n\n**Pitfall:** `GRANT ALL` would also hand over TRUNCATE, REFERENCES and TRIGGER. On a real server, also check schema `USAGE` and sequence privileges, or inserts fail on the identity column.",
 		},
 		{
 			id: "ch42-ex06",
-			title: "Veils on the forbidden shelves",
-			story:
-				"Apprentices may enter the scroll hall, but only public scrolls (clearance 1) should exist for them. Archivists see everything.",
+			title: "Row-level security policies per role",
 			prompt:
 				"Enable **row-level security** on `scrolls` and create policies so that `apprentice_reader` sees only scrolls with `clearance_level = 1`, and `archivist` sees **all** scrolls. The check counts the rows each role can see.",
 			difficulty: 4,
@@ -322,15 +310,13 @@ const chapter: Chapter = {
 				"... TO apprentice_reader USING (clearance_level = 1); CREATE POLICY ... TO archivist USING (true);",
 			],
 			explanation:
-				"The database itself now filters: 20 scrolls for apprentices, 30 for archivists, whatever query they write. You, the superuser, still see 30.\n\n**Pitfall:** policies without `ENABLE ROW LEVEL SECURITY` do nothing (apprentices see 30); enabling RLS with only the apprentice policy blinds the archivists (0 rows). `FOR ALL` also lets the archivist's UPDATEs through, still limited by its table privileges.",
+				"The database itself now filters: 20 scrolls for `apprentice_reader`, 30 for `archivist`, whatever query they write. You, the superuser, still see 30.\n\n**Pitfall:** policies without `ENABLE ROW LEVEL SECURITY` do nothing (`apprentice_reader` sees 30); enabling RLS with only the apprentice policy leaves `archivist` with 0 rows. `FOR ALL` also allows the archivist's UPDATEs, still limited by its table privileges.",
 		},
 		{
 			id: "ch42-ex07",
-			title: "The import that crashed",
-			story:
-				"The reader import from the Saltmarsh branch crashed halfway last night: Rowan Ashby was inserted, then everything stopped. The staging table `reader_import (email, name, clearance)` still holds all four rows. Two are existing readers whose email is typed in another case.",
+			title: "Idempotent import with ON CONFLICT",
 			prompt:
-				"Load `reader_import` into `readers` so the import is **idempotent** (running it again changes nothing):\n\n- a row whose email already exists (case-insensitive, `email` is citext) **updates name and clearance** only;\n- a new email inserts a reader with `password_hash = crypt('changeme', gen_salt('bf', 4))` and `joined_at = '2026-10-31 09:00+00'`.",
+				"A previous import failed halfway: one row of the staging table `reader_import (email, name, clearance)` was already inserted into `readers`. Two other rows match existing readers whose email differs only in case. Load `reader_import` into `readers` so the import is **idempotent** (running it again changes nothing):\n\n- a row whose email already exists (case insensitive, `email` is citext) **updates name and clearance** only;\n- a new email inserts a reader with `password_hash = crypt('changeme', gen_salt('bf', 4))` and `joined_at = '2026-10-31 09:00+00'`.",
 			difficulty: 4,
 			kind: "mutation",
 			concepts: ["upsert-patterns"],
@@ -344,18 +330,18 @@ const chapter: Chapter = {
 					"SELECT email::text, name, clearance, joined_at,\n       password_hash = crypt('changeme', password_hash) AS default_password\nFROM readers\nWHERE id IN (5, 7) OR id > 13\nORDER BY lower(email::text);",
 			},
 			hints: [
-				"A plain INSERT stops on Rowan with 23505: the previous run already inserted him.",
+				"A plain INSERT stops on Rowan Ashby with 23505: the previous run already inserted that row.",
 				"`ON CONFLICT (email) DO UPDATE SET ...` turns the conflict into an update. citext makes `WENDY@...` and `wendy@...` the same key.",
 				"... ON CONFLICT (email) DO UPDATE SET name = EXCLUDED.name, clearance = EXCLUDED.clearance;",
 			],
 			explanation:
-				"Every import row becomes either an insert or an update, so running the statement once, twice or after a crash gives the same table. Passwords and join dates of existing readers are untouched.\n\n**Pitfall:** `ON CONFLICT DO NOTHING` survives the rerun but never applies the corrections (Garrick stays at clearance 1); updating `password_hash` too would reset Garrick's password to *changeme*. **Alternative:** `MERGE INTO readers USING reader_import ...` with WHEN MATCHED / WHEN NOT MATCHED.",
+				"Every import row becomes either an insert or an update, so running the statement once, twice or after a failure gives the same table. Passwords and join dates of existing readers are untouched.\n\n**Pitfall:** `ON CONFLICT DO NOTHING` survives the rerun but never applies the corrections (Garrick Holt stays at clearance 1); updating `password_hash` too would reset that reader's password to *changeme*. **Alternative:** `MERGE INTO readers USING reader_import ...` with WHEN MATCHED / WHEN NOT MATCHED.",
 		},
 		{
 			id: "ch42-ex08",
 			title: "Boss: The Astral Wards",
 			story:
-				"The Spire's final trial. The scriptorium of the Saltmarsh branch sends batches of scrolls in `scroll_import`, sometimes twice. Elowen wants the hall warded before the next batch arrives: no duplicate titles, a memory of every real change, veils for the apprentices, and an import that can run twice.",
+				"Combines a UNIQUE constraint, a diff audit trigger, row-level security and an idempotent upsert in one script.",
 			prompt:
 				"The tables `scroll_audit (id, scroll_id, changed jsonb)` and `scroll_import (title, section_id, author, language, body, page_count, clearance_level)` exist. In one script:\n\n1. make `scrolls.title` **unique**;\n2. create an **AFTER UPDATE** row trigger on `scrolls` that inserts `(scroll id, changed)` into `scroll_audit`, where `changed` is a jsonb object of **only the columns whose value changed**, with their **new** values; an update that changes nothing writes **no** row;\n3. enable **RLS** on `scrolls`: `apprentice_reader` sees clearance 1 scrolls only, `archivist` sees all;\n4. upsert `scroll_import` into `scrolls` on **title** (existing titles get the imported **author** and **page_count**; new titles are inserted), and **run that upsert twice**.\n\nThe check also updates a scroll itself, counts rows per role and tries a duplicate title.",
 			difficulty: 5,
@@ -402,14 +388,14 @@ ${BOSS_UPSERT}`,
 				"INSERT INTO scrolls (...) SELECT ... FROM scroll_import ON CONFLICT (title) DO UPDATE SET author = EXCLUDED.author, page_count = EXCLUDED.page_count;",
 			],
 			explanation:
-				"The first import fills in the anonymous author of *Burned Pages* (audit: `{\"author\": \"Hakon Bly\", \"page_count\": 4}`) and adds Mittens's ledger; *Frost and Silence* arrives unchanged and leaves no trace. The second run updates rows to the values they already have, so the diff is empty and the audit stays quiet: the whole pipeline is idempotent. Apprentices now see 21 scrolls, archivists 31, and a duplicate title fails with 23505.\n\n**Pitfall:** auditing `to_jsonb(NEW)` blindly logs every no-op update of the second run; a plain INSERT fails on the rerun. **Alternative:** add `WHERE (scrolls.author, scrolls.page_count) IS DISTINCT FROM (EXCLUDED.author, EXCLUDED.page_count)` to the DO UPDATE so no-op updates never even happen.",
+				"The first import fills in the missing author of *Burned Pages* (audit: `{\"author\": \"Hakon Bly\", \"page_count\": 4}`) and adds *The Mouser's Ledger*; *Frost and Silence* arrives unchanged and writes no audit row. The second run updates rows to the values they already have, so the diff is empty and nothing is audited: the whole script is idempotent. `apprentice_reader` now sees 21 scrolls, `archivist` 31, and a duplicate title fails with 23505.\n\n**Pitfall:** auditing `to_jsonb(NEW)` without a diff logs every no-op update of the second run; a plain INSERT fails on the rerun. **Alternative:** add `WHERE (scrolls.author, scrolls.page_count) IS DISTINCT FROM (EXCLUDED.author, EXCLUDED.page_count)` to the DO UPDATE so no-op updates never even happen.",
 			boss: true,
 		},
 	],
 	practice: [
 		{
 			id: "ch42-pr01",
-			title: "Once per statement",
+			title: "Statement-level trigger",
 			prompt:
 				"The table `delete_stats (statements int)` holds one row with 0. Create a **statement-level** AFTER DELETE trigger on `loans` that adds 1 to `statements` each time a DELETE statement runs, however many rows it removes. The check runs a 3-row delete and a delete that matches nothing.",
 			difficulty: 2,
@@ -433,7 +419,7 @@ ${BOSS_UPSERT}`,
 		},
 		{
 			id: "ch42-pr02",
-			title: "Only real promotions",
+			title: "Trigger with a WHEN clause",
 			prompt:
 				"The table `clearance_log (reader_id, old_clearance, new_clearance)` exists. Create an AFTER UPDATE row trigger on `readers` that logs a row **only when the clearance actually changes**, using a `WHEN` clause on the trigger.",
 			difficulty: 3,
@@ -453,11 +439,11 @@ ${BOSS_UPSERT}`,
 				"WHEN (OLD.clearance IS DISTINCT FROM NEW.clearance)",
 			],
 			explanation:
-				"Only Isolde's promotion is logged. `AFTER UPDATE OF clearance` alone would also fire for `SET clearance = clearance`, because it only checks which columns the statement mentions.",
+				"Only the clearance change of reader 2 is logged. `AFTER UPDATE OF clearance` alone would also fire for `SET clearance = clearance`, because it only checks which columns the statement mentions.",
 		},
 		{
 			id: "ch42-pr03",
-			title: "Reading the history",
+			title: "Diff two jsonb rows",
 			prompt:
 				"The table `loan_audit (id, old_row jsonb, new_row jsonb)` holds two updates. For every audit row, return the **id**, the **key** that changed, its **old** value and its **new** value (as text), only for keys whose value differs.",
 			difficulty: 3,
@@ -474,13 +460,13 @@ ${BOSS_UPSERT}`,
 				"... jsonb_each_text(a.new_row) n JOIN LATERAL jsonb_each_text(a.old_row) o ON o.key = n.key WHERE n.value IS DISTINCT FROM o.value",
 			],
 			explanation:
-				"Loan 9 got a return date, loan 2 changed reader. With `<>` the first row would vanish: `NULL <> '2026-...'` is unknown.",
+				"Loan 9 got a return date, loan 2 changed reader. With `<>` the first row would disappear: `NULL <> '2026-...'` is unknown.",
 		},
 		{
 			id: "ch42-pr04",
-			title: "Ring and remember",
+			title: "Function that notifies and writes an outbox row",
 			prompt:
-				"The table `outbox (id, channel, payload)` exists. Create a function `announce(ch text, msg text) RETURNS void` that calls `pg_notify(ch, msg)` and inserts `(ch, msg)` into `outbox`. Then announce `'loan 9'` on channel `'overdue'`.",
+				"The table `outbox (id, channel, payload)` exists. Create a function `announce(ch text, msg text) RETURNS void` that calls `pg_notify(ch, msg)` and inserts `(ch, msg)` into `outbox`. Then call it with message `'loan 9'` on channel `'overdue'`.",
 			difficulty: 2,
 			kind: "ddl",
 			concepts: ["listen-notify"],
@@ -499,11 +485,11 @@ ${BOSS_UPSERT}`,
 				"PERFORM pg_notify(ch, msg); INSERT INTO outbox (channel, payload) VALUES (ch, msg);",
 			],
 			explanation:
-				"Listeners get the bell at COMMIT; the outbox keeps the message for anyone who was asleep.",
+				"Listeners receive the notification at COMMIT; the outbox keeps the message for any listener that was offline.",
 		},
 		{
 			id: "ch42-pr05",
-			title: "Predict the keys",
+			title: "Check privileges with has_table_privilege",
 			prompt:
 				"Return **one row** with `has_table_privilege('apprentice_reader', 'loans', 'SELECT')` and `has_table_privilege('archivist', 'loans', 'UPDATE')`.",
 			difficulty: 1,
@@ -514,14 +500,15 @@ ${BOSS_UPSERT}`,
 			check: { type: "result" },
 			hints: [
 				"Just run them.",
-				"The dataset grants apprentices only sections, scrolls and citations.",
+				"The dataset grants `apprentice_reader` only sections, scrolls and citations.",
 				"SELECT has_table_privilege('apprentice_reader', 'loans', 'SELECT'), has_table_privilege('archivist', 'loans', 'UPDATE');",
 			],
-			explanation: "false, true: apprentices cannot read the loans ledger; archivists can update it.",
+			explanation:
+				"false, true: `apprentice_reader` cannot read `loans`; `archivist` can update it.",
 		},
 		{
 			id: "ch42-pr06",
-			title: "Veil the high-clearance readers",
+			title: "RLS policy on readers",
 			prompt:
 				"Enable row-level security on `readers` and create a policy so that `archivist` sees only readers with `clearance <= 2`.",
 			difficulty: 2,
@@ -539,11 +526,12 @@ ${BOSS_UPSERT}`,
 				"`CREATE POLICY name ON readers FOR SELECT TO archivist USING (...)`.",
 				"USING (clearance <= 2)",
 			],
-			explanation: "The archivist sees 11 readers; Céleste and Mireille (clearance 3) are veiled. The superuser still sees 13.",
+			explanation:
+				"`archivist` sees 11 readers; the two readers with clearance 3 are hidden. The superuser still sees 13.",
 		},
 		{
 			id: "ch42-pr07",
-			title: "No promotions to forbidden",
+			title: "RLS UPDATE policy with WITH CHECK",
 			prompt:
 				"Enable row-level security on `scrolls`. Let `archivist` **read** every scroll, and **update** scrolls only if the updated row keeps `clearance_level < 3` (use `WITH CHECK`).",
 			difficulty: 3,
@@ -563,11 +551,11 @@ ${BOSS_UPSERT}`,
 				"CREATE POLICY ... FOR UPDATE TO archivist USING (true) WITH CHECK (clearance_level < 3);",
 			],
 			explanation:
-				"The promotion fails with 42501 (new row violates row-level security policy). Without WITH CHECK, Postgres checks new rows against USING, so `USING (true)` alone would let the archivist push any scroll onto the forbidden shelves.",
+				"Setting `clearance_level = 3` fails with 42501 (new row violates row-level security policy). Without WITH CHECK, Postgres checks new rows against USING, so `USING (true)` alone would let `archivist` set any scroll to clearance 3.",
 		},
 		{
 			id: "ch42-pr08",
-			title: "The visitor counter",
+			title: "Atomic counter with ON CONFLICT",
 			prompt:
 				"The table `visit_counts (reader_id int PRIMARY KEY, visits int NOT NULL)` is empty. Write **one** upsert that adds a visit for a reader (insert 1, or add 1 if the reader is already counted), and run it for readers **4, 4, 4** and **1** (four statements).",
 			difficulty: 2,
@@ -581,20 +569,18 @@ ${BOSS_UPSERT}`,
 				verifySql: "SELECT reader_id, visits FROM visit_counts ORDER BY reader_id;",
 			},
 			hints: [
-				"The first visit inserts, the next ones collide on the primary key.",
+				"The first visit inserts, the next ones conflict on the primary key.",
 				"In DO UPDATE, `visit_counts.visits` is the stored value.",
 				"INSERT INTO visit_counts VALUES (4, 1) ON CONFLICT (reader_id) DO UPDATE SET visits = visit_counts.visits + 1;",
 			],
 			explanation:
-				"The increment happens inside one statement under a row lock, so two readers arriving together never lose a visit, unlike `SELECT visits` then `UPDATE`.",
+				"The increment happens inside one statement under a row lock, so two concurrent sessions never lose a visit, unlike `SELECT visits` then `UPDATE`.",
 		},
 		{
 			id: "ch42-pr09",
-			title: "A rule in plain sight",
-			story:
-				"An old trigger `scrolls_positive_pages` rejects scrolls with zero pages. Nobody reading the schema can see the rule.",
+			title: "Replace a trigger with a CHECK constraint",
 			prompt:
-				"Replace the trigger with a **CHECK constraint**: drop the trigger `scrolls_positive_pages` on `scrolls`, then add a constraint that requires `page_count > 0`.",
+				"A trigger `scrolls_positive_pages` on `scrolls` rejects rows with zero pages, a rule that is invisible in the schema. Replace it with a **CHECK constraint**: drop the trigger `scrolls_positive_pages` on `scrolls`, then add a constraint that requires `page_count > 0`.",
 			difficulty: 2,
 			kind: "ddl",
 			concepts: ["stored-logic-guidelines"],
@@ -612,7 +598,7 @@ ${BOSS_UPSERT}`,
 				"DROP TRIGGER scrolls_positive_pages ON scrolls; ALTER TABLE scrolls ADD CONSTRAINT ... CHECK (page_count > 0);",
 			],
 			explanation:
-				"The rule is now declarative: visible in the schema, checked for existing rows when added, enforced with SQLSTATE 23514, and impossible to bypass by disabling triggers.",
+				"The rule is now declarative: visible in the schema, checked against existing rows when added, enforced with SQLSTATE 23514, and impossible to bypass by disabling triggers.",
 		},
 	],
 };

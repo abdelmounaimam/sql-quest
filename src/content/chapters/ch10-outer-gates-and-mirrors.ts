@@ -8,7 +8,7 @@ const chapter: Chapter = {
 	track: "query",
 	title: "Outer Gates and Mirrors",
 	subtitle:
-		"LEFT, FULL and self joins, joins on ranges, and the fan-out that inflates your sums",
+		"LEFT, RIGHT, FULL, self, cross and non-equi joins, and join fan-out",
 	emoji: "🪞",
 	datasetId: "starport",
 	concepts: [
@@ -23,13 +23,13 @@ const chapter: Chapter = {
 	lesson: [
 		{
 			kind: "explain",
-			title: "Nobody left behind",
-			body: "An inner join drops rows without a partner. **LEFT JOIN** keeps every row of the **left** table (the one before the keyword), and fills the right side with **NULL** when nothing matches:\n```sql\nFROM factions f\nLEFT JOIN pilots p ON p.faction_id = f.id\n```\nEvery faction appears at least once, even one with no pilots at all.",
+			title: "LEFT JOIN",
+			body: "An inner join drops rows without a partner. **LEFT JOIN** keeps every row of the **left** table (the one before the keyword), and fills the right side with **NULL** when nothing matches:\n```sql\nFROM factions f\nLEFT JOIN pilots p ON p.faction_id = f.id\n```\nEvery faction appears at least once, even one with no pilots.",
 		},
 		{
 			kind: "example",
-			title: "The empty guild hall",
-			body: "Scroll to the Lantern Guild: one row, and its pilot is NULL. An inner join would have hidden it completely.",
+			title: "A faction with no pilots",
+			body: "Find the Lantern Guild in the result: one row, with NULL in the pilot column. An inner join would have left it out.",
 			sql: "SELECT f.name AS faction, p.name AS pilot\nFROM factions f\nLEFT JOIN pilots p ON p.faction_id = f.id\nORDER BY f.name;",
 		},
 		{
@@ -44,43 +44,43 @@ const chapter: Chapter = {
 			],
 			answerIndex: 1,
 			explanation:
-				"WHERE filters the joined rows, and the NULL-filled row fails the test: the LEFT JOIN quietly becomes an inner join. Put conditions on the right table **in the ON clause**: `ON p.faction_id = f.id AND p.rank = 'captain'`.",
+				"WHERE filters the joined rows, and the NULL-filled row fails the test: the LEFT JOIN silently becomes an inner join. Put conditions on the right table **in the ON clause**: `ON p.faction_id = f.id AND p.rank = 'captain'`.",
 		},
 		{
 			kind: "explain",
-			title: "Counting the empty side",
-			body: "After a LEFT JOIN, an empty faction still produces **one row** (full of NULLs). So:\n\n- `count(*)` counts that row: **1** pilot for the Lantern Guild. Wrong!\n- `count(p.id)` counts non-NULL ids: **0**. Right.\n\nAlways count a column of the right table, ideally its key.",
+			title: "Counting after a LEFT JOIN",
+			body: "After a LEFT JOIN, an empty faction still produces **one row** (full of NULLs). So:\n\n- `count(*)` counts that row: **1** pilot for the Lantern Guild, which is wrong.\n- `count(p.id)` counts non-NULL ids: **0**, which is correct.\n\nAlways count a column of the right table, ideally its key.",
 		},
 		{
 			kind: "explain",
 			title: "RIGHT and FULL",
-			body: "`A RIGHT JOIN B` keeps every row of **B**: it is just `B LEFT JOIN A` written backwards. Most people swap the tables and stick to LEFT.\n\n`FULL JOIN` keeps unmatched rows from **both** sides:\n```sql\nFROM planets pl\nFULL JOIN factions f ON f.homeworld_id = pl.id\n```\nPlanets with no faction and factions with no homeworld both survive, NULL on the missing side.",
+			body: "`A RIGHT JOIN B` keeps every row of **B**: it is the same as `B LEFT JOIN A`. Most people swap the tables and use LEFT.\n\n`FULL JOIN` keeps unmatched rows from **both** sides:\n```sql\nFROM planets pl\nFULL JOIN factions f ON f.homeworld_id = pl.id\n```\nPlanets with no faction and factions with no homeworld are both kept, with NULL on the missing side.",
 		},
 		{
 			kind: "example",
-			title: "Mirror, mirror: a self join",
-			body: "A table can meet **itself**. `mentor_id` points at another pilot, so join pilots to pilots under two aliases. LEFT keeps the self-taught pilots, with a NULL mentor.",
+			title: "Self join",
+			body: "A table can be joined to **itself**. `mentor_id` references another row of `pilots`, so join `pilots` to `pilots` under two aliases. LEFT keeps the pilots with a NULL `mentor_id`.",
 			sql: "SELECT p.name AS pilot, m.name AS mentor\nFROM pilots p\nLEFT JOIN pilots m ON m.id = p.mentor_id;",
 		},
 		{
 			kind: "explain",
-			title: "Gates that are not '='",
-			body: "ON accepts **any** condition. A pilot gets the tier whose range holds their reputation:\n```sql\nJOIN reputation_tiers t\n  ON p.reputation BETWEEN t.min_rep AND t.max_rep\n```\nThat is a **non-equi join**. Mind the bounds: BETWEEN includes both ends.\n\n`CROSS JOIN` has no condition at all: every row with every row. Useful on purpose (a schedule grid), a disaster by accident.",
+			title: "Non-equi joins and CROSS JOIN",
+			body: "ON accepts **any** condition. Here each pilot is matched with the tier whose range contains their reputation:\n```sql\nJOIN reputation_tiers t\n  ON p.reputation BETWEEN t.min_rep AND t.max_rep\n```\nThat is a **non-equi join**. Mind the bounds: BETWEEN includes both ends.\n\n`CROSS JOIN` has no condition at all: every row with every row. It is useful on purpose (a schedule grid) and expensive by accident.",
 		},
 		{
 			kind: "example",
-			title: "Fan-out: where did 6 rows come from?",
-			body: "Black Lotus has **2** trades and **3** seizures. Join both children to the ship and each trade pairs with each seizure: 2 × 3 = **6** rows. Any sum over this would count every fine twice.",
+			title: "Join fan-out",
+			body: "Black Lotus has **2** trades and **3** seizures. Join both child tables to `ships` and each trade pairs with each seizure: 2 × 3 = **6** rows. Any sum over this result counts every fine twice.",
 			sql: "SELECT s.name, t.id AS trade, z.id AS seizure, z.fine\nFROM ships s\nJOIN trades t ON t.ship_id = s.id\nJOIN seizures z ON z.ship_id = s.id\nWHERE s.name = 'Black Lotus';",
 		},
 		{
 			kind: "explain",
-			title: "The cure: total first, join after",
-			body: "Aggregate each child table **on its own**, in a subquery in FROM, so it has one row per ship. Then join the totals:\n```sql\nFROM ships s\nLEFT JOIN (SELECT ship_id, sum(fine) AS fines\n           FROM seizures GROUP BY ship_id) z\n       ON z.ship_id = s.id\n```\nOne row per ship on each side means nothing can multiply. (Subqueries get a full chapter next world.)",
+			title: "Aggregate first, then join",
+			body: "Aggregate each child table **on its own**, in a subquery in FROM, so it has one row per ship. Then join the totals:\n```sql\nFROM ships s\nLEFT JOIN (SELECT ship_id, sum(fine) AS fines\n           FROM seizures GROUP BY ship_id) z\n       ON z.ship_id = s.id\n```\nOne row per ship on each side means nothing can multiply. (Subqueries are covered in *Queries within Queries*.)",
 		},
 		{
 			kind: "try",
-			title: "Your turn: no ship left behind",
+			title: "Try it: keep ships without a pilot",
 			prompt:
 				"Return every ship's **name** and its **pilot's name**, keeping ships without a pilot (their pilot shows as NULL).",
 			starterSql:
@@ -97,9 +97,7 @@ const chapter: Chapter = {
 	exercises: [
 		{
 			id: "ch10-ex01",
-			title: "Roll call of the factions",
-			story:
-				"The Harbor Master counts members per faction. The new Lantern Guild insists it must be on the list, even with nobody in it.",
+			title: "Pilots per faction, including zero",
 			prompt:
 				"Return every faction's **name** and its **number of pilots**. Factions with no pilots show **0**.",
 			difficulty: 2,
@@ -116,13 +114,11 @@ const chapter: Chapter = {
 				"FROM factions f LEFT JOIN pilots p ON p.faction_id = f.id ... count(p.id)",
 			],
 			explanation:
-				"The LEFT JOIN keeps the Lantern Guild as one row with NULL pilot columns, and `count(p.id)` skips that NULL: 0.\n\n**Pitfall:** `count(*)` counts the NULL-filled row too and reports **1** pilot for an empty guild.",
+				"The LEFT JOIN keeps the Lantern Guild as one row with NULL pilot columns, and `count(p.id)` skips that NULL: 0.\n\n**Pitfall:** `count(*)` counts the NULL-filled row too and reports **1** pilot for a faction with no pilots.",
 		},
 		{
 			id: "ch10-ex02",
-			title: "The vanishing ships",
-			story:
-				"The yearly report should list every ship with its number of trades in 2077. Half the fleet is missing from it, and the analyst swears he used a LEFT JOIN.",
+			title: "Move a filter from WHERE to ON",
 			prompt:
 				"Fix the query: return every ship's **name** and its **number of trades in 2077** (from 1 January 2077 included to 1 January 2078 excluded). Ships with no 2077 trade show **0**.",
 			difficulty: 3,
@@ -139,13 +135,11 @@ const chapter: Chapter = {
 				"Move the date conditions into the ON clause: ON t.ship_id = s.id AND t.traded_at >= ...",
 			],
 			explanation:
-				"Conditions in ON decide **which trades get attached**; the LEFT JOIN still keeps every ship. Conditions in WHERE run afterwards and delete the NULL-filled rows, which turns the LEFT JOIN back into an inner join.\n\n**Pitfall:** `WHERE t.traded_at >= '2077-01-01' OR t.id IS NULL` looks like a fix but drops ships that traded only in 2076 (Rusty Bucket, Ace of Wings...).",
+				"Conditions in ON decide **which trades get attached**; the LEFT JOIN still keeps every ship. Conditions in WHERE run afterwards and remove the NULL-filled rows, which turns the LEFT JOIN back into an inner join.\n\n**Pitfall:** `WHERE t.traded_at >= '2077-01-01' OR t.id IS NULL` looks like a fix but drops ships that traded only in 2076 (Rusty Bucket, Ace of Wings...).",
 		},
 		{
 			id: "ch10-ex03",
-			title: "Dust on the shelves",
-			story:
-				"The quartermaster wants to stop stocking goods nobody ever trades.",
+			title: "Commodities never traded",
 			prompt:
 				"Return the **name** of every commodity that has **never been traded**. Use a LEFT JOIN.",
 			difficulty: 2,
@@ -156,17 +150,15 @@ const chapter: Chapter = {
 			check: { type: "result" },
 			hints: [
 				"Keep every commodity, then look for the ones that found no trade.",
-				"After a LEFT JOIN, a row without partner has NULL in every trade column, including the trade's key.",
+				"After a LEFT JOIN, a row without a match has NULL in every trade column, including the trade's key.",
 				"LEFT JOIN trades t ON t.commodity_id = c.id WHERE t.id IS NULL",
 			],
 			explanation:
-				"This is the **anti-join** pattern: keep everything, then keep only rows whose partner is missing. Test the right table's **key** (`t.id`), which is never NULL in a real trade.\n\n**Pitfall:** `WHERE t.unit_price IS NULL` also catches trade 37, whose price was lost in a solar flare, and wrongly lists Hydroponic Rice.\n\n**Alternative:** `WHERE NOT EXISTS (...)`, coming in the Nested Catacombs.",
+				"This is the **anti-join** pattern: keep everything, then keep only rows with no match. Test the right table's **key** (`t.id`), which is never NULL in a real trade.\n\n**Pitfall:** `WHERE t.unit_price IS NULL` also catches trade 37, whose `unit_price` is NULL, and wrongly lists Hydroponic Rice.\n\n**Alternative:** `WHERE NOT EXISTS (...)`, covered in *Exists or Not*.",
 		},
 		{
 			id: "ch10-ex04",
-			title: "Both sides of the map",
-			story:
-				"The cartographers want one sheet with every planet and every faction homeworld claim, nothing left out on either side.",
+			title: "Planets and factions with FULL JOIN",
 			prompt:
 				"Return the **planet name** and the **name of the faction** whose homeworld it is. Keep planets that are **nobody's homeworld** (faction NULL) and factions with **no homeworld** (planet NULL).",
 			difficulty: 3,
@@ -181,13 +173,11 @@ const chapter: Chapter = {
 				"FROM planets pl FULL JOIN factions f ON f.homeworld_id = pl.id",
 			],
 			explanation:
-				"`FULL JOIN` = LEFT and RIGHT at once: 5 matched pairs, 7 lonely planets, 1 lonely faction, 13 rows.\n\n**Pitfall:** a WHERE on either table (`WHERE f.founded_year > 2000`) would silently drop the NULL side again, exactly like with LEFT JOIN.",
+				"`FULL JOIN` = LEFT and RIGHT at once: 5 matched pairs, 7 unmatched planets, 1 unmatched faction, 13 rows.\n\n**Pitfall:** a WHERE on either table (`WHERE f.founded_year > 2000`) would silently drop the NULL side again, exactly like with LEFT JOIN.",
 		},
 		{
 			id: "ch10-ex05",
-			title: "Who trained you?",
-			story:
-				"The academy is printing lineage cards: every pilot with the name of their mentor.",
+			title: "Pilots with their mentor",
 			prompt:
 				"Return every pilot's **name** and the **name of their mentor**. Pilots without a mentor stay, with a NULL mentor.",
 			difficulty: 2,
@@ -198,17 +188,15 @@ const chapter: Chapter = {
 			check: { type: "result" },
 			hints: [
 				"The mentor is also a pilot: the same table plays two roles.",
-				"Two aliases of pilots: one for the apprentice, one for the mentor. Keep self-taught pilots.",
+				"Two aliases of pilots: one for the pilot, one for the mentor. Keep pilots without a mentor.",
 				"FROM pilots p LEFT JOIN pilots m ON m.id = p.mentor_id",
 			],
 			explanation:
-				"`m` is a second copy of pilots, matched on the apprentice's `mentor_id`. LEFT keeps the 7 self-taught pilots.\n\n**Pitfall:** `ON m.mentor_id = p.id` reverses the roles: it lists each pilot with their **apprentices** instead.",
+				"`m` is a second copy of pilots, matched on the pilot's `mentor_id`. LEFT keeps the 7 pilots with no mentor.\n\n**Pitfall:** `ON m.mentor_id = p.id` reverses the roles: it lists each pilot with the pilots they **mentor** instead.",
 		},
 		{
 			id: "ch10-ex06",
-			title: "Two jumps away",
-			story:
-				"Pilots love two-jump trips: out through one hyperlane, on through a second. A trip that just comes back home does not count.",
+			title: "Two-hop routes",
 			prompt:
 				"Return the **start**, **middle** and **end** planet ids of every two-hop route: a route from start to middle followed by a route from middle to end, where the **end is not the start**.",
 			difficulty: 3,
@@ -223,13 +211,11 @@ const chapter: Chapter = {
 				"JOIN routes b ON b.from_planet_id = a.to_planet_id WHERE b.to_planet_id <> a.from_planet_id",
 			],
 			explanation:
-				"Chaining a table to itself on `end of hop 1 = start of hop 2` builds paths. 17 trips remain once the round trips (1 → 2 → 1 and friends) are removed.\n\n**Pitfall:** forgetting the `<>` filter keeps 6 pointless round trips. For paths of any length you will need recursion: see the Endless Stair.",
+				"Chaining a table to itself on `end of hop 1 = start of hop 2` builds paths. 17 paths remain once the round trips (1 → 2 → 1 and similar) are removed.\n\n**Pitfall:** forgetting the `<>` filter keeps 6 round trips. Paths of any length need recursion (recursive CTEs, covered in *The Endless Stair*).",
 		},
 		{
 			id: "ch10-ex07",
-			title: "Titles by reputation",
-			story:
-				"Each pilot's badge shows a title from the reputation table. The brackets include both of their bounds.",
+			title: "Join on a range",
 			prompt:
 				"Return every pilot's **name** and their reputation **tier**: the tier whose `min_rep` to `max_rep` range, **both bounds included**, contains the pilot's reputation.",
 			difficulty: 2,
@@ -244,13 +230,11 @@ const chapter: Chapter = {
 				"JOIN reputation_tiers t ON p.reputation BETWEEN t.min_rep AND t.max_rep",
 			],
 			explanation:
-				"Each reputation falls in exactly one bracket, so each pilot gets exactly one row.\n\n**Pitfall:** `p.reputation > t.min_rep AND p.reputation < t.max_rep` drops everyone sitting on a bound, like Lumen and Umbra-3 at exactly 0. Overlapping brackets would be the opposite bug: duplicate rows.",
+				"Each reputation falls in exactly one bracket, so each pilot gets exactly one row.\n\n**Pitfall:** `p.reputation > t.min_rep AND p.reputation < t.max_rep` drops every pilot whose reputation equals a bound, like Lumen and Umbra-3 at exactly 0. Overlapping brackets would be the opposite bug: duplicate rows.",
 		},
 		{
 			id: "ch10-ex08",
-			title: "Docking grid",
-			story:
-				"The dock chief plans test dockings: every heavy hauler must try every spaceport where gravity will not crush its landing gear.",
+			title: "Every ship and planet pair",
 			prompt:
 				"Return the **ship name** and **planet name** of every pairing between a ship with a **cargo capacity of 900 or more** and a planet that **has a spaceport** and a **gravity of 1.00 or less**.",
 			difficulty: 2,
@@ -265,15 +249,15 @@ const chapter: Chapter = {
 				"FROM ships s CROSS JOIN planets pl WHERE s.cargo_capacity >= 900 AND pl.has_spaceport AND pl.gravity <= 1.00",
 			],
 			explanation:
-				"4 haulers × 5 gentle spaceports = 20 pairings. CROSS JOIN is the honest way to ask for every combination.\n\n**Pitfall:** the same product happens by accident when a comma join forgets its WHERE condition. On big tables that is millions of rows.",
+				"4 ships × 5 planets = 20 pairs. CROSS JOIN states explicitly that you want every combination.\n\n**Pitfall:** the same product happens by accident when a comma join forgets its WHERE condition. On big tables that is millions of rows.",
 		},
 		{
 			id: "ch10-ex09",
 			title: "Boss: The Broken Gate",
 			story:
-				"The Harbor Master's faction report is broken: the Crimson Syndicate shows 10 pilots when it has 4, its sales and seizures are inflated, and empty factions show blanks. Repair the gate before the council meets.",
+				"Combines LEFT JOIN, pre-aggregated subqueries in FROM, count(DISTINCT) and COALESCE to fix a report inflated by fan-out.",
 			prompt:
-				"Fix the report. For **every faction** (all 6), return:\n\n1. the faction **name**\n2. the number of its **pilots**\n3. the number of **ships** flown by its pilots\n4. the total **sales value** of those ships: `qty * unit_price` over their trades with side `sell`\n5. the total **qty seized** from those ships\n\nShow **0**, not NULL, wherever there is nothing to count or add.",
+				"Fix the query. For **every faction** (all 6), return:\n\n1. the faction **name**\n2. the number of its **pilots**\n3. the number of **ships** flown by its pilots\n4. the total **sales value** of those ships: `qty * unit_price` over their trades with side `sell`\n5. the total **qty seized** from those ships\n\nShow **0**, not NULL, wherever there is nothing to count or add.",
 			difficulty: 5,
 			kind: "query",
 			concepts: ["join-fanout", "left-join"],
@@ -295,7 +279,7 @@ const chapter: Chapter = {
 	practice: [
 		{
 			id: "ch10-pr01",
-			title: "Quiet ports",
+			title: "Trades per planet, including zero",
 			prompt:
 				"Return every planet's **name** and its **number of trades**, with **0** for planets where nothing was ever traded.",
 			difficulty: 2,
@@ -305,7 +289,7 @@ const chapter: Chapter = {
 				"SELECT pl.name, count(t.id) AS trades\nFROM planets pl\nLEFT JOIN trades t ON t.planet_id = pl.id\nGROUP BY pl.id, pl.name;",
 			check: { type: "result" },
 			hints: [
-				"Hollow Moon saw no trade but must be listed.",
+				"Hollow Moon has no trades but must be listed.",
 				"LEFT JOIN from planets, then count a trades column.",
 				"count(t.id), not count(*)",
 			],
@@ -314,7 +298,7 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch10-pr02",
-			title: "Grounded pilots",
+			title: "Pilots without a ship",
 			prompt:
 				"Return the **name** of every pilot who flies **no ship**. Use a LEFT JOIN.",
 			difficulty: 2,
@@ -329,13 +313,11 @@ const chapter: Chapter = {
 				"LEFT JOIN ships s ON s.pilot_id = p.id WHERE s.id IS NULL",
 			],
 			explanation:
-				"Seven pilots are grounded. Testing `s.hull_integrity IS NULL` instead would also list Nox and Umbra-3, whose ships simply were never inspected.",
+				"Seven pilots have no ship. Testing `s.hull_integrity IS NULL` instead would also list Nox and Umbra-3, whose ships have a NULL `hull_integrity`.",
 		},
 		{
 			id: "ch10-pr03",
-			title: "The backwards gate",
-			story:
-				"A clerk wrote a RIGHT JOIN to list every commodity with its seizures, but only seized goods show up.",
+			title: "Fix the preserved side of an outer join",
 			prompt:
 				"Fix the query: return every commodity's **name** and the **id** of each of its seizures, keeping commodities that were **never seized** (id NULL).",
 			difficulty: 2,
@@ -356,7 +338,7 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch10-pr04",
-			title: "Kindred spirits",
+			title: "Pairs of pilots of the same species",
 			prompt:
 				"Return each **pair of pilot names** sharing the same **species**, for every species except Human. List each pair **once** (not also in mirrored order), never a pilot with themselves, the pilot with the **smaller id first**.",
 			difficulty: 3,
@@ -375,7 +357,7 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch10-pr05",
-			title: "Two-way lanes",
+			title: "Routes in both directions",
 			prompt:
 				"Return the **from_planet_id** and **to_planet_id** of every route that also exists in the **opposite direction**, listing each such lane once, with the **smaller planet id first**.",
 			difficulty: 3,
@@ -390,11 +372,11 @@ const chapter: Chapter = {
 				"... WHERE a.from_planet_id < a.to_planet_id",
 			],
 			explanation:
-				"Three lanes run both ways: between planets 1 and 2, 3 and 8, 4 and 7. Without the final filter each would appear twice.",
+				"Three routes exist in both directions: between planets 1 and 2, 3 and 8, 4 and 7. Without the final filter each would appear twice.",
 		},
 		{
 			id: "ch10-pr06",
-			title: "Badge printing",
+			title: "Every tier with every faction",
 			prompt:
 				"Return every combination of reputation **tier** and **faction name**, for factions **founded before 2050**.",
 			difficulty: 1,
@@ -408,11 +390,11 @@ const chapter: Chapter = {
 				"CROSS JOIN, then filter the factions.",
 				"FROM reputation_tiers t CROSS JOIN factions f WHERE f.founded_year < 2050",
 			],
-			explanation: "5 tiers × 3 old factions = 15 badge templates.",
+			explanation: "5 tiers × 3 factions = 15 rows.",
 		},
 		{
 			id: "ch10-pr07",
-			title: "Price gougers",
+			title: "Trades priced above base",
 			prompt:
 				"Return the **trade id**, the **commodity name**, the **unit_price** and the commodity's **base_price** for every trade whose unit price is **more than 10% above** the base price (strictly more than `base_price * 1.1`).",
 			difficulty: 2,
@@ -431,11 +413,9 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch10-pr08",
-			title: "Fines on repeat",
-			story:
-				"Customs reports 35000 in fines for Jackpot. The real figure is 17500. Someone left an old join in the query.",
+			title: "Remove a join that multiplies sums",
 			prompt:
-				"Fix the query: return the **name** and **total fines** of every ship that was seized at least once (a ship whose fines are all pending shows NULL).",
+				"Fix the query: return the **name** and **total fines** of every ship that was seized at least once (a ship whose fines are all pending shows NULL). The current query returns 35000 for Jackpot instead of 17500.",
 			difficulty: 2,
 			kind: "query",
 			concepts: ["join-fanout"],
@@ -454,7 +434,7 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch10-pr09",
-			title: "Two ledgers, one line",
+			title: "Trades and seizures per ship",
 			prompt:
 				"Return every ship's **name**, its **number of trades** and its **number of seizures**, with **0** where there are none.",
 			difficulty: 3,

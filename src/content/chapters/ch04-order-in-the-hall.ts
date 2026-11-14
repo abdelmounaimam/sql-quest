@@ -7,7 +7,7 @@ const chapter: Chapter = {
 	tier: "novice",
 	track: "query",
 	title: "Order in the Hall",
-	subtitle: "ORDER BY, LIMIT, DISTINCT, and why 'Zed' sorts before 'apple'",
+	subtitle: "ORDER BY, NULLS FIRST/LAST, LIMIT, OFFSET, DISTINCT and collations",
 	emoji: "🏆",
 	datasetId: "starport",
 	concepts: ["order-by", "limit-offset", "distinct", "collation-sorting"],
@@ -15,7 +15,7 @@ const chapter: Chapter = {
 	lesson: [
 		{
 			kind: "explain",
-			title: "Rows have no order",
+			title: "Sort rows with ORDER BY",
 			body: "A table is a *set* of rows: without instructions, the database returns them in whatever order is convenient, and that order can change.\n\n**ORDER BY** sorts the result:\n```sql\nSELECT name, credits\nFROM pilots\nORDER BY credits DESC;\n```\n`ASC` (smallest first) is the default, `DESC` reverses it.",
 		},
 		{
@@ -26,8 +26,8 @@ const chapter: Chapter = {
 		},
 		{
 			kind: "explain",
-			title: "Where do NULLs go?",
-			body: "By default NULL counts as *bigger than everything*: last in ASC, **first** in DESC. Choose explicitly:\n```sql\nORDER BY credits DESC NULLS LAST\n```",
+			title: "NULLS FIRST and NULLS LAST",
+			body: "By default NULL sorts as *larger than every value*: last in ASC, **first** in DESC. Choose explicitly:\n```sql\nORDER BY credits DESC NULLS LAST\n```",
 		},
 		{
 			kind: "quiz",
@@ -45,35 +45,35 @@ const chapter: Chapter = {
 		},
 		{
 			kind: "explain",
-			title: "Top N and pages: LIMIT and OFFSET",
-			body: "`LIMIT n` keeps the first n rows, `OFFSET k` skips k rows first. Page 3 with 5 rows per page is `LIMIT 5 OFFSET 10`.\n\nWithout ORDER BY, *first* means nothing, so always sort first.\n\nTo keep rows tied with the last one: `FETCH FIRST 3 ROWS WITH TIES`.",
+			title: "LIMIT and OFFSET",
+			body: "`LIMIT n` keeps the first n rows, `OFFSET k` skips k rows first. Page 3 with 5 rows per page is `LIMIT 5 OFFSET 10`.\n\nWithout ORDER BY, *first* is not defined, so always sort first.\n\nTo keep rows tied with the last one: `FETCH FIRST 3 ROWS WITH TIES`.",
 		},
 		{
 			kind: "example",
-			title: "The three richest",
-			body: "Sort, then cut.",
+			title: "Top 3 with LIMIT",
+			body: "ORDER BY sorts the rows, then LIMIT keeps the first 3.",
 			sql: "SELECT name, credits\nFROM pilots\nWHERE credits IS NOT NULL\nORDER BY credits DESC\nLIMIT 3;",
 		},
 		{
 			kind: "example",
-			title: "DISTINCT: each answer once",
+			title: "Remove duplicates with DISTINCT",
 			body: "`SELECT DISTINCT` removes duplicate **rows** from the result. With several columns, the *combination* must repeat to be removed.",
 			sql: "SELECT DISTINCT species\nFROM pilots;",
 		},
 		{
 			kind: "explain",
-			title: "The collation surprise",
+			title: "Collations and text order",
 			body: "Text order depends on the **collation**. This database uses `C`: plain byte order, so **every capital letter comes before every lower-case one**, and accented letters come after `z`:\n\n`Zed` < `ace` < `zigzag` < `Étoile`\n\nFor dictionary order, ask for another collation:\n```sql\nORDER BY callsign COLLATE \"unicode\"\n```",
 		},
 		{
 			kind: "example",
 			title: "Byte order vs dictionary order",
-			body: "Same callsigns, two orders. Compare the columns.",
+			body: "This sorts the callsigns with the `unicode` collation. Compare with a plain `ORDER BY callsign`.",
 			sql: "SELECT callsign\nFROM pilots\nWHERE callsign IS NOT NULL\nORDER BY callsign COLLATE \"unicode\";",
 		},
 		{
 			kind: "try",
-			title: "Your turn: the longest lanes",
+			title: "Three longest routes",
 			prompt:
 				"Return the **from_planet_id**, **to_planet_id** and **distance_ly** of the **3 longest** routes, longest first.",
 			starterSql:
@@ -90,8 +90,7 @@ const chapter: Chapter = {
 	exercises: [
 		{
 			id: "ch04-ex01",
-			title: "Alphabetical atlas",
-			story: "The atlas printer needs the planets in alphabetical order.",
+			title: "Planets A to Z",
 			prompt: "Return the **name** of every planet, sorted by name **A to Z**.",
 			difficulty: 1,
 			kind: "query",
@@ -104,11 +103,11 @@ const chapter: Chapter = {
 				"SELECT name FROM planets ORDER BY name;",
 			],
 			explanation:
-				"`ORDER BY name` sorts ascending. Did you notice *Éclat* at the very end? In the `C` collation accented letters come after z. We'll fix that later in this chapter.",
+				"`ORDER BY name` sorts ascending. Note that *Éclat* is at the very end: in the `C` collation accented letters come after z. Collations are covered later in this chapter.",
 		},
 		{
 			id: "ch04-ex02",
-			title: "The rich list",
+			title: "Credits descending, NULLs last",
 			prompt:
 				"Return every pilot's **name** and **credits**, richest first. Pilots with **unknown** credits go at the **very end**. Break ties by **name A to Z**.",
 			difficulty: 2,
@@ -119,7 +118,7 @@ const chapter: Chapter = {
 				"SELECT name, credits FROM pilots ORDER BY credits DESC NULLS LAST, name;",
 			check: { type: "result", orderMatters: true },
 			hints: [
-				"Run the starter: who is on top? And who comes first between Ada and Mira?",
+				"Run the starter: which row is on top? And which comes first between Ada and Mira?",
 				"In DESC order NULLs come first unless you say otherwise; ties need a second key.",
 				"ORDER BY credits DESC NULLS LAST, name",
 			],
@@ -128,8 +127,7 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch04-ex03",
-			title: "Heavy worlds",
-			story: "A gravity-training camp wants the three worlds with the strongest pull.",
+			title: "Top 3 known gravity",
 			prompt:
 				"Return the **name** and **gravity** of the **3** planets with the **highest known** gravity, strongest first.",
 			difficulty: 2,
@@ -140,20 +138,18 @@ const chapter: Chapter = {
 				"SELECT name, gravity FROM planets WHERE gravity IS NOT NULL ORDER BY gravity DESC LIMIT 3;",
 			check: { type: "result", orderMatters: true },
 			hints: [
-				"Run the starter: Hollow Moon grabs first place with no gravity at all.",
-				"Get rid of unknown gravity, with a WHERE or with NULLS LAST.",
+				"Run the starter: Hollow Moon is first, and its gravity is NULL.",
+				"Exclude the NULL gravity, with a WHERE or with NULLS LAST.",
 				"ORDER BY gravity DESC NULLS LAST LIMIT 3",
 			],
 			explanation:
-				"LIMIT cuts *after* sorting, so the NULL placement matters: in DESC order the unknown gravity sorts first and steals a slot. Filter it out or use `NULLS LAST`.",
+				"LIMIT cuts *after* sorting, so the NULL placement matters: in DESC order the NULL gravity sorts first and takes one of the 3 rows. Filter it out or use `NULLS LAST`.",
 		},
 		{
 			id: "ch04-ex04",
-			title: "Page two",
-			story:
-				"The shipyard catalogue shows 5 ships per page, sorted by name. A customer clicks **page 2**.",
+			title: "Second page of 5",
 			prompt:
-				"Return the **name** of the ships on **page 2** of the catalogue: ships sorted by name, 5 per page.",
+				"Return the **name** of the ships on **page 2**: ships sorted by name, 5 per page.",
 			difficulty: 2,
 			kind: "query",
 			concepts: ["limit-offset"],
@@ -169,7 +165,7 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch04-ex05",
-			title: "Species census",
+			title: "Distinct species",
 			prompt: "Return each **species** of the pilots **once**.",
 			difficulty: 1,
 			kind: "query",
@@ -187,7 +183,7 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch04-ex06",
-			title: "Who flies what",
+			title: "Distinct species and rank pairs",
 			prompt:
 				"Return each different combination of **species** and **rank** found among pilots, once each.",
 			difficulty: 2,
@@ -206,8 +202,6 @@ const chapter: Chapter = {
 		{
 			id: "ch04-ex07",
 			title: "Biggest holds, ties included",
-			story:
-				"A freight company will hire the ships with the two largest cargo capacities. Fairness rule: if several ships tie for second place, they all get the contract.",
 			prompt:
 				"Return the **name** and **cargo_capacity** of the ships with the **2** largest **known** cargo capacities, **including every ship tied** with the last one.",
 			difficulty: 3,
@@ -219,18 +213,16 @@ const chapter: Chapter = {
 				"SELECT name, cargo_capacity FROM ships ORDER BY cargo_capacity DESC NULLS LAST FETCH FIRST 2 ROWS WITH TIES;",
 			check: { type: "result" },
 			hints: [
-				"Three Hauler-class ships share 900 units. LIMIT 2 keeps only one of them.",
+				"Three ships share a capacity of 900. LIMIT 2 keeps only one of them.",
 				"The standard syntax FETCH FIRST n ROWS has a WITH TIES option.",
 				"ORDER BY cargo_capacity DESC NULLS LAST FETCH FIRST 2 ROWS WITH TIES",
 			],
 			explanation:
-				"`WITH TIES` keeps going while rows tie with the last kept row: Silent Vow (1200) plus the three 900-unit haulers. It requires an ORDER BY, which defines what a tie is.\n\n**Pitfall:** `LIMIT 2` picks one of the tied haulers arbitrarily.",
+				"`WITH TIES` keeps going while rows tie with the last kept row: Silent Vow (1200) plus the three ships with 900. It requires an ORDER BY, which defines what a tie is.\n\n**Pitfall:** `LIMIT 2` picks one of the tied ships arbitrarily.",
 		},
 		{
 			id: "ch04-ex08",
-			title: "Dictionary order",
-			story:
-				"Pilots complain the radio directory is \"broken\": Zed comes before ace and Étoile is at the very end.",
+			title: "Sort with a unicode collation",
 			prompt:
 				"Return every **known callsign** sorted in **dictionary order**: case does not split the list, and accented letters sort with their base letter (`Étoile` right after `ace`).",
 			difficulty: 3,
@@ -252,10 +244,9 @@ const chapter: Chapter = {
 		{
 			id: "ch04-ex09",
 			title: "Boss: The Hall of Fame",
-			story:
-				"The Starport's Hall of Fame lists pilots who have a callsign, from richest to poorest, 5 per wall panel. You're in charge of **panel 3**.",
+			story: "Combines WHERE, a two key ORDER BY and OFFSET pagination.",
 			prompt:
-				"Return the **name**, **callsign** and **credits** of the pilots on **panel 3**:\n\n- only pilots **with a callsign**;\n- sorted by **credits, highest first**, ties broken by **name A to Z**;\n- 5 pilots per panel (panel 1 = the 5 richest).",
+				"Return the **name**, **callsign** and **credits** of the pilots on **page 3**:\n\n- only pilots **with a callsign**;\n- sorted by **credits, highest first**, ties broken by **name A to Z**;\n- 5 pilots per page (page 1 = the 5 richest).",
 			difficulty: 4,
 			kind: "query",
 			concepts: ["order-by", "limit-offset", "null-basics", "where-comparison"],
@@ -264,18 +255,18 @@ const chapter: Chapter = {
 			check: { type: "result", orderMatters: true },
 			hints: [
 				"Build it clause by clause: WHERE, then ORDER BY, then the page.",
-				"Panel 3 skips the first two panels (10 pilots). Ties on credits need name as a second key.",
+				"Page 3 skips the first two pages (10 pilots). Ties on credits need name as a second key.",
 				"WHERE callsign IS NOT NULL ORDER BY credits DESC, name LIMIT 5 OFFSET 10",
 			],
 			explanation:
-				"The clauses run in a logical order: FROM, WHERE, then ORDER BY, then OFFSET/LIMIT. That is why the panel is cut *after* the filter and the sort.\n\nThe name tie-breaker matters here: Bram and Fizzik both have 12,500.50 credits, so do Hana and Rhea (9,100).",
+				"The clauses run in a logical order: FROM, WHERE, then ORDER BY, then OFFSET/LIMIT. That is why the page is cut *after* the filter and the sort.\n\nThe name tie breaker matters here: Bram and Fizzik both have 12,500.50 credits, so do Hana and Rhea (9,100).",
 			boss: true,
 		},
 	],
 	practice: [
 		{
 			id: "ch04-pr01",
-			title: "Cheapest first",
+			title: "Commodities by price",
 			prompt:
 				"Return the **name** and **base_price** of every commodity, **cheapest first**, ties broken by **name A to Z**. Commodities without a price come last.",
 			difficulty: 1,
@@ -294,7 +285,7 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch04-pr02",
-			title: "Newest discoveries",
+			title: "Discovery date descending, NULLs last",
 			prompt:
 				"Return the **name** and **discovered_on** of every planet, **most recently discovered first**; planets with an unknown date go **last**.",
 			difficulty: 2,
@@ -312,7 +303,7 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch04-pr03",
-			title: "Latest deals",
+			title: "Five most recent trades",
 			prompt:
 				"Return the **id** and **traded_at** of the **5 most recent** trades, most recent first.",
 			difficulty: 1,
@@ -325,11 +316,11 @@ const chapter: Chapter = {
 				"Then keep 5 rows.",
 				"ORDER BY traded_at DESC LIMIT 5",
 			],
-			explanation: "Sort first, cut second. Without ORDER BY, LIMIT 5 returns 5 arbitrary trades.",
+			explanation: "Sort first, then limit. Without ORDER BY, LIMIT 5 returns 5 arbitrary trades.",
 		},
 		{
 			id: "ch04-pr04",
-			title: "Silver medal",
+			title: "Second longest route",
 			prompt:
 				"Return the **from_planet_id**, **to_planet_id** and **distance_ly** of the **second longest** route.",
 			difficulty: 2,
@@ -340,7 +331,7 @@ const chapter: Chapter = {
 			check: { type: "result" },
 			hints: [
 				"Sort longest first, skip one, keep one.",
-				"OFFSET 1 skips the champion.",
+				"OFFSET 1 skips the longest one.",
 				"ORDER BY distance_ly DESC LIMIT 1 OFFSET 1",
 			],
 			explanation:
@@ -348,7 +339,7 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch04-pr05",
-			title: "Known dangers",
+			title: "Distinct non NULL hazards",
 			prompt: "Return each **known** route hazard **once**.",
 			difficulty: 2,
 			kind: "query",
@@ -356,11 +347,11 @@ const chapter: Chapter = {
 			solutionSql: "SELECT DISTINCT hazard FROM routes WHERE hazard IS NOT NULL;",
 			check: { type: "result" },
 			hints: [
-				"Remove duplicates, and remove the safe lanes (no hazard).",
+				"Remove duplicates, and remove the routes with a NULL hazard.",
 				"DISTINCT plus a WHERE ... IS NOT NULL.",
 				"SELECT DISTINCT hazard FROM routes WHERE hazard IS NOT NULL;",
 			],
-			explanation: "Three dangers: asteroids, ion storms and pirates.",
+			explanation: "Three distinct hazards: asteroids, ion storms and pirates.",
 		},
 		{
 			id: "ch04-pr06",
@@ -378,11 +369,11 @@ const chapter: Chapter = {
 				"SELECT DISTINCT category FROM commodities;",
 			],
 			explanation:
-				"Surprise: for DISTINCT, two NULLs count as duplicates, even though `NULL = NULL` is unknown. You get 7 rows, one of them NULL.",
+				"For DISTINCT, two NULLs count as duplicates, even though `NULL = NULL` is unknown. You get 7 rows, one of them NULL.",
 		},
 		{
 			id: "ch04-pr07",
-			title: "A proper atlas",
+			title: "Planets in dictionary order",
 			prompt:
 				"Return the **name** of every planet in **dictionary order**, with `Éclat` sorted among the E's (right after Cinderfall).",
 			difficulty: 2,

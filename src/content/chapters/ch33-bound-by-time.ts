@@ -13,7 +13,7 @@ const chapter: Chapter = {
 	tier: "expert",
 	track: "types",
 	title: "Bound by Time",
-	subtitle: "Instants, local clocks, ranges, multiranges and the end of double bookings",
+	subtitle: "timestamptz and time zones, ranges, multiranges and exclusion constraints",
 	emoji: "⌛",
 	datasetId: "inn",
 	concepts: ["timezones", "range-types", "multirange-types", "temporal-constraints"],
@@ -21,13 +21,13 @@ const chapter: Chapter = {
 	lesson: [
 		{
 			kind: "explain",
-			title: "One instant, many clocks",
-			body: "A `timestamptz` is an **instant**: one point on the universal timeline. It stores no zone at all; the session `TimeZone` (GMT here) only decides how it is **displayed**.\n\nThe inn's doors open onto five realms. When Kenji walks into Sakura Gate at 23:30, it is 14:30 in the Crossroads and 11:30 in the Lumière Quarter: same instant, different wall clocks.",
+			title: "timestamptz is an instant",
+			body: "A `timestamptz` is an **instant**: one point on the universal timeline. It stores no zone at all; the session `TimeZone` (GMT here) only decides how it is **displayed**.\n\nThe same instant shows different wall clock times in different zones. The check-in of booking 3 is 23:30 in Tokyo, 14:30 in UTC and 15:30 in Paris.",
 		},
 		{
 			kind: "example",
-			title: "Same instant, three clocks",
-			body: "`AT TIME ZONE` reads the instant on a given wall clock. Kenji's late arrival (booking 3), seen from three realms.",
+			title: "One instant in three time zones",
+			body: "`AT TIME ZONE` reads the instant on a given wall clock. Here is the `checked_in_at` of booking 3, read in two zones.",
 			sql: "SELECT checked_in_at,\n       checked_in_at AT TIME ZONE 'Asia/Tokyo' AS tokyo,\n       checked_in_at AT TIME ZONE 'Europe/Paris' AS paris\nFROM bookings\nWHERE id = 3;",
 		},
 		{
@@ -45,39 +45,39 @@ const chapter: Chapter = {
 		},
 		{
 			kind: "explain",
-			title: "When a day is 23 hours",
-			body: "Wall clocks jump. On 29 March 2026 Paris skips from 02:00 to 03:00 (summer time).\n\nOdile's night shift runs from midnight to 08:00 Paris time on that night: **7 hours** of real time. `interval '1 day'` added to a timestamptz follows the wall clock, `interval '24 hours'` follows the real clock. Always store instants (`timestamptz`), and convert to local time only to display or to group by local day.",
+			title: "Days that are not 24 hours",
+			body: "Wall clocks jump. On 29 March 2026 Paris skips from 02:00 to 03:00 (summer time).\n\nA shift from midnight to 08:00 Paris time on that night lasts **7 hours** of real time. `interval '1 day'` added to a timestamptz follows the wall clock, `interval '24 hours'` follows the real clock. Always store instants (`timestamptz`), and convert to local time only to display or to group by local day.",
 		},
 		{
 			kind: "explain",
 			title: "Ranges",
-			body: "A range is one value with two bounds: `daterange`, `tstzrange`, `int4range`, `numrange`. The inn writes stays as **half open** `[arrival, departure)`: the departure day is excluded.\n\n| operator | meaning |\n|---|---|\n| `a && b` | overlap |\n| `a @> x` | contains a value or range |\n| `a -\\|- b` | adjacent (they touch) |\n| `a * b` | intersection |\n\n`lower(r)`, `upper(r)` and `isempty(r)` read it.",
+			body: "A range is one value with two bounds: `daterange`, `tstzrange`, `int4range`, `numrange`. The `bookings.stay` column is **half open** `[arrival, departure)`: the departure day is excluded.\n\n| operator | meaning |\n|---|---|\n| `a && b` | overlap |\n| `a @> x` | contains a value or range |\n| `a -\\|- b` | adjacent (they touch) |\n| `a * b` | intersection |\n\n`lower(r)`, `upper(r)` and `isempty(r)` read it.",
 		},
 		{
 			kind: "example",
-			title: "Who sleeps here on the night of 1 March?",
-			body: "A stay contains the night if it contains the arrival date of that night. Four rooms are occupied.",
+			title: "Ranges that contain a date",
+			body: "A stay covers a night if it contains the date of that night. Four bookings cover 1 March.",
 			sql: "SELECT id, room_id, stay\nFROM bookings\nWHERE stay @> date '2026-03-01'\n  AND status <> 'cancelled';",
 		},
 		{
 			kind: "explain",
 			title: "Multiranges",
-			body: "A **multirange** is a set of non overlapping ranges: `{[2026-03-01,2026-03-03),[2026-03-20,2026-03-24)}`.\n\n- `range_agg(stay)` merges ranges, gluing overlaps and touching ones\n- `datemultirange(r)` wraps a single range\n- `m1 - m2` subtracts: a month minus the booked nights gives the **free** nights\n- `unnest(m)` turns it back into ranges\n\n`range + range` fails (22000) when the result would have a hole; multiranges do not care.",
+			body: "A **multirange** is a set of non overlapping ranges: `{[2026-03-01,2026-03-03),[2026-03-20,2026-03-24)}`.\n\n- `range_agg(stay)` merges ranges, joining overlapping and touching ones\n- `datemultirange(r)` wraps a single range\n- `m1 - m2` subtracts: a month minus the booked nights gives the **free** nights\n- `unnest(m)` turns it back into ranges\n\n`range + range` fails (22000) when the result would have a gap; multiranges allow gaps.",
 		},
 		{
 			kind: "example",
-			title: "Free nights in The Last Room",
-			body: "March, minus every live stay in room 14. Note how the double booking (20 to 23 and 22 to 24) merges into one block.",
+			title: "Subtract booked nights from a month",
+			body: "March, minus every non cancelled stay in room 14. The two overlapping bookings (20 to 23 and 22 to 24) merge into one block.",
 			sql: "SELECT datemultirange(daterange('2026-03-01', '2026-04-01'))\n       - range_agg(stay) AS free\nFROM bookings\nWHERE room_id = 14 AND status <> 'cancelled';",
 		},
 		{
 			kind: "explain",
-			title: "No double booking, ever",
+			title: "Exclusion constraints",
 			body: "An **exclusion constraint** generalises UNIQUE: no two rows may satisfy all the listed operators together.\n```sql\nALTER TABLE bookings ADD CONSTRAINT no_double_booking\n  EXCLUDE USING gist (room_id WITH =, stay WITH &&)\n  WHERE (status <> 'cancelled');\n```\n(`btree_gist` lets GiST handle the `=` on room_id.) Violations raise **23P01**. PG18 adds `PRIMARY KEY (room_id, stay WITHOUT OVERLAPS)` for the same idea.",
 		},
 		{
 			kind: "try",
-			title: "Your turn: back to back",
+			title: "Adjacent ranges",
 			prompt:
 				"Return the **id** and **stay** of every booking of the **same room** as booking 3 whose stay is **adjacent** to booking 3's stay (they touch without overlapping).",
 			starterSql:
@@ -94,9 +94,7 @@ const chapter: Chapter = {
 	exercises: [
 		{
 			id: "ch33-ex01",
-			title: "Arrival, local time",
-			story:
-				"Each realm's guild of innkeepers wants arrival times on its own clocks, not the Crossroads' GMT.",
+			title: "Convert to each row's time zone",
 			prompt:
 				"For every booking whose status is `checked_in` or `checked_out`, return the **id** and the **local wall clock time** of check-in in the realm of the booked room (a `timestamp` without zone). A missing check-in stays NULL.",
 			difficulty: 2,
@@ -106,18 +104,16 @@ const chapter: Chapter = {
 				"SELECT b.id, b.checked_in_at AT TIME ZONE r.timezone AS local_check_in\nFROM bookings b\nJOIN rooms ro ON ro.id = b.room_id\nJOIN realms r ON r.id = ro.realm_id\nWHERE b.status IN ('checked_in', 'checked_out');",
 			check: { type: "result", strictTypes: true },
 			hints: [
-				"The time zone lives in `realms`, reached through `rooms`.",
+				"The time zone is in `realms`, reached through `rooms`.",
 				"`AT TIME ZONE` accepts a column, not only a literal.",
 				"b.checked_in_at AT TIME ZONE r.timezone",
 			],
 			explanation:
-				"Every arrival reads 15:00 locally, except Kenji's 23:30 in Sakura Gate; booking 9 was never logged and stays NULL.\n\n**Pitfall:** `AT TIME ZONE 'UTC'` (or just the raw column) shows the Crossroads clock for everyone: 01:15 for a Chatham afternoon arrival.\n\n**Alternative:** `timezone(r.timezone, b.checked_in_at)` is the function form.",
+				"Every check-in reads 15:00 locally, except booking 3 at 23:30 in `Asia/Tokyo`; booking 9 has no check-in and stays NULL.\n\n**Pitfall:** `AT TIME ZONE 'UTC'` (or just the raw column) shows UTC for every row: 01:15 for an afternoon check-in in `Pacific/Chatham`.\n\n**Alternative:** `timezone(r.timezone, b.checked_in_at)` is the function form.",
 		},
 		{
 			id: "ch33-ex02",
-			title: "The Chatham calendar",
-			story:
-				"The Chatham Shoals keeper swears her bookings were made a day later than the ledger says. She is right: Chatham is 13 hours 45 minutes ahead of the Crossroads.",
+			title: "Local date of an instant",
 			prompt:
 				"For every booking of a room in realm **4** (Chatham Shoals), return the **id** and the **local calendar date** on which it was created, in that realm's time zone.",
 			difficulty: 3,
@@ -134,13 +130,11 @@ const chapter: Chapter = {
 				"(b.created_at AT TIME ZONE r.timezone)::date",
 			],
 			explanation:
-				"Converting to the Chatham wall clock before taking the date puts each booking on the day the keeper actually saw. The same trap hides in `date_trunc('day', ts)` and in `GROUP BY ts::date`.\n\n**Pitfall:** `created_at::date` uses GMT midnight, so a booking made at 07:30 on 25 January in Chatham lands on 24 January.\n\n**Alternative:** `(b.created_at AT TIME ZONE 'Pacific/Chatham')::date` with the zone written out.",
+				"`Pacific/Chatham` is 13 hours 45 minutes ahead of GMT. Converting to the local wall clock before taking the date gives the local calendar day. The same issue appears in `date_trunc('day', ts)` and in `GROUP BY ts::date`.\n\n**Pitfall:** `created_at::date` uses GMT midnight, so a booking made at 07:30 on 25 January in Chatham lands on 24 January.\n\n**Alternative:** `(b.created_at AT TIME ZONE 'Pacific/Chatham')::date` with the zone written out.",
 		},
 		{
 			id: "ch33-ex03",
-			title: "The shortest night",
-			story:
-				"Odile is paid by the hour. Her shifts all run from midnight to 08:00 Paris time, yet the payroll gnome pays her less for one of them.",
+			title: "Shift durations across a DST change",
 			prompt:
 				"For each of **Odile's** shifts, return the **id**, the local **start** and **end** on the Paris wall clock (`Europe/Paris`), and the real **duration** (`upper(shift) - lower(shift)`).",
 			difficulty: 2,
@@ -152,15 +146,14 @@ const chapter: Chapter = {
 			hints: [
 				"`lower` and `upper` give the bounds of the tstzrange.",
 				"Convert each bound to the Paris wall clock with AT TIME ZONE; subtract the instants for the duration.",
-				"lower(shift) AT TIME ZONE 'Europe/Paris', upper(shift) - lower(shift)",
+				"`lower(shift) AT TIME ZONE 'Europe/Paris'`, `upper(shift) - lower(shift)`",
 			],
 			explanation:
-				"Both shifts read 00:00 to 08:00 on the wall, but the night of 29 March loses an hour to summer time: 7 hours of real work.\n\n**Pitfall:** subtracting the *local* timestamps (`ends - starts` on wall clock values) says 8 hours both times and overpays the gnome's ledger.\n\n**Alternative:** `extract(epoch from upper(shift) - lower(shift)) / 3600` gives hours as a number.",
+				"Both shifts read 00:00 to 08:00 on the wall clock, but the night of 29 March loses an hour to summer time: 7 hours of real time.\n\n**Pitfall:** subtracting the *local* timestamps (`ends - starts` on wall clock values) gives 8 hours both times.\n\n**Alternative:** `extract(epoch from upper(shift) - lower(shift)) / 3600` gives hours as a number.",
 		},
 		{
 			id: "ch33-ex04",
-			title: "The night of 4 March",
-			story: "A ghost was seen on the night of 4 March. The constable wants every guest who slept at the inn that night.",
+			title: "Ranges that contain a date",
 			prompt:
 				"Return the **id**, **room_id** and **stay** of every booking that is **not cancelled** and covers the night of **2026-03-04**.",
 			difficulty: 1,
@@ -175,13 +168,11 @@ const chapter: Chapter = {
 				"WHERE stay @> date '2026-03-04' AND status <> 'cancelled'",
 			],
 			explanation:
-				"Ngaio (booking 12) and Ruy's second stay (27) were there. Ruy's first stay (11) ended that morning: `[2026-03-01,2026-03-04)` excludes the 4th.\n\n**Pitfall:** `date '2026-03-04' BETWEEN lower(stay) AND upper(stay)` includes the departure day and accuses booking 11.\n\n**Alternative:** `date '2026-03-04' <@ stay`.",
+				"Bookings 12 and 27 match. Booking 11 ends that day: `[2026-03-01,2026-03-04)` excludes the 4th.\n\n**Pitfall:** `date '2026-03-04' BETWEEN lower(stay) AND upper(stay)` includes the departure day and wrongly returns booking 11.\n\n**Alternative:** `date '2026-03-04' <@ stay`.",
 		},
 		{
 			id: "ch33-ex05",
-			title: "The Last Room, twice",
-			story:
-				"Two clerks sold The Last Room for the same nights. Find the culprits before the guests meet at the door.",
+			title: "Bookings that overlap",
 			prompt:
 				"Return each pair of **non cancelled** bookings of the **same room** whose stays **overlap**, as two columns **first_id** and **second_id** with first_id < second_id.",
 			difficulty: 3,
@@ -196,12 +187,11 @@ const chapter: Chapter = {
 				"ON b.room_id = a.room_id AND a.id < b.id AND a.stay && b.stay",
 			],
 			explanation:
-				"Only bookings 30 and 31 collide on the nights of 22 March. Back to back stays (3 and 4, 11 and 27, 22 and 29) merely touch: with half open ranges, `&&` correctly ignores them.\n\n**Pitfall:** comparing bounds with `<=` (`lower(a) <= upper(b) AND lower(b) <= upper(a)`) treats touching stays as overlaps; `a.id <> b.id` lists every pair twice.\n\n**Alternative:** `lower(a.stay) < upper(b.stay) AND lower(b.stay) < upper(a.stay)`.",
+				"Only bookings 30 and 31 overlap, on the night of 22 March. Back to back stays (3 and 4, 11 and 27, 22 and 29) only touch: with half open ranges, `&&` correctly ignores them.\n\n**Pitfall:** comparing bounds with `<=` (`lower(a) <= upper(b) AND lower(b) <= upper(a)`) treats touching stays as overlaps; `a.id <> b.id` lists every pair twice.\n\n**Alternative:** `lower(a.stay) < upper(b.stay) AND lower(b.stay) < upper(a.stay)`.",
 		},
 		{
 			id: "ch33-ex06",
-			title: "Desk coverage",
-			story: "The manager wants each clerk's time at the desk with double shifts merged.",
+			title: "Merge ranges with range_agg",
 			prompt:
 				"Return each **staff_name** with the **merged** union of their shifts as a multirange, sorted by staff_name.",
 			difficulty: 3,
@@ -215,12 +205,11 @@ const chapter: Chapter = {
 				"SELECT staff_name, range_agg(shift) FROM staff_shifts GROUP BY staff_name ORDER BY staff_name;",
 			],
 			explanation:
-				"Brom's overlapping 06 to 14 and 13 to 20 become one block; Nell's back to back shifts fuse into one long night; Odile keeps two pieces.\n\n**Pitfall:** `array_agg(shift)` keeps the raw shifts, overlaps and all.\n\n**Alternative:** `range_agg(shift ORDER BY lower(shift))` gives the same multirange: it is normalised anyway.",
+				"Brom's overlapping 06 to 14 and 13 to 20 become one block; Nell's back to back shifts merge into one long range; Odile keeps two pieces.\n\n**Pitfall:** `array_agg(shift)` keeps the raw shifts, overlaps included.\n\n**Alternative:** `range_agg(shift ORDER BY lower(shift))` gives the same multirange: it is normalised anyway.",
 		},
 		{
 			id: "ch33-ex07",
-			title: "Gaps in The Last Room",
-			story: "A traveller asks when The Last Room is free in March. The night clerk wants a single answer, not a list of bookings.",
+			title: "Free nights as a multirange",
 			prompt:
 				"Return the **free nights** of room **14** in **March 2026** as a single `datemultirange`, ignoring cancelled bookings.",
 			difficulty: 3,
@@ -231,17 +220,15 @@ const chapter: Chapter = {
 			check: { type: "result" },
 			hints: [
 				"March as a multirange, minus the booked stays.",
-				"`range_agg(stay)` merges the stays; subtracting multiranges leaves the holes.",
-				"datemultirange(daterange('2026-03-01', '2026-04-01')) - range_agg(stay)",
+				"`range_agg(stay)` merges the stays; subtracting multiranges leaves the gaps.",
+				"`datemultirange(daterange('2026-03-01', '2026-04-01')) - range_agg(stay)`",
 			],
 			explanation:
-				"Free from the 3rd to the 20th and from the 24th on. Stays outside March, if any, would simply subtract nothing.\n\n**Pitfall:** `daterange(...) - stay` per booking returns several rows, and a range minus a range in the middle fails with 22000 (*result would not be contiguous*).\n\n**Alternative:** `'{[2026-03-01,2026-04-01)}'::datemultirange - range_agg(stay)`.",
+				"Free from the 3rd to the 20th and from the 24th on. Stays outside March, if any, would subtract nothing.\n\n**Pitfall:** `daterange(...) - stay` per booking returns several rows, and a range minus a range in the middle fails with 22000 (*result would not be contiguous*).\n\n**Alternative:** `'{[2026-03-01,2026-04-01)}'::datemultirange - range_agg(stay)`.",
 		},
 		{
 			id: "ch33-ex08",
-			title: "The binding seal",
-			story:
-				"After the Last Room fiasco the owner wants the database itself to refuse double bookings. The clerks agree that Odo's later, still pending booking 31 yields.",
+			title: "Add an exclusion constraint",
 			setupSql: TRY_SQLSTATE,
 			prompt:
 				"1. Cancel booking **31** (set its status to `cancelled`).\n2. Add a constraint named **no_double_booking** to `bookings` so that no two bookings of the same room whose status is not `cancelled` can have overlapping stays.",
@@ -265,13 +252,13 @@ UNION ALL SELECT 'cancelled overlap', ${NEW_BOOKING(1, "[2026-03-28,2026-03-29)"
 				"ALTER TABLE bookings ADD CONSTRAINT no_double_booking EXCLUDE USING gist (room_id WITH =, stay WITH &&) WHERE (status <> 'cancelled');",
 			],
 			explanation:
-				"The constraint refuses any new overlap in the same room (23P01), while touching stays, other rooms and cancelled bookings pass. A partial exclusion constraint needs the data to be clean before it can be created.\n\n**Pitfall:** without the WHERE clause, cancelled bookings would still block the room; checking overlaps in application code instead loses the race between two clerks.\n\n**Alternative:** in PG18, a period key `PRIMARY KEY (room_id, stay WITHOUT OVERLAPS)` (but it cannot skip cancelled rows).",
+				"The constraint refuses any new overlap in the same room (23P01), while touching stays, other rooms and cancelled bookings pass. A partial exclusion constraint needs the data to be clean before it can be created.\n\n**Pitfall:** without the WHERE clause, cancelled bookings would still block the room; checking overlaps in application code instead is open to race conditions between concurrent sessions.\n\n**Alternative:** in PG18, a period key `PRIMARY KEY (room_id, stay WITHOUT OVERLAPS)` (but it cannot skip cancelled rows).",
 		},
 		{
 			id: "ch33-ex09",
 			title: "Boss: The Night Clerk's Calendar",
 			story:
-				"The Lumière Quarter's night clerk prints a March calendar for each of her rooms: booked nights, free nights, and when the last March guest hands back the key.",
+				"Combines range intersection, multirange aggregation, counting days and converting a local time to an instant.",
 			prompt:
 				"For every room of realm **1**, return:\n\n- **name** of the room\n- **booked**: its non cancelled stays **clipped to March 2026**, merged into a datemultirange (`'{}'` when none)\n- **free_nights**: 31 minus the number of booked March nights\n- **last_checkout**: the instant of its latest departure day **in March** at **11:00 Paris time**, as a timestamptz (NULL when none)\n\nSort by room name.",
 			difficulty: 5,
@@ -281,19 +268,19 @@ UNION ALL SELECT 'cancelled overlap', ${NEW_BOOKING(1, "[2026-03-28,2026-03-29)"
 				"SELECT ro.name,\n       coalesce(range_agg(b.stay * daterange('2026-03-01', '2026-04-01')), '{}') AS booked,\n       31 - coalesce((SELECT sum(upper(r) - lower(r))\n                      FROM unnest(range_agg(b.stay * daterange('2026-03-01', '2026-04-01'))) AS r), 0) AS free_nights,\n       (max(upper(b.stay)) FILTER (WHERE upper(b.stay) < date '2026-04-01') + time '11:00')\n         AT TIME ZONE 'Europe/Paris' AS last_checkout\nFROM rooms ro\nLEFT JOIN bookings b ON b.room_id = ro.id\n  AND b.status <> 'cancelled'\n  AND b.stay && daterange('2026-03-01', '2026-04-01')\nWHERE ro.realm_id = 1\nGROUP BY ro.name\nORDER BY ro.name;",
 			check: { type: "result", orderMatters: true },
 			hints: [
-				"LEFT JOIN the live March bookings to the rooms (filters in ON, so the empty Attic stays), then aggregate per room.",
+				"LEFT JOIN the non cancelled March bookings to the rooms (filters in ON, so the Attic of Echoes, which has none, stays), then aggregate per room.",
 				"`stay * daterange('2026-03-01', '2026-04-01')` clips a stay; `range_agg` merges; `unnest` the multirange to sum `upper - lower`.",
 				"For the checkout: `(max(upper(b.stay)) + time '11:00') AT TIME ZONE 'Europe/Paris'` turns a Paris wall clock into an instant.",
 			],
 			explanation:
-				"Ranges clip with `*`, multiranges merge and count without double counting, and `AT TIME ZONE` on a plain timestamp goes from the Paris wall clock to an instant: 11:00 is 10:00 GMT on 15 March but 09:00 GMT on the 29th and 31st, after the clocks sprang forward.\n\n**Pitfall:** a WHERE on bookings drops the Attic of Echoes; `AT TIME ZONE 'UTC'` or a fixed `+01` offset gets the summer checkouts wrong by an hour.\n\n**Alternative:** count free nights with `generate_series` over March days and `NOT (booked @> day)`.",
+				"Ranges clip with `*`, multiranges merge and count without double counting, and `AT TIME ZONE` on a plain timestamp goes from the Paris wall clock to an instant: 11:00 is 10:00 GMT on 15 March but 09:00 GMT on the 29th and 31st, after the switch to summer time.\n\n**Pitfall:** a WHERE on bookings drops the Attic of Echoes; `AT TIME ZONE 'UTC'` or a fixed `+01` offset gets the summer checkouts wrong by an hour.\n\n**Alternative:** count free nights with `generate_series` over March days and `NOT (booked @> day)`.",
 			boss: true,
 		},
 	],
 	practice: [
 		{
 			id: "ch33-pr01",
-			title: "The missing hour",
+			title: "Wall clock across a DST jump",
 			prompt:
 				"Return one row with the Paris wall clock reading (`AT TIME ZONE 'Europe/Paris'`) of the instants `2026-03-29 00:30+00` and `2026-03-29 01:30+00`, in that order.",
 			difficulty: 2,
@@ -307,11 +294,11 @@ UNION ALL SELECT 'cancelled overlap', ${NEW_BOOKING(1, "[2026-03-28,2026-03-29)"
 				"timestamptz 'literal' AT TIME ZONE 'Europe/Paris'",
 				"SELECT timestamptz '2026-03-29 00:30+00' AT TIME ZONE 'Europe/Paris', ...",
 			],
-			explanation: "01:30 then 03:30: one real hour apart, two hours apart on the wall. 02:30 Paris time never happened that night.",
+			explanation: "01:30 then 03:30: one real hour apart, two hours apart on the wall clock. 02:30 Paris time does not exist that night.",
 		},
 		{
 			id: "ch33-pr02",
-			title: "Tokyo's 14 March",
+			title: "Filter by local date",
 			prompt:
 				"Return the **id** of every booking **created** on **14 March 2026** according to the clocks of **Tokyo** (`Asia/Tokyo`).",
 			difficulty: 2,
@@ -329,7 +316,7 @@ UNION ALL SELECT 'cancelled overlap', ${NEW_BOOKING(1, "[2026-03-28,2026-03-29)"
 		},
 		{
 			id: "ch33-pr03",
-			title: "Seasonal prices",
+			title: "Ranges that overlap a stay",
 			prompt: "Return the **name** of every rate season whose period **overlaps** the stay of booking **20**.",
 			difficulty: 1,
 			kind: "query",
@@ -345,7 +332,7 @@ UNION ALL SELECT 'cancelled overlap', ${NEW_BOOKING(1, "[2026-03-28,2026-03-29)"
 		},
 		{
 			id: "ch33-pr04",
-			title: "Back to back",
+			title: "Adjacent bookings",
 			prompt:
 				"Return every pair of bookings of the **same room** whose stays are **adjacent**, as **first_id** and **second_id** with first_id < second_id.",
 			difficulty: 2,
@@ -359,11 +346,11 @@ UNION ALL SELECT 'cancelled overlap', ${NEW_BOOKING(1, "[2026-03-28,2026-03-29)"
 				"`-|-` means the ranges touch.",
 				"ON b.room_id = a.room_id AND a.id < b.id AND a.stay -|- b.stay",
 			],
-			explanation: "(3, 4), (11, 27) and (22, 29): the next guest arrives the day the previous one leaves.",
+			explanation: "(3, 4), (11, 27) and (22, 29): each second stay starts on the departure day of the first.",
 		},
 		{
 			id: "ch33-pr05",
-			title: "Actual desk hours",
+			title: "Total covered time without overlaps",
 			prompt:
 				"Return each **staff_name** and the **total time** they actually covered the desk, counting overlapping shifts only once (an interval).",
 			difficulty: 3,
@@ -375,17 +362,17 @@ UNION ALL SELECT 'cancelled overlap', ${NEW_BOOKING(1, "[2026-03-28,2026-03-29)"
 			hints: [
 				"Merge first, then measure.",
 				"`unnest(range_agg(shift))` yields the merged ranges.",
-				"(SELECT sum(upper(r) - lower(r)) FROM unnest(range_agg(shift)) r)",
+				"`(SELECT sum(upper(r) - lower(r)) FROM unnest(range_agg(shift)) r)`",
 			],
-			explanation: "Brom covered 22 hours, not 23: his double shift overlapped by an hour. Tiago 10, not 11.",
+			explanation: "Brom covered 22 hours, not 23: two of his shifts overlap by an hour. Tiago 10, not 11.",
 		},
 		{
 			id: "ch33-pr06",
-			title: "The seal holds",
+			title: "Violate an exclusion constraint",
 			setupSql:
 				"UPDATE bookings SET status = 'cancelled' WHERE id = 31;\nALTER TABLE bookings ADD CONSTRAINT no_double_booking EXCLUDE USING gist (room_id WITH =, stay WITH &&) WHERE (status <> 'cancelled');",
 			prompt:
-				"The `no_double_booking` constraint is in place. Try to book room **1** for guest **12** from **2026-03-29** to **2026-03-30** (ref `gen_random_uuid()`, status `confirmed`, created_at `2026-03-01 10:00+00`). The insert must be refused.",
+				"The `no_double_booking` constraint is in place. Insert a booking of room **1** for guest **12** from **2026-03-29** to **2026-03-30** (ref `gen_random_uuid()`, status `confirmed`, created_at `2026-03-01 10:00+00`). The insert must be refused.",
 			difficulty: 2,
 			kind: "mutation",
 			concepts: ["temporal-constraints"],
@@ -393,15 +380,15 @@ UNION ALL SELECT 'cancelled overlap', ${NEW_BOOKING(1, "[2026-03-28,2026-03-29)"
 				"INSERT INTO bookings (ref, room_id, guest_id, stay, status, created_at)\nVALUES (gen_random_uuid(), 1, 12, '[2026-03-29,2026-03-30)', 'confirmed', '2026-03-01 10:00+00');",
 			check: { type: "error", sqlstate: "23P01" },
 			hints: [
-				"Amélie's booking 17 holds room 1 from 27 to 31 March.",
+				"Booking 17 holds room 1 from 27 to 31 March.",
 				"Write a plain INSERT with the six columns.",
 				"VALUES (gen_random_uuid(), 1, 12, '[2026-03-29,2026-03-30)', 'confirmed', '2026-03-01 10:00+00')",
 			],
-			explanation: "23P01, *conflicting key value violates exclusion constraint*: the database guards the room even when two clerks type at the same time.",
+			explanation: "23P01, *conflicting key value violates exclusion constraint*: the database enforces the rule even when two sessions insert at the same time.",
 		},
 		{
 			id: "ch33-pr07",
-			title: "Holds without overlaps",
+			title: "Primary key WITHOUT OVERLAPS",
 			setupSql: TRY_SQLSTATE,
 			prompt:
 				"Create a table **room_holds** with columns `room_id int` and `hold daterange`, whose **primary key** is the room plus the hold period **without overlaps** (PG18 temporal key).",
@@ -419,11 +406,11 @@ UNION ALL SELECT 'cancelled overlap', ${NEW_BOOKING(1, "[2026-03-28,2026-03-29)"
 				"The range column comes last, followed by WITHOUT OVERLAPS.",
 				"PRIMARY KEY (room_id, hold WITHOUT OVERLAPS)",
 			],
-			explanation: "Overlapping holds of the same room fail with 23P01; touching holds and other rooms pass. Under the hood it is a GiST exclusion constraint.",
+			explanation: "Overlapping holds of the same room fail with 23P01; touching holds and other rooms pass. Internally it is a GiST exclusion constraint.",
 		},
 		{
 			id: "ch33-pr08",
-			title: "Closed brackets",
+			title: "Canonical form of a closed range",
 			prompt: "Return the value of `daterange('2026-03-01', '2026-03-05', '[]')` (both bounds included).",
 			difficulty: 1,
 			kind: "query",

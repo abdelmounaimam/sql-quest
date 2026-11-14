@@ -58,28 +58,28 @@ const chapter: Chapter = {
 	lesson: [
 		{
 			kind: "explain",
-			title: "Laws carved in stone",
-			body: "Application code forgets, scripts skip checks, tired clerks type nonsense. **Constraints** are laws the database enforces on every writer, forever.\n\nThe simplest is **CHECK**: a condition each row must satisfy.\n```sql\nALTER TABLE quests\n  ADD CONSTRAINT quests_reward_positive CHECK (reward_gold > 0);\n```\nA row that makes it false is refused with 23514. So is the ALTER itself, if an existing row already breaks the law.",
+			title: "Constraints and CHECK",
+			body: "Application code can forget a validation, and scripts can skip one. **Constraints** are rules the database enforces on every write, whatever the client.\n\nThe simplest is **CHECK**: a condition each row must satisfy.\n```sql\nALTER TABLE quests\n  ADD CONSTRAINT quests_reward_positive CHECK (reward_gold > 0);\n```\nA row that makes it false is refused with 23514. So is the ALTER itself, if an existing row already breaks the rule.",
 		},
 		{
 			kind: "example",
-			title: "Reading the laws of a table",
-			body: "`pg_constraint` lists every law. Type `p` is a primary key, `c` a CHECK, `f` a foreign key, `u` UNIQUE.",
+			title: "Listing the constraints of a table",
+			body: "`pg_constraint` lists every constraint. Type `p` is a primary key, `c` a CHECK, `f` a foreign key, `u` UNIQUE.",
 			sql: "SELECT conname, contype, pg_get_constraintdef(oid) AS rule\nFROM pg_constraint\nWHERE conrelid = 'quests'::regclass\nORDER BY conname;",
 		},
 		{
 			kind: "quiz",
 			question:
-				"You add `CHECK (gold >= 0)` to heroes. Xander's gold is NULL. What happens to his row, now and later?",
+				"You add `CHECK (gold >= 0)` to heroes. One hero's gold is NULL. What happens to that row, now and later?",
 			choices: [
 				"The ALTER fails: NULL is not >= 0",
 				"It is accepted: NULL >= 0 is unknown, and CHECK only refuses false",
-				"Xander's gold is set to 0 automatically",
-				"Xander's row is deleted",
+				"The gold is set to 0 automatically",
+				"The row is deleted",
 			],
 			answerIndex: 1,
 			explanation:
-				"WHERE keeps only true, but CHECK refuses only **false**. Unknown passes. That is usually what you want (unknown purse, not a negative one); if NULL must be refused too, add `NOT NULL`.",
+				"WHERE keeps only true, but CHECK refuses only **false**. Unknown passes. That is usually what you want (an unknown amount is not a negative one); if NULL must be refused too, add `NOT NULL`.",
 		},
 		{
 			kind: "explain",
@@ -88,12 +88,12 @@ const chapter: Chapter = {
 		},
 		{
 			kind: "explain",
-			title: "FOREIGN KEY: no orphans",
+			title: "FOREIGN KEY: no orphan rows",
 			body: "```sql\nALTER TABLE bounties\n  ADD FOREIGN KEY (hero_id) REFERENCES heroes (id);\n```\nNow every `hero_id` must exist in heroes (23503 otherwise). NULL is still allowed: *no hero yet*.\n\nThe target must be a primary key or UNIQUE column (42830), of a compatible type (42804). The parent is protected too: deleting a referenced hero fails.",
 		},
 		{
 			kind: "explain",
-			title: "When a parent dies",
+			title: "ON DELETE actions",
 			body: "The FK decides what deleting a parent does to its children:\n\n| action | children |\n|---|---|\n| `NO ACTION` / `RESTRICT` (default) | delete refused |\n| `ON DELETE CASCADE` | deleted too |\n| `ON DELETE SET NULL` | their FK becomes NULL |\n\nTo change it, drop the old constraint by name and add a new one: `ALTER TABLE t DROP CONSTRAINT name, ADD ...`.",
 		},
 		{
@@ -113,18 +113,18 @@ const chapter: Chapter = {
 		{
 			kind: "explain",
 			title: "Generated columns",
-			body: "A **generated column** is computed from the row:\n```sql\nALTER TABLE heroes ADD COLUMN xp_to_next int\n  GENERATED ALWAYS AS (level * 5000 - xp) STORED;\n```\n**STORED** computes it on write; **VIRTUAL** (the PG18 default) on read. Either way you cannot write to it (428C9), and the expression must be immutable: no `now()` (42P17).",
+			body: "A **generated column** is computed from other columns of the same row:\n```sql\nALTER TABLE heroes ADD COLUMN xp_to_next int\n  GENERATED ALWAYS AS (level * 5000 - xp) STORED;\n```\n**STORED** computes it on write; **VIRTUAL** (the PG18 default) on read. Either way you cannot write to it (428C9), and the expression must be immutable: no `now()` (42P17).",
 		},
 		{
 			kind: "explain",
-			title: "ALTER TABLE: renovating",
-			body: "Tables change after birth:\n```sql\nALTER TABLE heroes ADD COLUMN renown int NOT NULL DEFAULT 0;\nALTER TABLE heroes RENAME COLUMN renown TO fame;\nALTER TABLE heroes ALTER COLUMN height TYPE int USING height::int;\nALTER TABLE heroes ADD CONSTRAINT c CHECK (...) NOT VALID;\n```\n`USING` says how to convert old values (42804 without it). `NOT VALID` enforces a new law on new rows only, sparing the existing ones.",
+			title: "ALTER TABLE",
+			body: "`ALTER TABLE` changes an existing table:\n```sql\nALTER TABLE heroes ADD COLUMN renown int NOT NULL DEFAULT 0;\nALTER TABLE heroes RENAME COLUMN renown TO fame;\nALTER TABLE heroes ALTER COLUMN height TYPE int USING height::int;\nALTER TABLE heroes ADD CONSTRAINT c CHECK (...) NOT VALID;\n```\n`USING` says how to convert old values (42804 without it). `NOT VALID` enforces a new constraint on new and updated rows only, skipping the existing ones.",
 		},
 		{
 			kind: "try",
-			title: "Your turn: no negative experience",
+			title: "Add a CHECK on xp",
 			prompt:
-				"Add a law to **heroes**: **xp** can never be negative. Zero is fine (Bors the Bold has 0).",
+				"Add a constraint to **heroes**: **xp** can never be negative. Zero is allowed (one hero, Bors the Bold, has 0).",
 			starterSql: "ALTER TABLE heroes ADD CHECK (xp > 0);",
 			solutionSql: "ALTER TABLE heroes ADD CONSTRAINT heroes_xp_nonneg CHECK (xp >= 0);",
 			check: {
@@ -136,7 +136,7 @@ const chapter: Chapter = {
 				),
 			},
 			hints: [
-				"Run the starter: Bors breaks the law before it even exists.",
+				"Run the starter: an existing row with 0 xp already violates it.",
 				"Never negative means 0 is allowed: `>=`.",
 			],
 		},
@@ -144,9 +144,7 @@ const chapter: Chapter = {
 	exercises: [
 		{
 			id: "ch25-ex01",
-			title: "One motto per banner",
-			story:
-				"The Order of the Quiet Bell chose the motto 'Shh.' and the herald wants no copycats. Guilds without a motto are fine, as many as they like.",
+			title: "Add a UNIQUE constraint",
 			prompt:
 				"Make **guilds.motto** unique: no two guilds may share the same motto, but any number of guilds may have **no motto** (NULL). Comparison stays case sensitive.",
 			difficulty: 2,
@@ -169,15 +167,13 @@ const chapter: Chapter = {
 				"ALTER TABLE guilds ADD UNIQUE (motto);",
 			],
 			explanation:
-				"A plain `UNIQUE` treats every NULL as different from every other, so mottoless guilds never collide, while a second 'Shh.' is refused (23505).\n\n**Pitfall:** `UNIQUE NULLS NOT DISTINCT` would allow a single mottoless guild; a unique index on `lower(motto)` would also refuse 'shh.', which the herald did not ask for.\n\n**Alternative:** `CREATE UNIQUE INDEX guilds_motto_idx ON guilds (motto);` enforces the same rule.",
+				"A plain `UNIQUE` treats every NULL as different from every other, so guilds without a motto never collide, while a second 'Shh.' is refused (23505).\n\n**Pitfall:** `UNIQUE NULLS NOT DISTINCT` allows only one guild without a motto; a unique index on `lower(motto)` also refuses 'shh.', which the prompt does not ask for.\n\n**Alternative:** `CREATE UNIQUE INDEX guilds_motto_idx ON guilds (motto);` enforces the same rule.",
 		},
 		{
 			id: "ch25-ex02",
-			title: "The potion twins",
-			story:
-				"The armorer wants item names unique **ignoring case**. You suspect the catalogue already cheats.",
+			title: "Case insensitive unique index",
 			prompt:
-				"Create a unique index on **items** over `lower(name)`. The catalogue already holds a pair that differs only by case, so this mission succeeds when your statement **fails** with the right error.",
+				"Create a unique index on **items** over `lower(name)`, so that item names are unique **ignoring case**. The table already holds a pair that differs only by case, so this mission succeeds when your statement **fails** with the right error.",
 			difficulty: 2,
 			kind: "ddl",
 			concepts: ["unique-constraint"],
@@ -189,15 +185,13 @@ const chapter: Chapter = {
 				"CREATE UNIQUE INDEX items_name_lower_key ON items (lower(name));",
 			],
 			explanation:
-				"'Healing Potion' and 'healing potion' both become 'healing potion', so building the index fails with 23505 and names the duplicate key. Clean the data first (merge or rename item 20), then the index will hold.\n\n**Pitfall:** `UNIQUE (name)` succeeds and gives a false feeling of safety: the case twins slip through.\n\n**Alternative:** a `citext` column (World 8) compares case insensitively by itself.",
+				"'Healing Potion' and 'healing potion' both become 'healing potion', so building the index fails with 23505 and names the duplicate key. Clean the data first (merge or rename item 20), then the index can be built.\n\n**Pitfall:** `UNIQUE (name)` succeeds but does not enforce the rule: names that differ only by case still pass.\n\n**Alternative:** a `citext` column (covered in World 8) compares case insensitively by itself.",
 		},
 		{
 			id: "ch25-ex03",
-			title: "No debts in the guild",
-			story:
-				"Pip tried to buy a cloak on credit. The guild law: a purse can be empty, or unknown, but never negative.",
+			title: "CHECK with NULL allowed",
 			prompt:
-				"Add a law to **heroes**: **gold** can never be **below 0**. A gold of exactly 0 stays legal (Grimsby is broke), and unknown gold (NULL) must stay allowed.",
+				"Add a constraint to **heroes**: **gold** can never be **below 0**. A gold of exactly 0 stays legal (hero 12 has 0.00), and unknown gold (NULL) must stay allowed.",
 			difficulty: 2,
 			kind: "ddl",
 			concepts: ["check-constraint"],
@@ -218,13 +212,11 @@ const chapter: Chapter = {
 				"CHECK (gold >= 0)",
 			],
 			explanation:
-				"`CHECK (gold >= 0)` refuses only rows where the test is false. Xander's and Rhiannon's NULL purses give unknown, which passes.\n\n**Pitfall:** `CHECK (gold > 0)` fails on Grimsby's 0.00 (23514 at ALTER time), and `CHECK (gold >= 0 AND gold IS NOT NULL)` fails on the NULL purses.\n\n**Alternative:** `CHECK (gold >= 0 OR gold IS NULL)` says the same thing out loud.",
+				"`CHECK (gold >= 0)` refuses only rows where the test is false. Rows with a NULL gold give unknown, which passes.\n\n**Pitfall:** `CHECK (gold > 0)` fails on hero 12's 0.00 (23514 at ALTER time), and `CHECK (gold >= 0 AND gold IS NOT NULL)` fails on the NULL rows.\n\n**Alternative:** `CHECK (gold >= 0 OR gold IS NULL)` says the same thing explicitly.",
 		},
 		{
 			id: "ch25-ex04",
-			title: "Bounties on real heroes",
-			story:
-				"Someone posted a bounty on hero 999, who does not exist. The quartermaster's attempt to forbid it crashes.",
+			title: "Add a FOREIGN KEY",
 			prompt:
 				"Table **bounties** has a column **hero_id**. The starter fails. Add a foreign key so that **hero_id** must match an existing hero (`heroes.id`). A bounty with no hero (NULL) stays allowed.",
 			difficulty: 2,
@@ -250,13 +242,11 @@ const chapter: Chapter = {
 				"REFERENCES heroes (id)",
 			],
 			explanation:
-				"`hero_id` is an int and must point at `heroes.id`, the primary key. Now hero 999 is refused (23503), and so is deleting Mabel while a bounty names her.\n\n**Pitfall:** `REFERENCES heroes (name)` fails twice over: name is not unique (42830) and it is text, not int.\n\n**Alternative:** `REFERENCES heroes` without a column picks the primary key.",
+				"`hero_id` is an int and must point at `heroes.id`, the primary key. Now hero 999 is refused (23503), and so is deleting hero 30 while a bounty references it.\n\n**Pitfall:** `REFERENCES heroes (name)` fails twice over: name is not unique (42830) and it is text, not int.\n\n**Alternative:** `REFERENCES heroes` without a column picks the primary key.",
 		},
 		{
 			id: "ch25-ex05",
-			title: "Gone with the wind",
-			story:
-				"When a hero leaves the realm for good, the guild wants their quest records swept away with them, not left as orphans or blocking the farewell.",
+			title: "Change an FK to ON DELETE CASCADE",
 			prompt:
 				"Change the foreign key from **quest_completions.hero_id** to **heroes** so that deleting a hero **deletes their completions**. The completions' other foreign key (to quests) must stay as it is. Find the current constraint name in `pg_constraint`.",
 			difficulty: 4,
@@ -281,15 +271,13 @@ const chapter: Chapter = {
 				"DROP CONSTRAINT quest_completions_hero_id_fkey, then ADD FOREIGN KEY (hero_id) REFERENCES heroes (id) ON DELETE CASCADE",
 			],
 			explanation:
-				"With `ON DELETE CASCADE`, deleting Rowan takes his 2 completions with him in the same statement. The FK still refuses hero 999, and the quest FK still protects quest 20.\n\n**Pitfall:** dropping the FK without re-adding it also lets the delete through, but leaves orphan completions and accepts hero 999. CASCADE on the wrong FK (quests) silently deletes history when a quest is removed.\n\n**Alternative:** both steps in one statement: `ALTER TABLE quest_completions DROP CONSTRAINT ..., ADD CONSTRAINT ...`.",
+				"With `ON DELETE CASCADE`, deleting hero 17 also deletes its 2 completions in the same statement. The FK still refuses hero 999, and the quest FK still protects quest 20.\n\n**Pitfall:** dropping the FK without re-adding it also lets the delete through, but leaves orphan completions and accepts hero 999. CASCADE on the wrong FK (quests) silently deletes completions when a quest is removed.\n\n**Alternative:** both steps in one statement: `ALTER TABLE quest_completions DROP CONSTRAINT ..., ADD CONSTRAINT ...`.",
 		},
 		{
 			id: "ch25-ex06",
-			title: "How far to the next level?",
-			story:
-				"Heroes keep asking the scribe how much xp they still need. Next level costs `level * 5000` xp in total.",
+			title: "Add a generated column",
 			prompt:
-				"Add a **generated** column **xp_to_next** (`int`) to **heroes**, always equal to `level * 5000 - xp`. It must stay correct when level or xp change, and nobody may write it by hand.",
+				"Add a **generated** column **xp_to_next** (`int`) to **heroes**, always equal to `level * 5000 - xp` (the xp still needed for the next level). It must stay correct when level or xp change, and nobody may write it by hand.",
 			difficulty: 3,
 			kind: "ddl",
 			concepts: ["generated-columns"],
@@ -309,16 +297,14 @@ const chapter: Chapter = {
 			hints: [
 				"A normal column filled once by UPDATE would go stale.",
 				"`ADD COLUMN ... GENERATED ALWAYS AS (expression)`, then STORED or VIRTUAL.",
-				"ADD COLUMN xp_to_next int GENERATED ALWAYS AS (level * 5000 - xp) STORED",
+				"`ADD COLUMN xp_to_next int GENERATED ALWAYS AS (level * 5000 - xp) STORED`",
 			],
 			explanation:
-				"The database recomputes `xp_to_next` whenever level or xp changes: Bors at level 2 now needs 10000. Writing it by hand is refused (428C9).\n\n**Pitfall:** `ADD COLUMN xp_to_next int` plus a one-off UPDATE looks identical today and drifts tomorrow, the classic cached value bug.\n\n**Alternative:** `VIRTUAL` (the PG18 default) computes it on every read instead of storing it.",
+				"The database recomputes `xp_to_next` whenever level or xp changes: hero 24 at level 2 now needs 10000. Writing it by hand is refused (428C9).\n\n**Pitfall:** `ADD COLUMN xp_to_next int` plus a one-off UPDATE looks identical at first and becomes wrong after the next change, the classic stale cached value bug.\n\n**Alternative:** `VIRTUAL` (the PG18 default) computes it on every read instead of storing it.",
 		},
 		{
 			id: "ch25-ex07",
-			title: "Heights, at last numbers",
-			story:
-				"Someone stored hero heights in a text column. The tailor wants to sort and average them.",
+			title: "Change a column type with USING",
 			prompt:
 				"**heroes.height_cm** is `text` (values like '188', some NULL). The starter fails. Change the column to `int`, **keeping** every height.",
 			difficulty: 3,
@@ -348,9 +334,9 @@ const chapter: Chapter = {
 			id: "ch25-ex08",
 			title: "The Armory Ledger",
 			story:
-				"The armorer lends gear and loses half of it. Morwen dictates the laws of the new ledger, and the guild master adds one more law to the roll of heroes.",
+				"Combines UNIQUE, CHECK, foreign keys with ON DELETE actions, a generated column and a NOT VALID constraint.",
 			prompt:
-				"1. Create **item_loans** with:\n   - **id**: `int` identity primary key\n   - **item_id**: `int`, required, an existing item; **deleting an item deletes its loans**\n   - **hero_id**: `int`, required, an existing hero; **deleting a hero who has loans is refused**\n   - **qty**: `int`, required, **greater than 0**\n   - **loaned_on**: `date`, required; **returned_on**: `date`, optional, **never before** loaned_on\n   - **days_out**: `int`, **generated** as `returned_on - loaned_on`\n   - a hero may not borrow the **same item twice on the same day**\n2. On **heroes**: every **new** hero must have a guild, but the 6 existing wanderers stay as they are.",
+				"1. Create **item_loans** with:\n   - **id**: `int` identity primary key\n   - **item_id**: `int`, required, an existing item; **deleting an item deletes its loans**\n   - **hero_id**: `int`, required, an existing hero; **deleting a hero who has loans is refused**\n   - **qty**: `int`, required, **greater than 0**\n   - **loaned_on**: `date`, required; **returned_on**: `date`, optional, **never before** loaned_on\n   - **days_out**: `int`, **generated** as `returned_on - loaned_on`\n   - a hero may not borrow the **same item twice on the same day**\n2. On **heroes**: every **new** hero must have a guild (`guild_id`), but the 6 existing heroes without a guild stay as they are.",
 			difficulty: 5,
 			kind: "ddl",
 			concepts: [
@@ -389,20 +375,20 @@ const chapter: Chapter = {
 				),
 			},
 			hints: [
-				"Go law by law: NOT NULL, REFERENCES with an ON DELETE action, CHECK, GENERATED ALWAYS AS, and a UNIQUE over three columns. A CHECK that compares two columns is easiest as a table constraint.",
-				"For the heroes law, a plain CHECK fails on the wanderers (23514). There is a keyword that applies a new constraint to new rows only.",
+				"Go rule by rule: NOT NULL, REFERENCES with an ON DELETE action, CHECK, GENERATED ALWAYS AS, and a UNIQUE over three columns. A CHECK that compares two columns is easiest as a table constraint.",
+				"For the heroes rule, a plain CHECK fails on the existing heroes without a guild (23514). There is a keyword that applies a new constraint to new rows only.",
 				"item_id ... REFERENCES items ON DELETE CASCADE, hero_id ... REFERENCES heroes (default refuses), UNIQUE (hero_id, item_id, loaned_on), CHECK (returned_on >= loaned_on). Then: ALTER TABLE heroes ADD CHECK (guild_id IS NOT NULL) NOT VALID;",
 			],
 			explanation:
-				"Every law lives in the schema now: types and NOT NULL for presence, CHECKs for ranges, FKs with the right action for ownership (loans belong to an item, but a hero cannot vanish while holding gear), a three column UNIQUE for the daily rule, and a generated `days_out` that cannot drift. `NOT VALID` enforces the guild law on new rows while the 6 wanderers keep their history.\n\n**Pitfall:** `CHECK (returned_on >= loaned_on)` lets an open loan (NULL) pass, which is right; `ON DELETE CASCADE` on hero_id would silently erase the evidence of unreturned gear.\n\n**Alternative:** `RESTRICT` and the default `NO ACTION` both refuse the delete; `VIRTUAL` works for days_out. Later, after the wanderers join guilds, `ALTER TABLE heroes VALIDATE CONSTRAINT ...` checks the old rows too.",
+				"Every rule lives in the schema now: types and NOT NULL for presence, CHECKs for ranges, FKs with the right action for ownership (loans belong to an item, but a hero cannot be deleted while it has loans), a three column UNIQUE for the daily rule, and a generated `days_out` that cannot drift. `NOT VALID` enforces the guild rule on new rows while the 6 existing rows stay unchecked.\n\n**Pitfall:** `CHECK (returned_on >= loaned_on)` lets an open loan (NULL) pass, which is right; `ON DELETE CASCADE` on hero_id would silently erase the record of unreturned items.\n\n**Alternative:** `RESTRICT` and the default `NO ACTION` both refuse the delete; `VIRTUAL` works for days_out. Later, once those heroes have a guild, `ALTER TABLE heroes VALIDATE CONSTRAINT ...` checks the old rows too.",
 		},
 	],
 	practice: [
 		{
 			id: "ch25-pr01",
-			title: "One badge missing, at most",
+			title: "UNIQUE NULLS NOT DISTINCT",
 			prompt:
-				"Table **guards** has **badge_no**. Make badge numbers unique **and** allow **at most one** guard without a badge (NULL). Ines already has no badge.",
+				"Table **guards** has **badge_no**. Make badge numbers unique **and** allow **at most one** guard without a badge (NULL). Ines already has no badge (NULL).",
 			difficulty: 2,
 			kind: "ddl",
 			concepts: ["unique-constraint"],
@@ -423,11 +409,11 @@ const chapter: Chapter = {
 				"UNIQUE NULLS NOT DISTINCT (badge_no)",
 			],
 			explanation:
-				"`NULLS NOT DISTINCT` counts NULL as one value, so Lune cannot join Ines in the badgeless club.\n\n**Pitfall:** plain UNIQUE accepts any number of NULLs.\n\n**Alternative:** a partial unique index `ON guards ((badge_no IS NULL)) WHERE badge_no IS NULL` does the same in older versions.",
+				"`NULLS NOT DISTINCT` counts NULL as one value, so a second guard without a badge (Lune) is refused.\n\n**Pitfall:** plain UNIQUE accepts any number of NULLs.\n\n**Alternative:** a partial unique index `ON guards ((badge_no IS NULL)) WHERE badge_no IS NULL` does the same in older versions.",
 		},
 		{
 			id: "ch25-pr02",
-			title: "A law the past breaks",
+			title: "A CHECK that existing rows break",
 			prompt:
 				"Try to add `CHECK (level >= 5)` to **heroes**. Some heroes are below level 5, so this mission succeeds when the statement **fails** with the right error.",
 			difficulty: 1,
@@ -441,13 +427,13 @@ const chapter: Chapter = {
 				"ALTER TABLE heroes ADD CHECK (level >= 5);",
 			],
 			explanation:
-				"Mabel (level 2) and friends break the new law, so the ALTER fails with 23514 and nothing changes.\n\n**Pitfall:** believing a new constraint only applies to future rows: by default it checks the past too.\n\n**Alternative:** `NOT VALID` skips the existing rows on purpose.",
+				"Several heroes (hero 30 is level 2) break the new rule, so the ALTER fails with 23514 and nothing changes.\n\n**Pitfall:** believing a new constraint only applies to future rows: by default it checks the past too.\n\n**Alternative:** `NOT VALID` skips the existing rows on purpose.",
 		},
 		{
 			id: "ch25-pr03",
-			title: "No free quests",
+			title: "Strictly positive CHECK",
 			prompt:
-				"Add a law to **quests**: **reward_gold** must be **strictly positive**.",
+				"Add a constraint to **quests**: **reward_gold** must be **strictly positive**.",
 			difficulty: 1,
 			kind: "ddl",
 			concepts: ["check-constraint"],
@@ -466,11 +452,11 @@ const chapter: Chapter = {
 				"CHECK (reward_gold > 0)",
 			],
 			explanation:
-				"Every existing reward is at least 10, so the law is accepted and 0 is refused from now on.\n\n**Pitfall:** `>= 0` allows unpaid quests.\n\n**Alternative:** `CHECK (reward_gold BETWEEN 1 AND 100000)` adds an upper bound too.",
+				"Every existing reward is at least 10, so the constraint is accepted and 0 is refused from now on.\n\n**Pitfall:** `>= 0` allows unpaid quests.\n\n**Alternative:** `CHECK (reward_gold BETWEEN 1 AND 100000)` adds an upper bound too.",
 		},
 		{
 			id: "ch25-pr04",
-			title: "Pets need owners",
+			title: "Required foreign key",
 			prompt:
 				"Create **hero_pets** with **id** (`int` identity primary key), **hero_id** (`int`, required, an existing hero) and **name** (`text`, required).",
 			difficulty: 2,
@@ -494,11 +480,11 @@ const chapter: Chapter = {
 				"hero_id int NOT NULL REFERENCES heroes (id)",
 			],
 			explanation:
-				"NOT NULL demands an owner, REFERENCES demands a real one, and Mabel cannot leave while her toad waits.\n\n**Pitfall:** without NOT NULL the FK happily accepts a stray with no owner.\n\n**Alternative:** `FOREIGN KEY (hero_id) REFERENCES heroes` as a table constraint.",
+				"NOT NULL requires a hero_id, REFERENCES requires an existing one, and hero 30 cannot be deleted while a pet references it.\n\n**Pitfall:** without NOT NULL the FK accepts a pet with no hero_id.\n\n**Alternative:** `FOREIGN KEY (hero_id) REFERENCES heroes` as a table constraint.",
 		},
 		{
 			id: "ch25-pr05",
-			title: "The Lanterns cannot just vanish",
+			title: "Delete a referenced row",
 			prompt:
 				"Delete guild **5** (Wandering Lanterns). Its heroes still reference it, so this mission succeeds when the delete **fails** with the right error.",
 			difficulty: 1,
@@ -512,15 +498,13 @@ const chapter: Chapter = {
 				"DELETE FROM guilds WHERE id = 5;",
 			],
 			explanation:
-				"The default FK action (NO ACTION) refuses to orphan Zoë, Finn and the others: 23503.\n\n**Pitfall:** guild 6 deletes fine because nobody references it, so a test on an empty guild proves nothing.\n\n**Alternative:** `ON DELETE SET NULL` on heroes.guild_id would turn them into wanderers instead.",
+				"The default FK action (NO ACTION) refuses to leave heroes pointing at a missing guild: 23503.\n\n**Pitfall:** guild 6 deletes fine because nobody references it, so a test on an empty guild proves nothing.\n\n**Alternative:** `ON DELETE SET NULL` on heroes.guild_id would set their guild_id to NULL instead.",
 		},
 		{
 			id: "ch25-pr06",
-			title: "Prerequisites that fade",
-			story:
-				"Two training quests were added: Sparring Match requires Training Dummy. When a quest is retired, quests that required it should simply lose the requirement.",
+			title: "Change an FK to ON DELETE SET NULL",
 			prompt:
-				"Change the foreign key **quests.prerequisite_quest_id** so that deleting a quest sets the prerequisite of the quests that required it to **NULL**.",
+				"The setup adds two quests: Sparring Match requires Training Dummy. Change the foreign key **quests.prerequisite_quest_id** so that deleting a quest sets the prerequisite of the quests that required it to **NULL**.",
 			difficulty: 3,
 			kind: "ddl",
 			concepts: ["fk-actions"],
@@ -546,7 +530,7 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch25-pr07",
-			title: "Value per pound",
+			title: "Generated column with round",
 			prompt:
 				"Add a **generated** column **value_per_weight** (`numeric`) to **items**, equal to `round(base_value / weight, 2)`.",
 			difficulty: 2,
@@ -567,11 +551,11 @@ const chapter: Chapter = {
 				"ADD COLUMN value_per_weight numeric GENERATED ALWAYS AS (round(base_value / weight, 2)) VIRTUAL",
 			],
 			explanation:
-				"The Phoenix Feather tops the list at 750000 gold per pound; the unappraised Mystery Egg gets NULL, because NULL divided by anything is NULL.\n\n**Pitfall:** a plain column filled by UPDATE forgets every future price change.\n\n**Alternative:** STORED computes it once per write.",
+				"The Phoenix Feather has the highest value, 750000 per unit of weight; the Mystery Egg, with no base_value, gets NULL, because NULL divided by anything is NULL.\n\n**Pitfall:** a plain column filled by UPDATE forgets every future price change.\n\n**Alternative:** STORED computes it once per write.",
 		},
 		{
 			id: "ch25-pr08",
-			title: "Secret becomes hidden",
+			title: "Rename a column",
 			prompt: "Rename the column **is_secret** of **quests** to **hidden**.",
 			difficulty: 1,
 			kind: "ddl",
@@ -594,7 +578,7 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch25-pr09",
-			title: "Renown for everyone",
+			title: "Add a NOT NULL column with a default",
 			prompt:
 				"The starter fails. Add a required column **renown** (`int`) to **heroes** that starts at **0** for every existing and future hero.",
 			difficulty: 2,

@@ -7,7 +7,7 @@ const chapter: Chapter = {
 	tier: "novice",
 	track: "query",
 	title: "Hello, Table",
-	subtitle: "Your first SELECT: read the Starport's registers",
+	subtitle: "Tables, SELECT, column lists, aliases and quoting",
 	emoji: "👋",
 	datasetId: "starport",
 	concepts: [
@@ -22,30 +22,30 @@ const chapter: Chapter = {
 	lesson: [
 		{
 			kind: "explain",
-			title: "Welcome to the Starport",
-			body: "The Starport keeps its records in **tables**. A table is like a register: every **row** is one thing (a planet, a pilot, a ship) and every **column** is one fact about it (a name, a population).\n\nYou talk to the database in **SQL**. Ask a question, and it answers with... a new table.",
+			title: "Tables, rows and columns",
+			body: "A relational database stores data in **tables**. Every **row** is one record (a planet, a pilot, a ship) and every **column** is one attribute of it (a name, a population).\n\nYou query the database in **SQL**. Every query returns a result that is itself a table.",
 		},
 		{
 			kind: "example",
-			title: "Your very first query",
-			body: "`SELECT *` means *every column*, `FROM planets` names the table. Press **Run** and meet the planets on the trade lanes.",
+			title: "Select every column",
+			body: "`SELECT *` means *every column*, `FROM planets` names the table. Press **Run** to see every row of the `planets` table.",
 			sql: "SELECT * FROM planets;",
 		},
 		{
 			kind: "explain",
 			title: "Anatomy of a statement",
-			body: "```sql\nSELECT name, sector   -- which columns\nFROM planets;        -- which table\n```\n\n- **SELECT** and **FROM** are *clauses*. Keywords don't care about case: `select` works too.\n- A **semicolon** ends the statement.\n- `--` starts a comment: the database ignores the rest of the line.",
+			body: "```sql\nSELECT name, sector   -- which columns\nFROM planets;        -- which table\n```\n\n- **SELECT** and **FROM** are *clauses*. Keywords are case insensitive: `select` works too.\n- A **semicolon** ends the statement.\n- `--` starts a comment: the database ignores the rest of the line.",
 		},
 		{
 			kind: "example",
-			title: "Pick your columns",
+			title: "Select specific columns",
 			body: "List the columns you want, separated by **commas**. They come back in the order you write them.",
 			sql: "SELECT name, sector FROM planets;",
 		},
 		{
 			kind: "quiz",
 			question:
-				"The pilots table has columns `name`, `callsign` and `rank`. Which query returns only names and ranks?",
+				"The `pilots` table has columns `name`, `callsign` and `rank`. Which query returns only names and ranks?",
 			choices: [
 				"SELECT name rank FROM pilots;",
 				"SELECT name, rank FROM pilots;",
@@ -54,7 +54,7 @@ const chapter: Chapter = {
 			],
 			answerIndex: 1,
 			explanation:
-				"Columns are separated by commas, with no comma before FROM. Careful: `SELECT name rank` is not an error! It returns one column of names *renamed* to rank.",
+				"Columns are separated by commas, with no comma before FROM. Note that `SELECT name rank` is not an error: it returns one column of names *renamed* to `rank`.",
 		},
 		{
 			kind: "explain",
@@ -63,13 +63,13 @@ const chapter: Chapter = {
 		},
 		{
 			kind: "example",
-			title: "Aliases in action",
+			title: "Quoted aliases",
 			body: "Without double quotes, `Head Count` would be two words and `Planet` would become `planet` (names are folded to lower case).",
 			sql: 'SELECT name AS "Planet", population AS "Head Count", \'charted\' AS status\nFROM planets;',
 		},
 		{
 			kind: "try",
-			title: "Your turn: the pilot roster",
+			title: "Name and species of pilots",
 			prompt:
 				"Return the **name** and **species** of every pilot, in that column order.",
 			starterSql: "SELECT \nFROM pilots;",
@@ -84,9 +84,7 @@ const chapter: Chapter = {
 	exercises: [
 		{
 			id: "ch01-ex01",
-			title: "Open the faction registry",
-			story:
-				"Your first shift at the Starport! The dock chief slides a terminal over: \"Show me every faction on file. All of it.\"",
+			title: "All columns of factions",
 			prompt: "Return **every column** of the `factions` table.",
 			difficulty: 1,
 			kind: "query",
@@ -100,13 +98,11 @@ const chapter: Chapter = {
 				"SELECT * FROM factions;",
 			],
 			explanation:
-				"`SELECT *` expands to every column, in the table's own order. Perfect for exploring a table you don't know yet.\n\n**Pitfall:** in saved code, `*` silently changes meaning when someone adds a column, so prefer listing columns once you know what you need.",
+				"`SELECT *` expands to every column, in the table's own order. Useful for exploring a table you don't know yet.\n\n**Pitfall:** in saved code, `*` silently changes meaning when someone adds a column, so prefer listing columns once you know what you need.",
 		},
 		{
 			id: "ch01-ex02",
-			title: "Roll call",
-			story:
-				"The tower needs to know who is flying today, and what to call them on the radio.",
+			title: "Pilot names and callsigns",
 			prompt:
 				"Return the **name** and **callsign** of every pilot (name first).",
 			difficulty: 1,
@@ -121,13 +117,11 @@ const chapter: Chapter = {
 				"SELECT name, callsign FROM ...;",
 			],
 			explanation:
-				"`SELECT name, callsign` keeps just those two columns, in that order. Some callsigns are empty (NULL): we will meet NULL properly in *The Void*.\n\n**Pitfall:** column order matters to the checker here, because it compares columns by position.",
+				"`SELECT name, callsign` keeps just those two columns, in that order. Some callsigns are NULL (no value): NULL is covered in *The Void*.\n\n**Pitfall:** column order matters to the checker here, because it compares columns by position.",
 		},
 		{
 			id: "ch01-ex03",
-			title: "Static on the line",
-			story:
-				"A junior clerk typed this query to list the ships, but the console only beeps angrily.",
+			title: "Fix a trailing comma",
 			prompt:
 				"Fix the query so it returns the **name** and **model** of every ship.",
 			difficulty: 1,
@@ -142,13 +136,11 @@ const chapter: Chapter = {
 				"Remove the comma just before FROM.",
 			],
 			explanation:
-				"The comma before `FROM` tells Postgres another column is coming, so it chokes on `FROM` (*syntax error at or near \"FROM\"*, SQLSTATE 42601).\n\n**Tip:** when you see a syntax error, look just **before** the word Postgres points at.",
+				"The comma before `FROM` tells Postgres another column is coming, so it fails on `FROM` (*syntax error at or near \"FROM\"*, SQLSTATE 42601).\n\n**Tip:** when you see a syntax error, look just **before** the word Postgres points at.",
 		},
 		{
 			id: "ch01-ex04",
-			title: "Price tags",
-			story:
-				"The market board can only display columns called `item` and `price`.",
+			title: "Rename two columns",
 			prompt:
 				"Return every commodity's `name` as a column called **item** and its `base_price` as a column called **price**.",
 			difficulty: 1,
@@ -167,9 +159,7 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch01-ex05",
-			title: "The census report",
-			story:
-				"The Census Bureau is picky: their spreadsheet expects the titles `Planet` and `Head Count`, exactly like that.",
+			title: "Aliases with capitals and spaces",
 			prompt:
 				'Return every planet\'s `name` titled **Planet** and its `population` titled **Head Count** (capital letters and the space included).',
 			difficulty: 2,
@@ -189,9 +179,7 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch01-ex06",
-			title: "Cleared for launch",
-			story:
-				"Customs just cleared every ship in the yard. The board must show it next to each name.",
+			title: "A constant text column",
 			prompt:
 				"Return every ship's **name** and a second column containing the text **cleared** on every row.",
 			difficulty: 2,
@@ -211,8 +199,6 @@ const chapter: Chapter = {
 		{
 			id: "ch01-ex07",
 			title: "One row per ship",
-			story:
-				"The shipyard wants a raw list of models to count spare parts, one line per ship, repeats included.",
 			prompt:
 				"Return only the **model** column of the `ships` table: one row per ship, duplicates and missing models included.",
 			difficulty: 1,
@@ -226,13 +212,12 @@ const chapter: Chapter = {
 				"SELECT model FROM ships;",
 			],
 			explanation:
-				"Selecting fewer columns never removes rows: you get 21 rows, with `Hauler 9` three times and one empty (NULL) model. Removing duplicates is a separate decision (`DISTINCT`, coming in *Order in the Hall*).",
+				"Selecting fewer columns never removes rows: you get 21 rows, with `Hauler 9` three times and one empty (NULL) model. Removing duplicates is a separate decision (`DISTINCT`, covered in *Order in the Hall*).",
 		},
 		{
 			id: "ch01-ex08",
 			title: "Boss: The Harbor Master's Board",
-			story:
-				"The Harbor Master wants a shiny departure board. \"Four columns, titled exactly like this, or I send you to scrub Hollow Moon.\"",
+			story: "Combines a column list, aliases, quoted identifiers and a text literal.",
 			prompt:
 				"Return one row per ship with these columns, in this order and with these exact titles:\n\n| title | content |\n|---|---|\n| `Ship` | the ship's name |\n| `Model` | its model |\n| `Hold` | its cargo capacity |\n| `Dock` | the text `Bay 7` |",
 			difficulty: 3,
@@ -252,14 +237,14 @@ const chapter: Chapter = {
 				'SELECT name AS "Ship", model AS "Model", cargo_capacity AS "Hold", \'Bay 7\' AS "Dock" FROM ...',
 			],
 			explanation:
-				"Every tool of the chapter at once: a column list, aliases, double quotes for exact titles and single quotes for a value.\n\n**Pitfall:** `AS Ship` (no quotes) gives a column called `ship`, and the board would stay dark.",
+				"This uses every tool of the chapter: a column list, aliases, double quotes for exact titles and single quotes for a value.\n\n**Pitfall:** `AS Ship` (no quotes) gives a column called `ship`, so the exact title check fails.",
 			boss: true,
 		},
 	],
 	practice: [
 		{
 			id: "ch01-pr01",
-			title: "Sector by sector",
+			title: "Sector of every planet",
 			prompt:
 				"Return the **sector** column of every planet: one row per planet, repeats and unknown sectors included.",
 			difficulty: 1,
@@ -277,8 +262,7 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch01-pr02",
-			title: "The silent comma",
-			story: "This query runs without error, but the report has only one column.",
+			title: "Fix a missing comma",
 			prompt:
 				"Fix it so it returns the **name** and the **motto** of every faction.",
 			difficulty: 1,
@@ -293,11 +277,11 @@ const chapter: Chapter = {
 				"SELECT name, motto FROM factions;",
 			],
 			explanation:
-				"`SELECT name motto` means `SELECT name AS motto`: one column of names wearing the wrong label. This is one of the sneakiest beginner bugs because nothing fails.",
+				"`SELECT name motto` means `SELECT name AS motto`: one column of names with the wrong title. This bug is easy to miss because no error is raised.",
 		},
 		{
 			id: "ch01-pr03",
-			title: "Shipyard inventory",
+			title: "Three ship columns",
 			prompt:
 				"Return the **name**, **model** and **cargo_capacity** of every ship, in that order.",
 			difficulty: 1,
@@ -316,7 +300,7 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch01-pr04",
-			title: "The evidence locker",
+			title: "All columns of seizures",
 			prompt: "Return every column of the `seizures` table.",
 			difficulty: 1,
 			kind: "query",
@@ -333,7 +317,7 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch01-pr05",
-			title: "Market labels",
+			title: "Rename commodity columns",
 			prompt:
 				"Return every commodity's `name` titled **commodity** and its `unit` titled **sold_by**.",
 			difficulty: 1,
@@ -352,7 +336,7 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch01-pr06",
-			title: "The captain's log",
+			title: "Escape a single quote",
 			prompt:
 				"Return every pilot's **name** and a second column containing the text **Captain's log** (with the apostrophe) on every row.",
 			difficulty: 2,

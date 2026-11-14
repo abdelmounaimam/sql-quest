@@ -7,7 +7,7 @@ const chapter: Chapter = {
 	tier: "novice",
 	track: "query",
 	title: "Sifting the Ledger",
-	subtitle: "WHERE, AND/OR, IN, BETWEEN and LIKE: keep only the rows you need",
+	subtitle: "WHERE, comparison operators, AND, OR, NOT, IN, BETWEEN and LIKE",
 	emoji: "🔎",
 	datasetId: "starport",
 	concepts: ["where-comparison", "boolean-logic", "in-and-between", "like-ilike"],
@@ -15,18 +15,18 @@ const chapter: Chapter = {
 	lesson: [
 		{
 			kind: "explain",
-			title: "Keep only some rows",
+			title: "Filter rows with WHERE",
 			body: "**WHERE** comes after FROM and keeps only the rows where a condition is **true**.\n\n```sql\nSELECT name, credits\nFROM pilots\nWHERE credits > 40000;\n```\n\nComparison operators: `=` `<>` (or `!=`) `<` `<=` `>` `>=`. There is no `==` in SQL.",
 		},
 		{
 			kind: "example",
-			title: "The wealthy few",
-			body: "Run it: only pilots with more than 40,000 credits survive the filter.",
+			title: "A numeric comparison",
+			body: "Run it: only pilots with more than 40,000 credits pass the filter.",
 			sql: "SELECT name, credits\nFROM pilots\nWHERE credits > 40000;",
 		},
 		{
 			kind: "explain",
-			title: "Comparing text",
+			title: "Compare text values",
 			body: "Text values go in **single quotes**, and the comparison is exact, case included:\n\n```sql\nWHERE rank = 'captain'   -- matches\nWHERE rank = 'Captain'   -- matches nothing here\nWHERE rank = \"captain\"   -- error: that's a column name!\n```",
 		},
 		{
@@ -50,7 +50,7 @@ const chapter: Chapter = {
 		},
 		{
 			kind: "example",
-			title: "Shortcuts: IN and BETWEEN",
+			title: "IN and BETWEEN",
 			body: "`IN (...)` matches any value of a list. `BETWEEN low AND high` includes **both** ends.",
 			sql: "SELECT name, category, base_price\nFROM commodities\nWHERE category IN ('fuel', 'tech')\n  AND base_price BETWEEN 90 AND 900;",
 		},
@@ -61,13 +61,13 @@ const chapter: Chapter = {
 		},
 		{
 			kind: "example",
-			title: "Ships with an apostrophe",
+			title: "Match an apostrophe",
 			body: "`''` inside quotes is one apostrophe, so `'%''%'` means *contains an apostrophe*.",
 			sql: "SELECT name\nFROM ships\nWHERE name LIKE '%''%';",
 		},
 		{
 			kind: "try",
-			title: "Your turn: the zero-credit club",
+			title: "Pilots with zero credits",
 			prompt:
 				"Return the **name** of every pilot whose credits are exactly **0**.",
 			starterSql: "SELECT name\nFROM pilots\nWHERE ",
@@ -79,9 +79,7 @@ const chapter: Chapter = {
 	exercises: [
 		{
 			id: "ch02-ex01",
-			title: "Heavy haulers",
-			story:
-				"A mining colony needs a ship that can carry at least 500 units of ore.",
+			title: "Ships with 500 or more capacity",
 			prompt:
 				"Return the **name** and **cargo_capacity** of every ship with a cargo capacity of **500 or more**.",
 			difficulty: 1,
@@ -97,12 +95,11 @@ const chapter: Chapter = {
 				"WHERE cargo_capacity >= 500",
 			],
 			explanation:
-				"`>=` keeps the Sentinels (exactly 500) as well as the bigger haulers. With `>` you would lose three ships.\n\n**Note:** the Ghost Ship has no known capacity: a comparison with an unknown value is never true, so it is filtered out. More about that in *The Void*.",
+				"`>=` keeps the Sentinel ships (exactly 500) as well as the larger ones. With `>` you would lose three ships.\n\n**Note:** the Ghost Ship has a NULL capacity: a comparison with an unknown value is never true, so it is filtered out. NULL is covered in *The Void*.",
 		},
 		{
 			id: "ch02-ex02",
-			title: "Captains, report!",
-			story: "The Admiralty is calling a meeting of every captain.",
+			title: "Pilots with rank captain",
 			prompt: "Return the **name** of every pilot whose rank is **captain**.",
 			difficulty: 1,
 			kind: "query",
@@ -119,9 +116,7 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch02-ex03",
-			title: "Kepler's Rest",
-			story:
-				"A courier needs the details of Kepler's Rest, but the clerk's query keeps exploding.",
+			title: "Escape an apostrophe in WHERE",
 			prompt:
 				"Return the **sector** and **population** of the planet named **Kepler's Rest**.",
 			difficulty: 2,
@@ -138,7 +133,7 @@ const chapter: Chapter = {
 				"'Kepler''s Rest'",
 			],
 			explanation:
-				"`''` inside a text value stands for one apostrophe. The starter ends the string after `Kepler` and Postgres sees garbage after it.",
+				"`''` inside a text value stands for one apostrophe. The starter ends the string after `Kepler` and Postgres cannot parse the rest.",
 		},
 		{
 			id: "ch02-ex04",
@@ -157,13 +152,11 @@ const chapter: Chapter = {
 				"WHERE rank = 'captain' AND species = ...",
 			],
 			explanation:
-				"`AND` keeps a row only when both conditions hold. Grimble Tusk is a captain but a Zorblax, so he is out.",
+				"`AND` keeps a row only when both conditions hold. Grimble Tusk is a captain but a Zorblax, so that row is excluded.",
 		},
 		{
 			id: "ch02-ex05",
-			title: "The precedence trap",
-			story:
-				"Security asked for Synth or Vulpine pilots with a positive reputation. The report includes two Synths with a reputation of exactly 0. Something is off.",
+			title: "Fix AND/OR precedence",
 			prompt:
 				"Fix the query: return the **name** of every pilot whose species is **Synth or Vulpine** and whose reputation is **greater than 0**.",
 			difficulty: 2,
@@ -180,11 +173,11 @@ const chapter: Chapter = {
 				"Wrap the two species tests in parentheses.",
 			],
 			explanation:
-				"`a OR b AND c` is read as `a OR (b AND c)`: every Synth slipped through. Parentheses force the OR first.\n\n**Alternative:** `WHERE species IN ('Synth', 'Vulpine') AND reputation > 0` avoids the trap entirely.",
+				"`a OR b AND c` is read as `a OR (b AND c)`: every Synth was returned. Parentheses force the OR first.\n\n**Alternative:** `WHERE species IN ('Synth', 'Vulpine') AND reputation > 0` avoids the trap entirely.",
 		},
 		{
 			id: "ch02-ex06",
-			title: "Fuel and tech",
+			title: "Filter with IN",
 			prompt:
 				"Return the **name** and **category** of every commodity whose category is **fuel** or **tech**.",
 			difficulty: 2,
@@ -194,16 +187,16 @@ const chapter: Chapter = {
 				"SELECT name, category FROM commodities WHERE category IN ('fuel', 'tech');",
 			check: { type: "result" },
 			hints: [
-				"You could write two conditions with OR... or use a list.",
+				"You could write two conditions with OR, or use a list.",
 				"`column IN ('a', 'b')` matches any value in the list.",
 				"WHERE category IN ('fuel', 'tech')",
 			],
 			explanation:
-				"`IN` is shorthand for a chain of `=` joined by `OR`. Each value is quoted separately: `IN ('fuel, tech')` would look for one single (weird) category.",
+				"`IN` is shorthand for a chain of `=` joined by `OR`. Each value is quoted separately: `IN ('fuel, tech')` would look for one category named `fuel, tech`.",
 		},
 		{
 			id: "ch02-ex07",
-			title: "Mid-sized deals",
+			title: "Quantities from 20 to 50",
 			prompt:
 				"Return the **id** and **qty** of every trade whose quantity is between **20 and 50, both included**.",
 			difficulty: 2,
@@ -221,7 +214,7 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch02-ex08",
-			title: "L is for Launch",
+			title: "Names starting with L",
 			prompt: "Return the **name** of every ship whose name starts with a capital **L**.",
 			difficulty: 2,
 			kind: "query",
@@ -234,13 +227,12 @@ const chapter: Chapter = {
 				"WHERE name LIKE 'L%'",
 			],
 			explanation:
-				"`'L%'` = an L followed by anything. Without the `%`, LIKE behaves like `=` and matches only a ship called exactly *L*.",
+				"`'L%'` matches an L followed by anything. Without the `%`, LIKE behaves like `=` and matches only a ship called exactly *L*.",
 		},
 		{
 			id: "ch02-ex09",
 			title: "Boss: The Customs Sweep",
-			story:
-				"Customs is raiding the yard tonight. They want every ship that is either a worn-out model they distrust, or registered by someone fond of apostrophes (they find it suspicious).",
+			story: "Combines IN, BETWEEN, LIKE with an escaped apostrophe, and AND/OR precedence in one WHERE clause.",
 			prompt:
 				"Return the **name**, **model** and **hull_integrity** of every ship that matches **at least one** of these rules:\n\n1. its model is **Viper X**, **Gambit 3** or **Hauler 9**, **and** its hull integrity is between **10 and 60** (both included);\n2. its name contains an **apostrophe** (`'`).",
 			difficulty: 4,
@@ -255,14 +247,14 @@ const chapter: Chapter = {
 				"WHERE (model IN (...) AND hull_integrity BETWEEN 10 AND 60) OR name LIKE '%''%'",
 			],
 			explanation:
-				"Two rules joined by `OR`, the first one built with `AND`. Parentheses are not strictly needed (AND binds tighter) but they make the intent obvious.\n\n**Pitfall:** `(model IN ... OR name LIKE ...) AND hull_integrity BETWEEN 10 AND 60` applies the hull test to rule 2 as well and loses Halo's Edge, Pike's Peak and Raven's Claw.",
+				"The two rules are joined by `OR`, and the first one is built with `AND`. Parentheses are not strictly needed (AND binds tighter) but they make the intent obvious.\n\n**Pitfall:** `(model IN ... OR name LIKE ...) AND hull_integrity BETWEEN 10 AND 60` applies the hull test to rule 2 as well and loses Halo's Edge, Pike's Peak and Raven's Claw.",
 			boss: true,
 		},
 	],
 	practice: [
 		{
 			id: "ch02-pr01",
-			title: "Bargain bin",
+			title: "Commodities under 20",
 			prompt:
 				"Return the **name** and **base_price** of every commodity cheaper than **20** credits.",
 			difficulty: 1,
@@ -281,7 +273,7 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch02-pr02",
-			title: "No cadets allowed",
+			title: "Pilots who are not cadets",
 			prompt: "Return the **name** and **rank** of every pilot who is **not** a cadet.",
 			difficulty: 1,
 			kind: "query",
@@ -297,7 +289,7 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch02-pr03",
-			title: "Rising stars or troublemakers",
+			title: "Lieutenants or negative reputation",
 			prompt:
 				"Return the **name** of every pilot who is a **lieutenant** or whose reputation is **below 0**.",
 			difficulty: 2,
@@ -316,7 +308,7 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch02-pr04",
-			title: "Not by the crate",
+			title: "Legal and not sold by the crate",
 			prompt:
 				"Return the **name** of every commodity that is **legal** and **not** sold by the `crate` (its `unit` is something else).",
 			difficulty: 2,
@@ -335,7 +327,7 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch02-pr05",
-			title: "The golden age of discovery",
+			title: "Planets discovered 2050 to 2069",
 			prompt:
 				"Return the **name** and **discovered_on** of every planet discovered from **2050-01-01** to **2069-12-31**, both days included.",
 			difficulty: 2,
@@ -354,7 +346,7 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch02-pr06",
-			title: "Four-letter callsigns",
+			title: "Callsigns of exactly 4 characters",
 			prompt:
 				"Return the **callsign** of every pilot whose callsign is **exactly 4 characters** long.",
 			difficulty: 3,
@@ -368,12 +360,11 @@ const chapter: Chapter = {
 				"WHERE callsign LIKE '____'",
 			],
 			explanation:
-				"Four underscores = exactly four characters, no more, no less. (`length(callsign) = 4` works too: string functions arrive in World 2.)",
+				"Four underscores match exactly four characters, no more, no less. (`length(callsign) = 4` works too: string functions are covered in World 2.)",
 		},
 		{
 			id: "ch02-pr07",
-			title: "The underscore suspect",
-			story: "Intel says a smuggler uses a callsign with an underscore in it.",
+			title: "Match a literal underscore",
 			prompt:
 				"Return the **name** and **callsign** of every pilot whose callsign contains an underscore (`_`).",
 			difficulty: 3,
@@ -393,8 +384,7 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch02-pr08",
-			title: "Zzz",
-			story: "Radio static garbled a callsign. All the operator heard was a buzzing \"z\".",
+			title: "Case insensitive match with ILIKE",
 			prompt:
 				"Return the **callsign** of every pilot whose callsign contains the letter **z**, in upper or lower case.",
 			difficulty: 2,
@@ -404,7 +394,7 @@ const chapter: Chapter = {
 			check: { type: "result" },
 			hints: [
 				"The z may be anywhere, and may be Z or z.",
-				"LIKE is case sensitive; its sibling is not.",
+				"LIKE is case sensitive; ILIKE is not.",
 				"WHERE callsign ILIKE '%z%'",
 			],
 			explanation:

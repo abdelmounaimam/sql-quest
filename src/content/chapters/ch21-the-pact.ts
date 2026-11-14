@@ -12,7 +12,7 @@ const chapter: Chapter = {
 	tier: "apprentice",
 	track: "mutation",
 	title: "The Pact",
-	subtitle: "All or nothing: transactions, savepoints and reading constraint errors",
+	subtitle: "Transactions (BEGIN, COMMIT, ROLLBACK), savepoints and constraint error codes",
 	emoji: "🤝",
 	datasetId: "starport",
 	concepts: ["transactions-basics", "savepoints", "constraint-errors"],
@@ -20,24 +20,24 @@ const chapter: Chapter = {
 	lesson: [
 		{
 			kind: "explain",
-			title: "A pact between statements",
-			body: "A credit transfer is **two** UPDATEs: one wallet down, one wallet up. If the power fails between them, credits vanish.\n\nA **transaction** binds them:\n```sql\nBEGIN;\nUPDATE pilots SET credits = credits - 500 WHERE id = 1;\nUPDATE pilots SET credits = credits + 500 WHERE id = 4;\nCOMMIT;\n```\nAll of it happens, or none of it (**atomic**), the rules hold at the end (**consistent**), others never see it half done (**isolated**), and once committed it stays (**durable**).",
+			title: "Transactions: several statements as one unit",
+			body: "A credit transfer takes **two** UPDATEs: one balance decreases, the other increases. If the server stops between them, the credits are lost.\n\nA **transaction** groups them:\n```sql\nBEGIN;\nUPDATE pilots SET credits = credits - 500 WHERE id = 1;\nUPDATE pilots SET credits = credits + 500 WHERE id = 4;\nCOMMIT;\n```\nEither all of it happens or none of it (**atomic**), constraints hold at the end (**consistent**), other sessions never see it half done (**isolated**), and once committed it is kept (**durable**).",
 		},
 		{
 			kind: "example",
-			title: "Ada pays Dax",
-			body: "The admiral lends 500 credits to young Dax. Both wallets change together.",
+			title: "Transfer credits between two pilots",
+			body: "Pilot 1 transfers 500 credits to pilot 4. Both balances change together.",
 			sql: "BEGIN;\nUPDATE pilots SET credits = credits - 500 WHERE id = 1;\nUPDATE pilots SET credits = credits + 500 WHERE id = 4;\nCOMMIT;\n\nSELECT id, name, credits FROM pilots WHERE id IN (1, 4);",
 		},
 		{
 			kind: "explain",
 			title: "ROLLBACK, and when it is too late",
-			body: "`ROLLBACK;` cancels everything since `BEGIN`, as if nothing happened.\n\nWithout BEGIN, Postgres runs in **autocommit**: each statement is its own little transaction, committed the moment it ends. A ROLLBACK afterwards has nothing to undo (it only prints a warning).\n\nSame after COMMIT: committed is final.",
+			body: "`ROLLBACK;` cancels everything since `BEGIN`, as if nothing happened.\n\nWithout BEGIN, PostgreSQL runs in **autocommit** mode: each statement is its own transaction, committed as soon as it ends. A ROLLBACK afterwards has nothing to undo (it only prints a warning).\n\nThe same applies after COMMIT: committed changes are final.",
 		},
 		{
 			kind: "quiz",
 			question:
-				"Inside a BEGIN, the second UPDATE fails with a constraint error. You keep typing more UPDATEs. What happens to them?",
+				"Inside a BEGIN, the second UPDATE fails with a constraint error. You keep running more UPDATEs. What happens to them?",
 			choices: [
 				"They run normally; only the failed statement is lost",
 				"They are all refused with 25P02 (transaction aborted) until you ROLLBACK",
@@ -46,23 +46,23 @@ const chapter: Chapter = {
 			],
 			answerIndex: 1,
 			explanation:
-				"After an error the whole transaction is **aborted**: every statement fails with 25P02 *current transaction is aborted* until you ROLLBACK (or ROLLBACK TO a savepoint taken before the error). And a final COMMIT turns into a ROLLBACK.",
+				"After an error the whole transaction is **aborted**: every statement fails with 25P02 *current transaction is aborted* until you ROLLBACK (or ROLLBACK TO a savepoint taken before the error). A final COMMIT is turned into a ROLLBACK.",
 		},
 		{
 			kind: "explain",
-			title: "Savepoints: an undo point inside",
-			body: "```sql\nBEGIN;\nUPDATE ...;            -- keep this\nSAVEPOINT risky;\nUPDATE ...;            -- maybe not\nROLLBACK TO SAVEPOINT risky;\nCOMMIT;\n```\n`ROLLBACK TO SAVEPOINT` undoes only what came **after** the mark; the transaction stays open. `RELEASE SAVEPOINT` just forgets the mark: it commits nothing. A plain `ROLLBACK` still throws away everything.",
+			title: "Savepoints: partial rollback",
+			body: "```sql\nBEGIN;\nUPDATE ...;            -- keep this\nSAVEPOINT risky;\nUPDATE ...;            -- maybe not\nROLLBACK TO SAVEPOINT risky;\nCOMMIT;\n```\n`ROLLBACK TO SAVEPOINT` undoes only what came **after** the savepoint; the transaction stays open. `RELEASE SAVEPOINT` only removes the savepoint: it commits nothing. A plain `ROLLBACK` still discards everything.",
 		},
 		{
 			kind: "example",
-			title: "Keep one price, drop the other",
-			body: "The first change survives, the second is undone by the savepoint.",
+			title: "Keep one change, undo the other",
+			body: "The first change is kept, the second is undone by rolling back to the savepoint.",
 			sql: "BEGIN;\nUPDATE commodities SET base_price = 13.00 WHERE name = 'Water Ice';\nSAVEPOINT before_kelp;\nUPDATE commodities SET base_price = 0.01 WHERE name = 'Space Kelp';\nROLLBACK TO SAVEPOINT before_kelp;\nCOMMIT;\n\nSELECT name, base_price FROM commodities WHERE name IN ('Water Ice', 'Space Kelp');",
 		},
 		{
 			kind: "explain",
 			title: "Reading constraint errors",
-			body: "Broken rules raise coded errors (SQLSTATE):\n\n| code | rule |\n|---|---|\n| 23502 | NOT NULL |\n| 23503 | foreign key |\n| 23505 | unique |\n| 23514 | CHECK |\n\nRead the **DETAIL** line, it names the culprit: `Key (callsign)=(Nova) already exists.` Note that two NULL callsigns never collide: NULL is not equal to NULL.",
+			body: "Constraint violations raise errors with a code (SQLSTATE):\n\n| code | constraint |\n|---|---|\n| 23502 | NOT NULL |\n| 23503 | foreign key |\n| 23505 | unique |\n| 23514 | CHECK |\n\nRead the **DETAIL** line, it names the offending value: `Key (callsign)=(Nova) already exists.` Two NULL callsigns never conflict: NULL is not equal to NULL.",
 		},
 		{
 			kind: "quiz",
@@ -75,7 +75,7 @@ const chapter: Chapter = {
 		},
 		{
 			kind: "try",
-			title: "Your turn: a safe transfer",
+			title: "Try it: a transfer in a transaction",
 			prompt:
 				"Inside **BEGIN** / **COMMIT**, move **300** credits from **Kree-7** (pilot 10) to **Tiko** (pilot 19).",
 			starterSql: "BEGIN;\nUPDATE pilots SET credits = credits - 300 WHERE id = 10;\nCOMMIT;",
@@ -83,7 +83,7 @@ const chapter: Chapter = {
 				"BEGIN;\nUPDATE pilots SET credits = credits - 300 WHERE id = 10;\nUPDATE pilots SET credits = credits + 300 WHERE id = 19;\nCOMMIT;",
 			check: { type: "state", verifySql: PILOT_CREDITS },
 			hints: [
-				"The starter takes the credits but never gives them.",
+				"The starter subtracts the credits but never adds them to the other pilot.",
 				"Add the UPDATE for pilot 19 before the COMMIT.",
 			],
 		},
@@ -91,9 +91,7 @@ const chapter: Chapter = {
 	exercises: [
 		{
 			id: "ch21-ex01",
-			title: "Vera's gift",
-			story:
-				"Captain Vera Lux sponsors young Yuki Hoshino. The bank only accepts transfers sealed in a pact.",
+			title: "Transfer credits in a transaction",
 			prompt:
 				"Inside **BEGIN** / **COMMIT**, move **1000** credits from **Vera Lux** (pilot 21) to **Yuki Hoshino** (pilot 24).",
 			difficulty: 1,
@@ -108,15 +106,13 @@ const chapter: Chapter = {
 				"BEGIN; UPDATE pilots SET credits = credits - 1000 WHERE id = 21; UPDATE ... + 1000 WHERE id = 24; COMMIT;",
 			],
 			explanation:
-				"Between BEGIN and COMMIT the two UPDATEs form one unit: no observer can ever see the credits in flight, and a crash in the middle loses nothing.\n\n**Pitfall:** two separate autocommit UPDATEs give the same result on a good day, and a missing 1000 credits on a bad one.",
+				"Between BEGIN and COMMIT the two UPDATEs form one unit: no other session can see the intermediate state, and a crash in the middle loses nothing.\n\n**Pitfall:** two separate autocommit UPDATEs usually give the same result, but a failure between them leaves 1000 credits missing.",
 		},
 		{
 			id: "ch21-ex02",
-			title: "The test that was not a test",
-			story:
-				"A clerk wanted to *see what happens* if the hazardous lanes were closed. He ran the DELETE, then ROLLBACK to undo it, then opened a new lane. The Harbor Master now finds seven lanes missing.",
+			title: "Fix: ROLLBACK without BEGIN",
 			prompt:
-				"Fix the script so the **test DELETE is undone** and the new lane **9 → 3** (5.5 ly, hazard `ion storm`) is opened. In the end every original route still exists, plus the new one.",
+				"The starter is meant to test a DELETE, undo it with ROLLBACK, then add a route. As written, it permanently deletes seven routes. Fix the script so the **test DELETE is undone** and the new route **9 → 3** (5.5 ly, hazard `ion storm`) is added. In the end every original route still exists, plus the new one.",
 			difficulty: 2,
 			kind: "transaction",
 			concepts: ["transactions-basics"],
@@ -127,19 +123,17 @@ const chapter: Chapter = {
 			check: { type: "state", verifySql: ROUTES_STATE },
 			hints: [
 				"What does ROLLBACK undo when no transaction was started?",
-				"Without BEGIN, the DELETE committed on its own the moment it finished.",
+				"Without BEGIN, the DELETE was committed on its own as soon as it finished.",
 				"Start with BEGIN; so the ROLLBACK has something to cancel.",
 			],
 			explanation:
-				"With `BEGIN` first, the DELETE lives inside a transaction and ROLLBACK erases it. The INSERT then runs in autocommit and stays.\n\n**Pitfall:** believing ROLLBACK is an undo button. In autocommit mode every statement is committed immediately; ROLLBACK just warns *there is no transaction in progress*.",
+				"With `BEGIN` first, the DELETE runs inside a transaction and ROLLBACK cancels it. The INSERT then runs in autocommit mode and is kept.\n\n**Pitfall:** treating ROLLBACK as a general undo. In autocommit mode every statement is committed immediately; ROLLBACK only warns *there is no transaction in progress*.",
 		},
 		{
 			id: "ch21-ex03",
-			title: "Jax cannot pay",
-			story:
-				"Jax O'Hara owes the docks 50 credits. His wallet holds exactly 0.00, and the bank's rule says `credits >= 0`.",
+			title: "CHECK violation on an UPDATE",
 			prompt:
-				"Write the UPDATE that takes **50** credits from **Jax O'Hara** (pilot 9). It must **fail**: run it and read the error code.",
+				"Pilot **Jax O'Hara** (pilot 9) has exactly 0.00 credits, and `pilots` has the constraint `CHECK (credits >= 0)`. Write the UPDATE that subtracts **50** credits from this pilot. It must **fail**: run it and read the error code.",
 			difficulty: 2,
 			kind: "mutation",
 			concepts: ["constraint-errors"],
@@ -151,15 +145,13 @@ const chapter: Chapter = {
 				"UPDATE pilots SET credits = credits - 50 WHERE id = 9;",
 			],
 			explanation:
-				"23514 is a **check violation**: -50.00 breaks `credits >= 0`, and the message names the constraint `pilots_credits_check`. The row keeps 0.00.\n\n**Pitfall:** retrying the same statement, or dropping the CHECK to \"make it work\". The data is telling you a business rule: Jax needs a loan, not a negative wallet.",
+				"23514 is a **check violation**: -50.00 breaks `credits >= 0`, and the message names the constraint `pilots_credits_check`. The row keeps 0.00.\n\n**Pitfall:** retrying the same statement, or dropping the CHECK to \"make it work\". The constraint encodes a rule of the data model; the change itself must be different.",
 		},
 		{
 			id: "ch21-ex04",
-			title: "Two Mirages?",
-			story:
-				"A surveyor insists he found a second planet called Mirage. The registers disagree.",
+			title: "Unique violation on an INSERT",
 			prompt:
-				"Write the INSERT that registers a planet named **Mirage** in sector **Outer Rim**. It must **fail**: run it and read the error code.",
+				"Write the INSERT that adds a planet named **Mirage** in sector **Outer Rim**. A planet with that name already exists, so it must **fail**: run it and read the error code.",
 			difficulty: 1,
 			kind: "mutation",
 			concepts: ["constraint-errors"],
@@ -171,13 +163,11 @@ const chapter: Chapter = {
 				"INSERT INTO planets (name, sector) VALUES ('Mirage', 'Outer Rim');",
 			],
 			explanation:
-				"23505 is a **unique violation**; DETAIL says `Key (name)=(Mirage) already exists.` Note the sequence still handed out an id for the failed row: one more gap.\n\n**Pitfall:** reading only the message. The DETAIL line tells you *which* key collided, which matters on tables with several unique columns.",
+				"23505 is a **unique violation**; DETAIL says `Key (name)=(Mirage) already exists.` The sequence still generated an id for the failed row: one more gap.\n\n**Pitfall:** reading only the message. The DETAIL line tells you *which* key conflicted, which matters on tables with several unique columns.",
 		},
 		{
 			id: "ch21-ex05",
-			title: "A typo in the price list",
-			story:
-				"The quartermaster updates two prices. Halfway through, he notices he typed 99.99 for Void Pearls instead of 1999.99.",
+			title: "Undo one change with a savepoint",
 			prompt:
 				"In **one transaction**: set **Water Ice**'s base_price to **13.00**, take a savepoint named **before_pearls**, set **Void Pearls** to **99.99**, roll back **to the savepoint**, then **COMMIT**. Water Ice keeps its new price, Void Pearls its old one.",
 			difficulty: 3,
@@ -192,15 +182,13 @@ const chapter: Chapter = {
 				"... SAVEPOINT before_pearls; UPDATE ... 'Void Pearls'; ROLLBACK TO SAVEPOINT before_pearls; COMMIT;",
 			],
 			explanation:
-				"The savepoint splits the transaction: rolling back to it erases the typo while keeping the Water Ice change, which COMMIT then makes permanent.\n\n**Pitfall:** a plain `ROLLBACK` throws away the whole transaction, Water Ice included.",
+				"The savepoint splits the transaction: rolling back to it cancels the Void Pearls change while keeping the Water Ice change, which COMMIT then makes permanent.\n\n**Pitfall:** a plain `ROLLBACK` discards the whole transaction, Water Ice included.",
 		},
 		{
 			id: "ch21-ex06",
-			title: "RELEASE is not COMMIT",
-			story:
-				"Customs fines two smugglers 100 reputation each. The clerk thought `RELEASE SAVEPOINT` saved his work, ended with ROLLBACK to tidy up, and both fines evaporated.",
+			title: "Fix: RELEASE SAVEPOINT does not commit",
 			prompt:
-				"Fix the script so that **both** fines stick: Nox (pilot 13) and Sable Ironwood (pilot 18) each lose **100** reputation.",
+				"The starter subtracts reputation from two pilots, releases a savepoint, then ends with ROLLBACK, so nothing is kept. Fix the script so that **both** changes are kept: Nox (pilot 13) and Sable Ironwood (pilot 18) each lose **100** reputation.",
 			difficulty: 3,
 			kind: "transaction",
 			concepts: ["savepoints", "transactions-basics"],
@@ -211,19 +199,17 @@ const chapter: Chapter = {
 			check: { type: "state", verifySql: "SELECT id, reputation FROM pilots ORDER BY id;" },
 			hints: [
 				"Which statement actually ends the transaction, and how?",
-				"RELEASE only forgets the savepoint. The final ROLLBACK cancels everything since BEGIN.",
+				"RELEASE only removes the savepoint. The final ROLLBACK cancels everything since BEGIN.",
 				"End with COMMIT instead of ROLLBACK.",
 			],
 			explanation:
-				"`RELEASE SAVEPOINT` removes the mark; the changes stay *pending* until the transaction ends. COMMIT makes both fines permanent.\n\n**Pitfall:** thinking a released savepoint is saved for good. Only COMMIT persists anything; a ROLLBACK afterwards still wipes released work.",
+				"`RELEASE SAVEPOINT` removes the savepoint; the changes stay *pending* until the transaction ends. COMMIT makes both changes permanent.\n\n**Pitfall:** assuming a released savepoint is saved. Only COMMIT persists anything; a ROLLBACK afterwards still discards released work.",
 		},
 		{
 			id: "ch21-ex07",
 			title: "Nested savepoints",
-			story:
-				"The bank replays Ada Quasar's busiest day (she starts with 98000.00 credits).",
 			prompt:
-				"Ada's day was this script:\n```sql\nBEGIN;\nUPDATE pilots SET credits = credits + 100 WHERE id = 1;\nSAVEPOINT a;\nUPDATE pilots SET credits = credits + 200 WHERE id = 1;\nSAVEPOINT b;\nUPDATE pilots SET credits = credits + 400 WHERE id = 1;\nROLLBACK TO SAVEPOINT a;\nUPDATE pilots SET credits = credits + 800 WHERE id = 1;\nCOMMIT;\n```\n**Return** one value: Ada's **credits** at the end of the day. Predict first, then run the script followed by a SELECT to check.",
+				"Pilot 1 starts with 98000.00 credits. Consider this script:\n```sql\nBEGIN;\nUPDATE pilots SET credits = credits + 100 WHERE id = 1;\nSAVEPOINT a;\nUPDATE pilots SET credits = credits + 200 WHERE id = 1;\nSAVEPOINT b;\nUPDATE pilots SET credits = credits + 400 WHERE id = 1;\nROLLBACK TO SAVEPOINT a;\nUPDATE pilots SET credits = credits + 800 WHERE id = 1;\nCOMMIT;\n```\n**Return** one value: pilot 1's **credits** after the script. Predict first, then run the script followed by a SELECT to check.",
 			difficulty: 3,
 			kind: "transaction",
 			concepts: ["savepoints"],
@@ -232,19 +218,19 @@ const chapter: Chapter = {
 			check: { type: "result" },
 			hints: [
 				"Which updates came after savepoint `a`?",
-				"Rolling back to `a` undoes the +200 and the +400 (and forgets savepoint `b`, which was taken after it).",
+				"Rolling back to `a` undoes the +200 and the +400 (and removes savepoint `b`, which was taken after it).",
 				"98000 + 100 + 800",
 			],
 			explanation:
-				"98900.00: ROLLBACK TO `a` erases everything after `a`, including the later savepoint `b` and its +400, then the +800 lands and COMMIT keeps it.\n\n**Pitfall:** thinking ROLLBACK TO only undoes the last step. It rewinds to the named mark, however many statements and savepoints came after it.",
+				"98900.00: ROLLBACK TO `a` cancels everything after `a`, including the later savepoint `b` and its +400. Then the +800 is applied and COMMIT keeps it.\n\n**Pitfall:** thinking ROLLBACK TO only undoes the last step. It goes back to the named savepoint, however many statements and savepoints came after it.",
 		},
 		{
 			id: "ch21-ex08",
 			title: "Boss: The Cargo Pact",
 			story:
-				"Bram Kettle buys a hold full of Space Kelp. His mentor Grimble takes a commission, and the dock chief offers a loyalty refund... until Customs vetoes it. One pact, or the trade never happened.",
+				"Combines an INSERT and several UPDATEs in one transaction with two savepoints and a partial rollback.",
 			prompt:
-				"In **one transaction**:\n\n1. Record the trade: ship **2** **buy**s **300** units of commodity **11** on planet **5** at **8.50** each, at **2078-01-15 09:00 UTC**.\n2. Bram (pilot **2**) pays for it: **2550.00** credits.\n3. Take a savepoint **commission**, then Bram pays Grimble (pilot **7**) a commission of **51.00** credits.\n4. Take a savepoint **refund**, then give Bram a refund of **255.00** credits.\n5. Customs vetoes the refund: roll back to the savepoint **refund**.\n6. **COMMIT**.",
+				"In **one transaction**:\n\n1. Insert the trade: ship **2** **buy**s **300** units of commodity **11** on planet **5** at **8.50** each, at **2078-01-15 09:00 UTC**.\n2. Pilot **2** (Bram) pays for it: subtract **2550.00** credits.\n3. Take a savepoint **commission**, then transfer a commission of **51.00** credits from pilot 2 to pilot **7** (Grimble).\n4. Take a savepoint **refund**, then add a refund of **255.00** credits to pilot 2.\n5. Cancel the refund: roll back to the savepoint **refund**.\n6. **COMMIT**.",
 			difficulty: 5,
 			kind: "transaction",
 			concepts: ["transactions-basics", "savepoints", "insert-basic"],
@@ -257,20 +243,20 @@ const chapter: Chapter = {
 			},
 			hints: [
 				"Write it step by step: BEGIN, INSERT, UPDATE, SAVEPOINT, two UPDATEs, SAVEPOINT, UPDATE, ROLLBACK TO, COMMIT.",
-				"The commission is a transfer: one UPDATE for Bram, one for Grimble. The refund only touches Bram.",
+				"The commission is a transfer: one UPDATE for pilot 2, one for pilot 7. The refund only changes pilot 2.",
 				"Step 5 is `ROLLBACK TO SAVEPOINT refund;`, not a plain ROLLBACK.",
 			],
 			explanation:
-				"The trade (id 41), the payment and the commission survive: Bram ends at 9899.50, Grimble at 27801.00. Only the refund, after the last savepoint, is undone.\n\n**Pitfall:** a plain `ROLLBACK` at step 5 wipes the whole pact, trade included; `ROLLBACK TO SAVEPOINT commission` would also cancel Grimble's fee.",
+				"The trade (id 41), the payment and the commission are kept: pilot 2 ends at 9899.50, pilot 7 at 27801.00. Only the refund, after the last savepoint, is undone.\n\n**Pitfall:** a plain `ROLLBACK` at step 5 discards the whole transaction, trade included; `ROLLBACK TO SAVEPOINT commission` would also cancel the commission.",
 			boss: true,
 		},
 	],
 	practice: [
 		{
 			id: "ch21-pr01",
-			title: "Lanes in a pact",
+			title: "Insert two routes in a transaction",
 			prompt:
-				"Inside **BEGIN** / **COMMIT**, open the lanes **11 → 2** and **2 → 11**, both **3.9** light years, no hazard.",
+				"Inside **BEGIN** / **COMMIT**, add the routes **11 → 2** and **2 → 11**, both **3.9** light years, no hazard.",
 			difficulty: 1,
 			kind: "transaction",
 			concepts: ["transactions-basics"],
@@ -279,18 +265,17 @@ const chapter: Chapter = {
 			check: { type: "state", verifySql: ROUTES_STATE },
 			hints: [
 				"BEGIN, two INSERTs, COMMIT.",
-				"Each lane is one row of routes.",
+				"Each route is one row of routes.",
 				"INSERT INTO routes (from_planet_id, to_planet_id, distance_ly) VALUES (11, 2, 3.9);",
 			],
 			explanation:
-				"A lane open in only one direction would strand ships, so both inserts belong to one pact.\n\n**Pitfall:** ending with ROLLBACK by habit: nothing would be opened.",
+				"A route in only one direction would leave the data inconsistent, so both inserts belong to one transaction.\n\n**Pitfall:** ending with ROLLBACK out of habit: nothing would be inserted.",
 		},
 		{
 			id: "ch21-pr02",
-			title: "The payroll that never paid",
-			story: "The cadets complain: the clerk's payroll script ran without error, yet nobody got paid.",
+			title: "Fix: transaction ends with ROLLBACK",
 			prompt:
-				"Fix the script so every **cadet** really gets **50** credits (a NULL balance stays NULL).",
+				"The starter runs without error, but no credits change. Fix the script so every **cadet** gets **50** credits (a NULL balance stays NULL).",
 			difficulty: 1,
 			kind: "transaction",
 			concepts: ["transactions-basics"],
@@ -305,11 +290,11 @@ const chapter: Chapter = {
 				"End with COMMIT.",
 			],
 			explanation:
-				"COMMIT makes the payroll permanent; ROLLBACK discarded it.\n\n**Pitfall:** \"no error\" does not mean \"saved\". Always look at how the transaction ends.",
+				"COMMIT makes the update permanent; ROLLBACK discarded it.\n\n**Pitfall:** \"no error\" does not mean \"saved\". Always check how the transaction ends.",
 		},
 		{
 			id: "ch21-pr03",
-			title: "Back to the first mark",
+			title: "Roll back to the first savepoint",
 			prompt:
 				"In **one transaction**: set **Medical Gel** to **220.00**; savepoint **one**; set **Robot Parts** to **99.00**; savepoint **two**; set **Synth Silk** to **270.00**; roll back to savepoint **one**; COMMIT.",
 			difficulty: 2,
@@ -324,13 +309,13 @@ const chapter: Chapter = {
 				"ROLLBACK TO SAVEPOINT one; COMMIT;",
 			],
 			explanation:
-				"Only Medical Gel changes: everything after savepoint `one`, savepoint `two` included, is rewound.\n\n**Pitfall:** `ROLLBACK TO SAVEPOINT two` would keep Robot Parts at 99.00.",
+				"Only Medical Gel changes: everything after savepoint `one`, savepoint `two` included, is undone.\n\n**Pitfall:** `ROLLBACK TO SAVEPOINT two` would keep Robot Parts at 99.00.",
 		},
 		{
 			id: "ch21-pr04",
-			title: "A ship with no hold",
+			title: "CHECK violation on an INSERT",
 			prompt:
-				"Write the INSERT that registers a ship **Paper Moon** with cargo capacity **0**. It must **fail**: read the error code.",
+				"Write the INSERT that adds a ship **Paper Moon** with cargo capacity **0**. It must **fail**: read the error code.",
 			difficulty: 1,
 			kind: "mutation",
 			concepts: ["constraint-errors"],
@@ -342,13 +327,13 @@ const chapter: Chapter = {
 				"INSERT INTO ships (name, cargo_capacity) VALUES ('Paper Moon', 0);",
 			],
 			explanation:
-				"23514: the CHECK `cargo_capacity > 0` refuses a hold of size zero. NULL would pass: a CHECK only rejects FALSE, not unknown.\n\n**Pitfall:** confusing 23514 (a rule on the value) with 23502 (a missing value).",
+				"23514: the CHECK `cargo_capacity > 0` rejects a capacity of zero. NULL would pass: a CHECK only rejects FALSE, not unknown.\n\n**Pitfall:** confusing 23514 (a rule on the value) with 23502 (a missing value).",
 		},
 		{
 			id: "ch21-pr05",
-			title: "A pilot from nowhere in time",
+			title: "NOT NULL violation on an INSERT",
 			prompt:
-				"Write the INSERT that registers pilot **Nemo**, a **Human** **cadet**, without giving `joined_at`. It must **fail**: read the error code.",
+				"Write the INSERT that adds pilot **Nemo**, a **Human** **cadet**, without giving `joined_at`. It must **fail**: read the error code.",
 			difficulty: 1,
 			kind: "mutation",
 			concepts: ["constraint-errors"],
@@ -360,13 +345,13 @@ const chapter: Chapter = {
 				"INSERT INTO pilots (name, species, rank) VALUES ('Nemo', 'Human', 'cadet');",
 			],
 			explanation:
-				"23502 is a **not-null violation**: leaving out a NOT NULL column without a default stores NULL, which is refused.\n\n**Pitfall:** \"fixing\" it with a fake date. Ask for the real one.",
+				"23502 is a **not-null violation**: leaving out a NOT NULL column without a default stores NULL, which is rejected.\n\n**Pitfall:** \"fixing\" it with an invented date. Supply the real value.",
 		},
 		{
 			id: "ch21-pr06",
-			title: "The phantom ship",
+			title: "Foreign key violation on an INSERT",
 			prompt:
-				"Write the INSERT that records a trade for ship **99** (it does not exist): planet 1, commodity 1, side buy, qty 1, unit price 1.00, at 2078-01-01 00:00 UTC. It must **fail**: read the error code.",
+				"Write the INSERT that adds a trade for ship **99** (it does not exist): planet 1, commodity 1, side buy, qty 1, unit price 1.00, at 2078-01-01 00:00 UTC. It must **fail**: read the error code.",
 			difficulty: 2,
 			kind: "mutation",
 			concepts: ["constraint-errors"],
@@ -379,13 +364,13 @@ const chapter: Chapter = {
 				"VALUES (99, 1, 1, 'buy', 1, 1.00, '2078-01-01 00:00:00+00')",
 			],
 			explanation:
-				"23503: `Key (ship_id)=(99) is not present in table \"ships\"`. Foreign keys refuse rows pointing at nothing.\n\n**Pitfall:** creating a fake ship 99 to silence the error. Fix the id instead.",
+				"23503: `Key (ship_id)=(99) is not present in table \"ships\"`. Foreign keys reject rows that reference a missing row.\n\n**Pitfall:** creating a placeholder ship 99 to silence the error. Fix the id instead.",
 		},
 		{
 			id: "ch21-pr07",
-			title: "Two Novas",
+			title: "Unique violation on a callsign",
 			prompt:
-				"Write the INSERT that registers pilot **Nova Jr**, a **Human** **cadet** joined at **2078-01-01 00:00 UTC**, with callsign **Nova**. It must **fail**: read the error code.",
+				"Write the INSERT that adds pilot **Nova Jr**, a **Human** **cadet** joined at **2078-01-01 00:00 UTC**, with callsign **Nova**. It must **fail**: read the error code.",
 			difficulty: 2,
 			kind: "mutation",
 			concepts: ["constraint-errors"],
@@ -394,11 +379,11 @@ const chapter: Chapter = {
 			check: { type: "error", sqlstate: "23505" },
 			hints: [
 				"A normal INSERT with five columns.",
-				"callsign is UNIQUE and Ada already flies as Nova.",
+				"callsign is UNIQUE and pilot 1 already has the callsign Nova.",
 				"VALUES ('Nova Jr', 'Human', 'cadet', 'Nova', '2078-01-01 00:00:00+00')",
 			],
 			explanation:
-				"23505: `Key (callsign)=(Nova) already exists.` A NULL callsign would have been fine: Dax, Lumen and Umbra-3 already share NULL callsigns.\n\n**Pitfall:** `'nova'` in lower case is a different text and would pass the unique check.",
+				"23505: `Key (callsign)=(Nova) already exists.` A NULL callsign would have been accepted: Dax, Lumen and Umbra-3 already have NULL callsigns.\n\n**Pitfall:** `'nova'` in lower case is a different text value and would pass the unique check.",
 		},
 	],
 };

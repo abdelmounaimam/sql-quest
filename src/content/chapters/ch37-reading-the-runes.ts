@@ -16,7 +16,7 @@ const chapter: Chapter = {
 	tier: "adept",
 	track: "performance",
 	title: "Reading the Runes",
-	subtitle: "EXPLAIN, plan nodes, estimates vs reality, and how tables get joined",
+	subtitle: "EXPLAIN, EXPLAIN ANALYZE, scan nodes, estimates vs actual rows, join algorithms",
 	emoji: "📖",
 	datasetId: "dungeon",
 	concepts: ["explain-basics", "explain-analyze", "scan-types", "join-algorithms"],
@@ -24,13 +24,13 @@ const chapter: Chapter = {
 	lesson: [
 		{
 			kind: "explain",
-			title: "The engine's runes",
-			body: "Deep under the leaderboard ticks the Clockwork Engine, and `run_archive` (100 000 runs) is its heaviest gear. Before changing anything, read how a query runs:\n```sql\nEXPLAIN SELECT ...;\n```\nYou get the **plan**: a tree of nodes. Read it from the most indented line up: children feed their parent. Each node shows a **cost** (planner units, not milliseconds) and **rows**, an *estimate*.",
+			title: "EXPLAIN and the query plan",
+			body: "The `run_archive` table holds 100 000 runs, enough for performance to matter. Before you change anything, look at how a query runs:\n```sql\nEXPLAIN SELECT ...;\n```\nThe result is the **plan**: a tree of nodes. Read it from the most indented line up: children feed their parent. Each node shows a **cost** (planner units, not milliseconds) and **rows**, an *estimate*.",
 		},
 		{
 			kind: "example",
-			title: "Your first rune",
-			body: "One node: a **Seq Scan** reads every row and keeps those passing the **Filter**. The `rows=` estimate is close to 2900: the planner guesses from statistics, it has not counted anything.",
+			title: "A single node plan",
+			body: "One node: a **Seq Scan** reads every row and keeps those that pass the **Filter**. The `rows=` estimate is close to 2900: the planner guesses from statistics, it has not counted anything.",
 			sql: "EXPLAIN SELECT * FROM run_archive WHERE player_id = 7;",
 		},
 		{
@@ -45,17 +45,17 @@ const chapter: Chapter = {
 			],
 			answerIndex: 1,
 			explanation:
-				"Costs are abstract units (roughly: one sequential page read = 1). The first number is the cost before the first row comes out, the second the cost to return them all. They let the planner compare plans, they are not a stopwatch.",
+				"Costs are abstract units (roughly: one sequential page read = 1). The first number is the cost before the first row comes out, the second the cost to return all rows. They let the planner compare plans; they are not a time measurement.",
 		},
 		{
 			kind: "explain",
-			title: "EXPLAIN ANALYZE: estimates meet reality",
-			body: "`EXPLAIN ANALYZE` **runs** the query and adds what really happened: `actual rows`, `loops`, `Rows Removed by Filter`, and `Buffers` (8 kB pages touched).\n\nIn this browser engine timings are meaningless, so add `COSTS OFF, TIMING OFF` and trust rows and buffers.\n\nIt really runs: an `EXPLAIN ANALYZE DELETE` deletes. Wrap it in `BEGIN; ... ROLLBACK;`.",
+			title: "EXPLAIN ANALYZE: estimates vs actual rows",
+			body: "`EXPLAIN ANALYZE` **runs** the query and adds what really happened: `actual rows`, `loops`, `Rows Removed by Filter`, and `Buffers` (8 kB pages touched).\n\nIn this browser engine timings are meaningless, so add `COSTS OFF, TIMING OFF` and rely on rows and buffers.\n\nThe statement really executes: an `EXPLAIN ANALYZE DELETE` deletes rows. Wrap it in `BEGIN; ... ROLLBACK;`.",
 		},
 		{
 			kind: "example",
-			title: "Counting the southern runs",
-			body: "The Seq Scan kept 10 000 rows and threw 90 000 away. Look at `Buffers: shared hit=1786`: to find 10% of the runs, the engine touched **every** page of the table.",
+			title: "Rows removed and buffers",
+			body: "The Seq Scan kept 10 000 rows and discarded 90 000. Look at `Buffers: shared hit=1786`: to find 10% of the rows, Postgres touched **every** page of the table.",
 			sql: "EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF)\nSELECT count(*) FROM run_archive WHERE region = 'sa';",
 		},
 		{
@@ -65,19 +65,19 @@ const chapter: Chapter = {
 		},
 		{
 			kind: "example",
-			title: "Three queries, three scans",
-			body: "Surprise in the middle column: asking only for `id` lets the primary key index answer alone, an **Index Only Scan** you never asked for. Quotes inside the helper's text are doubled, as in any string.",
+			title: "Three queries, three scan types",
+			body: "Look at the middle column: selecting only `id` lets the primary key index answer alone, an **Index Only Scan**. Quotes inside the helper's text are doubled, as in any string literal.",
 			sql: "SELECT plan_nodes('SELECT * FROM run_archive WHERE id = 7') AS by_key,\n       plan_nodes('SELECT id FROM run_archive WHERE id < 100') AS keys_only,\n       plan_nodes('SELECT * FROM run_archive WHERE score > 100') AS everything;",
 		},
 		{
 			kind: "explain",
-			title: "How two tables meet",
-			body: "Three join algorithms:\n- **Nested Loop**: for each outer row, look up matches in the inner side. Great when the outer side is small and the inner side has an index.\n- **Hash Join**: build a hash table on the smaller input, stream the other. Great for big unsorted inputs.\n- **Merge Join**: walk two inputs already sorted on the key, like zipping two sorted lists.",
+			title: "Join algorithms",
+			body: "Postgres has three join algorithms:\n- **Nested Loop**: for each outer row, look up matches in the inner side. Best when the outer side is small and the inner side has an index.\n- **Hash Join**: build a hash table on the smaller input, then stream the other. Best for large unsorted inputs.\n- **Merge Join**: walk two inputs already sorted on the key, like merging two sorted lists.",
 		},
 		{
 			kind: "quiz",
 			question:
-				"A plan shows a **Nested Loop**: 50 outer rows, and for each one a **Seq Scan** of all 100 000 archived runs. What is the real problem?",
+				"A plan shows a **Nested Loop**: 50 outer rows, and for each one a **Seq Scan** of all 100 000 rows of `run_archive`. What is the real problem?",
 			choices: [
 				"Nested loops are always slow: force a hash join",
 				"The inner side has no index on the join key, so it reads 5 million rows",
@@ -86,11 +86,11 @@ const chapter: Chapter = {
 			],
 			answerIndex: 1,
 			explanation:
-				"A nested loop is the best join when each inner lookup is cheap, which means an index on the inner join key. With a Seq Scan inside, every loop rereads the table: 50 x 100 000 rows. Fix the inner side, don't blame the loop.",
+				"A nested loop is the best join when each inner lookup is cheap, which means an index on the inner join key. With a Seq Scan inside, every loop rereads the table: 50 x 100 000 rows. Fix the inner side instead of changing the join type.",
 		},
 		{
 			kind: "try",
-			title: "Your turn: read a range",
+			title: "Try it: plan of a range query",
 			prompt:
 				"Return the node types of the plan of `SELECT * FROM run_archive WHERE id BETWEEN 10 AND 20`, using `plan_nodes`.",
 			starterSql: "SELECT plan_nodes('SELECT * FROM run_archive');",
@@ -106,9 +106,7 @@ const chapter: Chapter = {
 	exercises: [
 		{
 			id: "ch37-ex01",
-			title: "The first rune",
-			story:
-				"The season commissioner hands you a dusty plan scroll: \"Before you touch the Engine, tell me how it hunts the Sunken Crypt runs.\"",
+			title: "Read the top node of a plan",
 			prompt:
 				"Run `EXPLAIN` on `SELECT * FROM run_archive WHERE dungeon_id = 2`, then answer with **one row, one column**: the node type at the top of the plan, as text (for example `SELECT 'Hash Join';`).",
 			difficulty: 1,
@@ -123,13 +121,11 @@ const chapter: Chapter = {
 				"Replace the starter with SELECT '...'; holding those two words.",
 			],
 			explanation:
-				"Without an index on `dungeon_id`, the only way is a **Seq Scan** with a Filter: read all 100 000 rows, keep about 20 000.\n\n**Pitfall:** a Seq Scan is not a bug in itself. Reading a fifth of a table sequentially can beat jumping around an index. The plan tells you what happens, not whether it is bad.\n\n**Alternative:** `SELECT (plan_nodes('SELECT * FROM run_archive WHERE dungeon_id = 2'))[1];` reads the same rune with the helper.",
+				"Without an index on `dungeon_id`, the only option is a **Seq Scan** with a Filter: read all 100 000 rows, keep about 20 000.\n\n**Pitfall:** a Seq Scan is not a bug in itself. Reading a fifth of a table sequentially can be faster than jumping around an index. The plan tells you what happens, not whether it is bad.\n\n**Alternative:** `SELECT (plan_nodes('SELECT * FROM run_archive WHERE dungeon_id = 2'))[1];` reads the same node with the helper.",
 		},
 		{
 			id: "ch37-ex02",
-			title: "The planner's guess",
-			story:
-				"The anti-cheat bot wants to know how many southern runs the Engine *expects* before it reads a single page.",
+			title: "Read the estimated row count",
 			prompt:
 				"Run `EXPLAIN SELECT * FROM run_archive WHERE region = 'sa'` and answer with **one number**: the planner's **estimated** row count (the `rows=` value of the scan).",
 			difficulty: 2,
@@ -140,17 +136,16 @@ const chapter: Chapter = {
 			solutionSql: "SELECT estimated_rows('SELECT * FROM run_archive WHERE region = ''sa''');",
 			check: { type: "result" },
 			hints: [
-				"The estimate sits inside the parentheses of the plan line.",
+				"The estimate is inside the parentheses of the plan line.",
 				"Not the cost, not the width: the number after `rows=`.",
-				"Answer with SELECT <that number>; (it is an estimate, so it is rarely a round 10000). The mission's helper estimated_rows('<query>') can read it for you.",
+				"Answer with SELECT <that number>; (it is an estimate, so it is rarely a round 10000). The exercise's helper estimated_rows('<query>') can read it for you.",
 			],
 			explanation:
-				"The planner never counts before planning: it multiplies the table size by the frequency of `'sa'` stored in the statistics gathered by `ANALYZE`. That sample is random, so the guess lands close to the true 10 000 without hitting it.\n\n**Pitfall:** answering with `count(*)` gives the truth, not the guess. Comparing the two is exactly what EXPLAIN ANALYZE is for.\n\n**Alternative:** this mission's helper `estimated_rows('<query>')` runs `EXPLAIN (FORMAT JSON)` and returns its `Plan Rows` field.",
+				"The planner never counts before planning: it multiplies the table size by the frequency of `'sa'` stored in the statistics gathered by `ANALYZE`. That sample is random, so the estimate lands close to the true 10 000 without matching it.\n\n**Pitfall:** answering with `count(*)` gives the actual count, not the estimate. Comparing the two is exactly what EXPLAIN ANALYZE is for.\n\n**Alternative:** this exercise's helper `estimated_rows('<query>')` runs `EXPLAIN (FORMAT JSON)` and returns its `Plan Rows` field.",
 		},
 		{
 			id: "ch37-ex03",
-			title: "What really happened",
-			story: "The commissioner wants facts, not guesses, about the runs still in progress.",
+			title: "Read actual rows and rows removed",
 			prompt:
 				"Use `EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF)` on `SELECT * FROM run_archive WHERE status = 'in_progress'`, then answer with one row: the scan's **actual rows** and its **Rows Removed by Filter**, in that order.",
 			difficulty: 2,
@@ -162,19 +157,17 @@ const chapter: Chapter = {
 			check: { type: "result" },
 			hints: [
 				"Run the starter: the scan line shows `actual rows=...`.",
-				"The line under the Filter tells how many rows were read and thrown away.",
+				"The line under the Filter tells how many rows were read and discarded.",
 				"SELECT <actual rows>, <rows removed>;",
 			],
 			explanation:
-				"2 000 rows kept, 98 000 read for nothing: 98% wasted work. That ratio is the first thing to look for in an EXPLAIN ANALYZE, and the reason Index Forging (next chapter) exists.\n\n**Pitfall:** `rows=` in plain EXPLAIN is only the estimate. Only ANALYZE shows `actual rows`.",
+				"2 000 rows kept, 98 000 read for nothing: 98% wasted work. That ratio is the first thing to look for in an EXPLAIN ANALYZE, and the reason for indexes (next chapter, *Index Forging*).\n\n**Pitfall:** `rows=` in plain EXPLAIN is only the estimate. Only ANALYZE shows `actual rows`.",
 		},
 		{
 			id: "ch37-ex04",
-			title: "The rune that ate the archive",
-			story:
-				"An apprentice wanted to see how the Engine deletes abandoned runs. He ran the starter... and 10 000 runs vanished from the archive. Reset, then do it safely.",
+			title: "EXPLAIN ANALYZE a DELETE safely",
 			prompt:
-				"Fix the starter so the commissioner still gets the **real execution numbers** of the DELETE (EXPLAIN **ANALYZE**), but the abandoned runs **survive**.",
+				"The starter runs `EXPLAIN ANALYZE` on a DELETE, which really deletes the abandoned runs. Fix it so you still get the **real execution numbers** of the DELETE (EXPLAIN **ANALYZE**), but the abandoned runs **remain** in the table.",
 			difficulty: 3,
 			kind: "transaction",
 			concepts: ["explain-analyze"],
@@ -192,12 +185,11 @@ const chapter: Chapter = {
 				"BEGIN; then the EXPLAIN ANALYZE DELETE ...; then ROLLBACK;",
 			],
 			explanation:
-				"Inside `BEGIN ... ROLLBACK` the DELETE runs for real (so the numbers are real), then the rollback undoes it. The statistics counter `n_tup_del` still remembers 10 000 deleted rows: that is how this check knows the plan ran.\n\n**Pitfall:** plain `EXPLAIN DELETE` is safe but shows only estimates; `EXPLAIN ANALYZE DELETE` without a transaction is a real DELETE.\n\n**Alternative:** `START TRANSACTION` and `ABORT` are synonyms.",
+				"Inside `BEGIN ... ROLLBACK` the DELETE runs for real (so the numbers are real), then the rollback undoes it. The statistics counter `n_tup_del` still records 10 000 deleted rows: that is how this check knows the plan ran.\n\n**Pitfall:** plain `EXPLAIN DELETE` is safe but shows only estimates; `EXPLAIN ANALYZE DELETE` without a transaction is a real DELETE.\n\n**Alternative:** `START TRANSACTION` and `ABORT` are synonyms.",
 		},
 		{
 			id: "ch37-ex05",
-			title: "Three keys, three doors",
-			story: "The Engine has three ways into the archive. Predict which one each query takes.",
+			title: "Predict three scan types",
 			prompt:
 				"Answer with one row of three text columns: the scan node type the planner picks for\n\n1. `SELECT * FROM run_archive WHERE id = 42`\n2. `SELECT id FROM run_archive WHERE id < 100`\n3. `SELECT * FROM run_archive WHERE score > 5000`",
 			difficulty: 2,
@@ -217,11 +209,9 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch37-ex06",
-			title: "Two bitmaps, one answer",
-			story:
-				"The previous engineer forged one index on `player_id` and another on `dungeon_id`. Watch what the planner does with both.",
+			title: "Read a BitmapAnd plan",
 			prompt:
-				"Look at the plan of `SELECT * FROM run_archive WHERE player_id = 20 AND dungeon_id = 3`. Answer with one row: the **name of the node that combines the two bitmaps** (text), and the **number of Bitmap Index Scan nodes** in the plan.",
+				"Two indexes exist: one on `player_id`, one on `dungeon_id`. Look at the plan of `SELECT * FROM run_archive WHERE player_id = 20 AND dungeon_id = 3`. Answer with one row: the **name of the node that combines the two bitmaps** (text), and the **number of Bitmap Index Scan nodes** in the plan.",
 			difficulty: 2,
 			kind: "query",
 			concepts: ["scan-types"],
@@ -235,15 +225,13 @@ const chapter: Chapter = {
 				"SELECT '<that node>', <how many Bitmap Index Scan>;",
 			],
 			explanation:
-				"Each Bitmap Index Scan marks the pages holding matches; **BitmapAnd** keeps the pages present in both bitmaps; the Bitmap Heap Scan then reads only those pages. With `OR`, the node is a BitmapOr.\n\n**Pitfall:** believing two single-column indexes equal one index on both columns. It works, but both indexes are scanned in full for their value. Next chapter forges the better key.",
+				"Each Bitmap Index Scan marks the pages holding matches; **BitmapAnd** keeps the pages present in both bitmaps; the Bitmap Heap Scan then reads only those pages. With `OR`, the node is a BitmapOr.\n\n**Pitfall:** assuming two single column indexes equal one index on both columns. It works, but each index is scanned in full for its value. The next chapter builds the better composite index.",
 		},
 		{
 			id: "ch37-ex07",
-			title: "Three handshakes",
-			story:
-				"The archive keeper indexed `run_archive(player_id)`. Now the Engine has a choice for every join.",
+			title: "Predict three join algorithms",
 			prompt:
-				"Answer with one row of three text columns: the **join node** the planner picks for\n\n1. `SELECT r.id, p.handle FROM run_archive r JOIN players p ON p.id = r.player_id`\n2. the same query with `WHERE p.id = 7` added\n3. `SELECT r.id, a.score FROM runs r JOIN run_archive a ON a.id = r.id`",
+				"An index on `run_archive(player_id)` exists. Answer with one row of three text columns: the **join node** the planner picks for\n\n1. `SELECT r.id, p.handle FROM run_archive r JOIN players p ON p.id = r.player_id`\n2. the same query with `WHERE p.id = 7` added\n3. `SELECT r.id, a.score FROM runs r JOIN run_archive a ON a.id = r.id`",
 			difficulty: 3,
 			kind: "query",
 			concepts: ["join-algorithms"],
@@ -254,17 +242,17 @@ const chapter: Chapter = {
 			check: { type: "result" },
 			hints: [
 				"Check each query with plan_nodes: the join is the top node.",
-				"All runs: big unsorted input. One player: few outer rows and an index inside. Live runs by id: both sides can come out sorted.",
+				"All rows: large unsorted input. One player: few outer rows and an index on the inner side. `runs` joined by id: both sides can come out sorted.",
 				"(plan_nodes('...'))[1] for each, or the three names you read.",
 			],
 			explanation:
-				"All 100 000 runs: build a hash of 25 players, stream the archive (**Hash Join**). One player: one outer row, one index lookup (**Nested Loop**). The 50 live runs by id: the archive's primary key already delivers ids in order, so the planner sorts 50 rows and zips the two lists (**Merge Join**).\n\n**Pitfall:** \"Hash Join is the fast one\". Each algorithm wins in its own situation; the planner picks by estimated rows.",
+				"All 100 000 rows: build a hash of 25 players, stream the archive (**Hash Join**). One player: one outer row, one index lookup (**Nested Loop**). The 50 rows of `runs` by id: the archive's primary key already returns ids in order, so the planner sorts 50 rows and merges the two lists (**Merge Join**).\n\n**Pitfall:** \"Hash Join is the fast one\". Each algorithm wins in its own situation; the planner picks by estimated rows.",
 		},
 		{
 			id: "ch37-ex08",
 			title: "Boss: The Rune Reader",
 			story:
-				"The commissioner drops four rune scrolls on your desk. \"Before the Engine is overhauled, I want a report on every one of them, in one query.\"",
+				"Combines plan_nodes, array access, ANY and CASE to summarise four query plans in one query.",
 			prompt:
 				"The starter lists four labelled queries. Return one row per query with:\n\n- **label**;\n- **top_node**: the node type at the top of its plan;\n- **join_node**: `Nested Loop`, `Hash Join` or `Merge Join` if the plan contains one, else NULL;\n- **uses_index**: true when any node of the plan has `Index` in its name.\n\nAn index on `run_archive(player_id)` already exists.",
 			difficulty: 4,
@@ -279,17 +267,17 @@ const chapter: Chapter = {
 			hints: [
 				"Compute plan_nodes once per query in a CTE, then read the array in the outer SELECT.",
 				"`nodes[1]` is the top node; `'Hash Join' = ANY (nodes)` tests membership; a CASE picks the join.",
-				"For uses_index, glue the array into text with array_to_string(nodes, ',') and test LIKE '%Index%'.",
+				"For uses_index, join the array into text with array_to_string(nodes, ',') and test LIKE '%Index%'.",
 			],
 			explanation:
-				"The vault key is one Index Scan; the eu crowd (60% of runs) is a Seq Scan with no index at all; the owl hunt is a Nested Loop whose inner side uses the player index through a bitmap; the grand census aggregates a Hash Join of two Seq Scans. Reading these four shapes at a glance is the whole skill of this chapter.\n\n**Pitfall:** `nodes[2]` or a LIKE on `'%Join%'` alone misses the Nested Loop, whose name has no *Join*.\n\n**Alternative:** `EXISTS (SELECT 1 FROM unnest(nodes) n WHERE n LIKE '%Index%')` for uses_index.",
+				"`vault key` is one Index Scan; `eu crowd` (60% of rows) is a Seq Scan with no index at all; `owl hunt` is a Nested Loop whose inner side uses the player index through a bitmap; `grand census` aggregates a Hash Join of two Seq Scans. Recognising these four shapes quickly is the core skill of this chapter.\n\n**Pitfall:** `nodes[2]` or a LIKE on `'%Join%'` alone misses the Nested Loop, whose name has no *Join*.\n\n**Alternative:** `EXISTS (SELECT 1 FROM unnest(nodes) n WHERE n LIKE '%Index%')` for uses_index.",
 			boss: true,
 		},
 	],
 	practice: [
 		{
 			id: "ch37-pr01",
-			title: "A small guess",
+			title: "Estimate on a small table",
 			prompt:
 				"Answer with one number: the **estimated rows** in the plan of `SELECT * FROM players`.",
 			difficulty: 1,
@@ -303,11 +291,11 @@ const chapter: Chapter = {
 				"SELECT <that number>;",
 			],
 			explanation:
-				"25: on a small table ANALYZE reads every row, so the estimate is exact. On `run_archive` it samples, and the guesses get fuzzy.",
+				"25: on a small table ANALYZE reads every row, so the estimate is exact. On `run_archive` it samples, and the estimates are less precise.",
 		},
 		{
 			id: "ch37-pr02",
-			title: "Who sits on top",
+			title: "Top node of an aggregate",
 			prompt:
 				"Answer with the node type at the **top** of the plan of `SELECT count(*) FROM run_archive`, as text.",
 			difficulty: 1,
@@ -321,11 +309,11 @@ const chapter: Chapter = {
 				"SELECT '<top node name>';",
 			],
 			explanation:
-				"The Seq Scan produces 100 000 rows, the **Aggregate** above it eats them and returns one. Plans read bottom up: data flows from the leaves to the root.",
+				"The Seq Scan produces 100 000 rows, the **Aggregate** above it consumes them and returns one. Plans read bottom up: data flows from the leaves to the root.",
 		},
 		{
 			id: "ch37-pr03",
-			title: "The lazy merge",
+			title: "Actual rows in a Merge Join",
 			prompt:
 				"Run `EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF) SELECT r.id, a.score FROM runs r JOIN run_archive a ON a.id = r.id;` and answer with one number: the **actual rows** produced by the Index Scan on `run_archive`.",
 			difficulty: 2,
@@ -339,11 +327,11 @@ const chapter: Chapter = {
 				"SELECT <that number>;",
 			],
 			explanation:
-				"Only 51 of 100 000 rows! A Merge Join stops reading the archive as soon as it passes the largest id of the 50 live runs. Actual rows reveal work the estimates never show.",
+				"Only 51 of 100 000 rows. A Merge Join stops reading the archive as soon as it passes the largest id in `runs`. Actual rows reveal work that the estimates never show.",
 		},
 		{
 			id: "ch37-pr04",
-			title: "Pages for one key",
+			title: "Buffers for a primary key lookup",
 			prompt:
 				"Run `EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF) SELECT * FROM run_archive WHERE id = 42;` and answer with the number of **shared hit** buffers of the Index Scan.",
 			difficulty: 2,
@@ -357,11 +345,11 @@ const chapter: Chapter = {
 				"SELECT <that number>;",
 			],
 			explanation:
-				"3 pages: the root of the B-tree, one leaf, and the table page holding the row. A Seq Scan for the same row touches 1786. Buffers are this world's stopwatch: they do not depend on the machine.",
+				"3 pages: the root of the B-tree, one leaf, and the table page holding the row. A Seq Scan for the same row touches 1786. Buffers are the reliable measure here: they do not depend on the machine.",
 		},
 		{
 			id: "ch37-pr05",
-			title: "Crowds and corners",
+			title: "Selectivity and scan choice",
 			prompt:
 				"An index on `run_archive(region)` exists. Answer with one row of two text columns: the **top node** of the plan of `SELECT * FROM run_archive WHERE region = 'eu'`, then of the same query with `region = 'sa'`.",
 			difficulty: 2,
@@ -372,16 +360,16 @@ const chapter: Chapter = {
 				"SELECT (plan_nodes('SELECT * FROM run_archive WHERE region = ''eu'''))[1],\n       (plan_nodes('SELECT * FROM run_archive WHERE region = ''sa'''))[1];",
 			check: { type: "result" },
 			hints: [
-				"About 60% of runs are eu, 10% are sa.",
+				"About 60% of rows are eu, 10% are sa.",
 				"Use plan_nodes on both queries.",
 				"(plan_nodes('SELECT * FROM run_archive WHERE region = ''eu'''))[1], and the same for 'sa'.",
 			],
 			explanation:
-				"`eu`: Seq Scan, because reading 60% of the rows through an index costs more than reading the table. `sa`: Bitmap Heap Scan, the index pays off for 10%. Same index, two verdicts: selectivity decides.",
+				"`eu`: Seq Scan, because reading 60% of the rows through an index costs more than reading the table. `sa`: Bitmap Heap Scan, the index pays off for 10%. Same index, two different plans: selectivity decides.",
 		},
 		{
 			id: "ch37-pr06",
-			title: "Forbidden handshakes",
+			title: "Disable join algorithms",
 			prompt:
 				"Run `SET enable_hashjoin = off;` and `SET enable_nestloop = off;`, then answer with the **top node** of the plan of `SELECT r.id, p.handle FROM run_archive r JOIN players p ON p.id = r.player_id`, as text.",
 			difficulty: 2,
@@ -396,11 +384,11 @@ const chapter: Chapter = {
 				"(plan_nodes('SELECT r.id, p.handle FROM run_archive r JOIN players p ON p.id = r.player_id'))[1]",
 			],
 			explanation:
-				"**Merge Join**, with a Sort of 100 000 runs underneath: the price of zipping inputs that are not already ordered. `enable_*` settings are a lab tool for comparing plans, never a production fix.",
+				"**Merge Join**, with a Sort of 100 000 rows underneath: the cost of merging inputs that are not already ordered. `enable_*` settings are a testing tool for comparing plans, never a production fix.",
 		},
 		{
 			id: "ch37-pr07",
-			title: "One owl, one loop",
+			title: "Nested Loop with an inner index",
 			prompt:
 				"An index on `run_archive(player_id)` exists. Answer with the **top node** of the plan of `SELECT p.handle, r.score FROM players p JOIN run_archive r ON r.player_id = p.id WHERE p.handle = 'Lua'`, as text.",
 			difficulty: 2,
@@ -416,7 +404,7 @@ const chapter: Chapter = {
 				"(plan_nodes('...'))[1] with the quotes around Lua doubled.",
 			],
 			explanation:
-				"**Nested Loop**: one outer row (Lua), one index lookup for her runs. Drop the `player_id` index and the same query becomes a Hash Join over the whole archive.",
+				"**Nested Loop**: one outer row (Lua), one index lookup for that player's rows. Drop the `player_id` index and the same query becomes a Hash Join over the whole archive.",
 		},
 	],
 };

@@ -10,7 +10,7 @@ const chapter: Chapter = {
 	tier: "adept",
 	track: "types",
 	title: "Shaped Data",
-	subtitle: "Enums that sort themselves, domains that guard, composites and arrays",
+	subtitle: "Enum, domain and composite types, arrays",
 	emoji: "🧬",
 	datasetId: "guild",
 	concepts: ["enum-types", "domain-types", "composite-types", "arrays"],
@@ -18,13 +18,13 @@ const chapter: Chapter = {
 	lesson: [
 		{
 			kind: "explain",
-			title: "Enums: labels with a rank",
-			body: "An **enum** is a closed list of labels, declared once:\n```sql\nCREATE TYPE rarity AS ENUM\n  ('common', 'uncommon', 'rare', 'epic', 'legendary');\n```\nEnums sort and compare in **declaration order**, not alphabetically: `'rare' > 'uncommon'` is true. A label outside the list is refused with **22P02**. The guild uses two: `hero_class` and `rarity`.",
+			title: "Enums: ordered labels",
+			body: "An **enum** is a closed list of labels, declared once:\n```sql\nCREATE TYPE rarity AS ENUM\n  ('common', 'uncommon', 'rare', 'epic', 'legendary');\n```\nEnums sort and compare in **declaration order**, not alphabetically: `'rare' > 'uncommon'` is true. A label outside the list is refused with **22P02**. This dataset has two enums: `hero_class` and `rarity`.",
 		},
 		{
 			kind: "example",
-			title: "The rarity ladder",
-			body: "Sorted by rank, rarest first. Alphabetically, `uncommon` would come last of all; here it sits just above `common`.",
+			title: "Sort by an enum",
+			body: "Sorted by rank, highest first. Alphabetically, `uncommon` would come last; here it comes just above `common`.",
 			sql: "SELECT name, rarity\nFROM items\nORDER BY rarity DESC, name;",
 		},
 		{
@@ -34,12 +34,12 @@ const chapter: Chapter = {
 			choices: ["bard", "warrior", "cleric", "It depends on the collation"],
 			answerIndex: 1,
 			explanation:
-				"Enums sort by declaration order, so `warrior` is first and `bard` last. Collations only apply to text; cast with `class::text` if you ever want alphabetical order.",
+				"Enums sort by declaration order, so `warrior` is first and `bard` last. Collations only apply to text; cast with `class::text` if you want alphabetical order.",
 		},
 		{
 			kind: "explain",
 			title: "Domains: a type with a rule",
-			body: "A **domain** is a base type plus constraints, reusable on any column:\n```sql\nCREATE DOMAIN gold_amount AS numeric(10,2)\n  CHECK (VALUE >= 0);\n```\nEvery column of type `gold_amount` now refuses negative gold with **23514**. Define the rule once instead of copying a CHECK into ten tables.",
+			body: "A **domain** is a base type plus constraints, reusable on any column:\n```sql\nCREATE DOMAIN gold_amount AS numeric(10,2)\n  CHECK (VALUE >= 0);\n```\nEvery column of type `gold_amount` now refuses negative values with **23514**. You define the rule once instead of copying a CHECK into ten tables.",
 		},
 		{
 			kind: "explain",
@@ -48,8 +48,8 @@ const chapter: Chapter = {
 		},
 		{
 			kind: "example",
-			title: "The nimblest heroes",
-			body: "Sorting on a field of a composite. Bors was never assessed: his whole `stats` is NULL, so are its fields.",
+			title: "Sort on a composite field",
+			body: "Sorting on a field of a composite. Bors has a NULL `stats`, so its fields are NULL too.",
 			sql: "SELECT name, stats, (stats).dex AS dex\nFROM heroes\nORDER BY (stats).dex DESC NULLS LAST, name\nLIMIT 4;",
 		},
 		{
@@ -63,17 +63,17 @@ const chapter: Chapter = {
 			choices: ["veteran", "leader", "NULL", "An error: index out of range"],
 			answerIndex: 2,
 			explanation:
-				"Postgres arrays are 1-based: `tags[1]` is `veteran`. An index outside the array is not an error, it quietly returns NULL, which makes 0-based habits hard to spot.",
+				"Postgres arrays are 1-based: `tags[1]` is `veteran`. An index outside the array is not an error: it returns NULL, which makes 0-based mistakes hard to spot.",
 		},
 		{
 			kind: "example",
-			title: "Scouts of the guild",
+			title: "Array containment with @>",
 			body: "`@>` reads *contains*: every hero whose tags include `scout`.",
 			sql: "SELECT name, tags\nFROM heroes\nWHERE tags @> '{scout}';",
 		},
 		{
 			kind: "try",
-			title: "Your turn: the first tag",
+			title: "First element of an array",
 			prompt: "Return each hero's **name** and the **first** element of their `tags` (NULL when there is none).",
 			starterSql: "SELECT name, tags[0]\nFROM heroes;",
 			solutionSql: "SELECT name, tags[1] FROM heroes;",
@@ -87,8 +87,7 @@ const chapter: Chapter = {
 	exercises: [
 		{
 			id: "ch30-ex01",
-			title: "Beyond the ordinary",
-			story: "The quartermaster only insures loot rarer than *uncommon*.",
+			title: "Items above a rarity",
 			prompt: "Return the **name** and **rarity** of every item whose rarity is **above** `uncommon` (rare, epic or legendary).",
 			difficulty: 1,
 			kind: "query",
@@ -101,12 +100,11 @@ const chapter: Chapter = {
 				"WHERE rarity > 'uncommon'",
 			],
 			explanation:
-				"The literal `'uncommon'` is read as a `rarity`, and enum comparison follows the declared order: rare, epic and legendary pass.\n\n**Pitfall:** `rarity::text > 'uncommon'` compares letters, and no rarity name sorts after *uncommon*: zero rows.\n\n**Alternative:** `rarity IN ('rare', 'epic', 'legendary')`, which breaks the day a new rarity is added.",
+				"The literal `'uncommon'` is read as a `rarity`, and enum comparison follows the declared order: rare, epic and legendary pass.\n\n**Pitfall:** `rarity::text > 'uncommon'` compares letters, and no rarity name sorts after *uncommon*: zero rows.\n\n**Alternative:** `rarity IN ('rare', 'epic', 'legendary')`, which breaks as soon as a new rarity is added.",
 		},
 		{
 			id: "ch30-ex02",
-			title: "Roll call by class",
-			story: "Aldric wants the muster roll in the order the founders declared the classes.",
+			title: "Heroes per class in enum order",
 			prompt:
 				"Return each **class** with its number of **heroes**, in **class declaration order** (warrior first).",
 			difficulty: 2,
@@ -120,13 +118,11 @@ const chapter: Chapter = {
 				"ORDER BY class",
 			],
 			explanation:
-				"`ORDER BY class` follows the enum: warrior, mage, rogue, cleric, ranger, bard.\n\n**Pitfall:** `ORDER BY class::text` sorts alphabetically and puts the bards first.\n\n**Alternative:** `ORDER BY array_position(enum_range(NULL::hero_class), class)` spells out the same rank.",
+				"`ORDER BY class` follows the enum: warrior, mage, rogue, cleric, ranger, bard.\n\n**Pitfall:** `ORDER BY class::text` sorts alphabetically and puts bard first.\n\n**Alternative:** `ORDER BY array_position(enum_range(NULL::hero_class), class)` spells out the same rank.",
 		},
 		{
 			id: "ch30-ex03",
-			title: "No debts in the ledger",
-			story:
-				"A prankster set someone's gold to a negative number last winter. The treasurer wants a rule that every purse column of the realm can reuse.",
+			title: "A domain that refuses negatives",
 			prompt:
 				"Create a domain **gold_amount** based on `numeric(10,2)` that refuses **negative** values, then change the type of `heroes.gold` to `gold_amount`. NULL gold must stay allowed.",
 			difficulty: 3,
@@ -146,12 +142,11 @@ const chapter: Chapter = {
 				"CREATE DOMAIN gold_amount AS numeric(10,2) CHECK (VALUE >= 0);",
 			],
 			explanation:
-				"The rule now lives in the type: any column declared `gold_amount` refuses negative gold with 23514, and a NULL still passes (CHECK accepts unknown).\n\n**Pitfall:** a plain `ALTER TABLE heroes ADD CHECK (gold >= 0)` protects one column only; the next table with gold needs it again.\n\n**Alternative:** add `NOT NULL` to the domain when a value is mandatory, but beware: outer joins can still produce NULLs of that type.",
+				"The rule now lives in the type: any column declared `gold_amount` refuses negative values with 23514, and a NULL still passes (CHECK accepts unknown).\n\n**Pitfall:** a plain `ALTER TABLE heroes ADD CHECK (gold >= 0)` protects one column only; the next table with a gold column needs it again.\n\n**Alternative:** add `NOT NULL` to the domain when a value is mandatory, but note that outer joins can still produce NULLs of that type.",
 		},
 		{
 			id: "ch30-ex04",
-			title: "The wise ones",
-			story: "Morwen the Grey is assembling a council of the wise.",
+			title: "Filter and sort on composite fields",
 			prompt:
 				"Return the **name**, **str**, **dex** and **wis** (the three fields of `stats`) of every hero whose wisdom is **15 or more**, wisdom descending, ties by name (byte order).",
 			difficulty: 2,
@@ -170,8 +165,7 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch30-ex05",
-			title: "The missing table",
-			story: "The old scribe wrote this query to list every hero's dexterity. Postgres complains about a table that does not exist.",
+			title: "Fix a composite field reference",
 			prompt: "Return the **name** and **dex** of every hero (heroes without stats show NULL).",
 			difficulty: 2,
 			kind: "query",
@@ -185,13 +179,11 @@ const chapter: Chapter = {
 				"(stats).dex",
 			],
 			explanation:
-				"The parentheses tell the parser that `stats` is a value, not a table name.\n\n**Pitfall:** renaming things or adding a table alias does not help; only `(stats).dex` (or `(h.stats).dex` with an alias) does.\n\n**Alternative:** if you really want a dex column, store it as a plain column: composites are handy for function results, less for tables.",
+				"The parentheses tell the parser that `stats` is a value, not a table name.\n\n**Pitfall:** renaming things or adding a table alias does not help; only `(stats).dex` (or `(h.stats).dex` with an alias) does.\n\n**Alternative:** if you need a dex column often, store it as a plain column: composites are handy for function results, less so in tables.",
 		},
 		{
 			id: "ch30-ex06",
-			title: "Scouts who shoot",
-			story:
-				"The Wandering Lanterns need a scout who is also an archer. The recruiter's query brings back half the guild.",
+			title: "Arrays that contain two values",
 			prompt: "Return the **name** of every hero whose tags include **both** `scout` **and** `archer`.",
 			difficulty: 2,
 			kind: "query",
@@ -200,18 +192,16 @@ const chapter: Chapter = {
 			solutionSql: "SELECT name FROM heroes WHERE tags @> '{scout,archer}';",
 			check: { type: "result" },
 			hints: [
-				"Run the starter: Cedric is a scout but carries no bow.",
+				"Run the starter: Cedric is tagged scout but not archer.",
 				"`&&` means *at least one in common*; you need *contains all*.",
 				"WHERE tags @> '{scout,archer}'",
 			],
 			explanation:
-				"`@>` checks that every element on the right is in the array: Zoë and Wren qualify.\n\n**Pitfall:** `&&` (overlap) or `'scout' = ANY(tags)` answers a weaker question and lets every scout in.\n\n**Alternative:** `'scout' = ANY(tags) AND 'archer' = ANY(tags)`. Only `@>` and `&&` can use a GIN index.",
+				"`@>` checks that every element on the right is in the array: Zoë and Wren qualify.\n\n**Pitfall:** `&&` (overlap) or `'scout' = ANY(tags)` answers a weaker question and returns every scout.\n\n**Alternative:** `'scout' = ANY(tags) AND 'archer' = ANY(tags)`. Only `@>` and `&&` can use a GIN index.",
 		},
 		{
 			id: "ch30-ex07",
-			title: "Blank sheets",
-			story:
-				"The archivist must tag every hero who has no tags yet, whether the field was left empty or never filled in.",
+			title: "NULL or empty arrays",
 			prompt: "Return the **name** of every hero who has **no tags at all**: tags NULL **or** an empty array.",
 			difficulty: 3,
 			kind: "query",
@@ -224,12 +214,11 @@ const chapter: Chapter = {
 				"WHERE tags IS NULL OR tags = '{}'",
 			],
 			explanation:
-				"Seven heroes: three never filled in (NULL) and four explicitly empty.\n\n**Pitfall:** `cardinality(tags) = 0` finds only the four empty arrays, and `tags IS NULL` only the three NULLs.\n\n**Alternative:** `coalesce(cardinality(tags), 0) = 0`. Note `array_length('{}', 1)` is NULL, not 0: a classic surprise.",
+				"Seven heroes: three never filled in (NULL) and four explicitly empty.\n\n**Pitfall:** `cardinality(tags) = 0` finds only the four empty arrays, and `tags IS NULL` only the three NULLs.\n\n**Alternative:** `coalesce(cardinality(tags), 0) = 0`. Note that `array_length('{}', 1)` is NULL, not 0: a common surprise.",
 		},
 		{
 			id: "ch30-ex08",
-			title: "The tag census",
-			story: "Which tags are fashionable this season?",
+			title: "Count heroes per tag",
 			prompt:
 				"Return each distinct **tag** with the number of **heroes** carrying it, most common first, ties by tag (byte order).",
 			difficulty: 3,
@@ -244,13 +233,13 @@ const chapter: Chapter = {
 				"FROM heroes, unnest(tags) AS t GROUP BY t ORDER BY count(*) DESC, t",
 			],
 			explanation:
-				"`unnest` in FROM acts like a join between each hero and its own tags. NULL and empty arrays yield no rows, which is exactly right here.\n\n**Pitfall:** `GROUP BY tags` groups whole arrays: `{scout,archer}` and `{archer}` would be different groups.\n\n**Alternative:** `SELECT unnest(tags) ...` in the select list works too, but FROM keeps the logic visible.",
+				"`unnest` in FROM acts like a join between each hero and its own tags. NULL and empty arrays yield no rows, which is what you want here.\n\n**Pitfall:** `GROUP BY tags` groups whole arrays: `{scout,archer}` and `{archer}` would be different groups.\n\n**Alternative:** `SELECT unnest(tags) ...` in the select list works too, but FROM keeps the logic visible.",
 		},
 		{
 			id: "ch30-ex09",
 			title: "Boss: The Class Registry",
 			story:
-				"The guild's charter must list, for every class, how many heroes it counts, how nimble they are and which tags they wear.",
+				"Combines enum ordering, an average over a composite field and a per group array of distinct tags.",
 			prompt:
 				"For each **class**, in declaration order, return:\n\n- **heroes**: the number of heroes of that class\n- **avg_dex**: their average dexterity rounded to **1 decimal** (heroes without stats ignored)\n- **tags**: the array of **distinct** tags used by heroes of that class, sorted A to Z",
 			difficulty: 4,
@@ -261,18 +250,18 @@ const chapter: Chapter = {
 			check: { type: "result", orderMatters: true },
 			hints: [
 				"Count and average on `heroes` grouped by class; the tags need their own unnest.",
-				"If you unnest tags in the main FROM, every hero is repeated once per tag (and heroes without tags vanish): counts and averages go wrong. Use a correlated subquery for the tags.",
+				"If you unnest tags in the main FROM, every hero is repeated once per tag (and heroes without tags disappear): counts and averages go wrong. Use a correlated subquery for the tags.",
 				"(SELECT array_agg(DISTINCT t ORDER BY t) FROM heroes h2, unnest(h2.tags) t WHERE h2.class = h.class)",
 			],
 			explanation:
-				"Grouping on the enum gives one row per class in charter order; `avg` skips Bors's NULL stats; the subquery unnests tags per class without disturbing the counts.\n\n**Pitfall:** `FROM heroes, unnest(tags)` then `count(*)` counts tags instead of heroes and loses the untagged: the mages jump from 5 to 8.\n\n**Alternative:** aggregate tags in a separate CTE grouped by class and join it to the counts.",
+				"Grouping on the enum gives one row per class in declaration order; `avg` skips Bors's NULL stats; the subquery unnests tags per class without changing the counts.\n\n**Pitfall:** `FROM heroes, unnest(tags)` then `count(*)` counts tags instead of heroes and loses the untagged heroes: the mage count jumps from 5 to 8.\n\n**Alternative:** aggregate tags in a separate CTE grouped by class and join it to the counts.",
 			boss: true,
 		},
 	],
 	practice: [
 		{
 			id: "ch30-pr01",
-			title: "The middle shelf",
+			title: "Enum range with BETWEEN",
 			prompt: "Return the **name** of every item whose rarity is **between uncommon and epic**, both included.",
 			difficulty: 1,
 			kind: "query",
@@ -288,9 +277,9 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch30-pr02",
-			title: "A new calling",
+			title: "Add an enum value",
 			prompt:
-				"The guild recognises a new class: add the value **paladin** to `hero_class`, placed **right after cleric**.",
+				"Add the value **paladin** to the `hero_class` enum, placed **right after cleric**.",
 			difficulty: 2,
 			kind: "ddl",
 			concepts: ["enum-types"],
@@ -306,9 +295,9 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch30-pr03",
-			title: "Not a real class",
+			title: "Insert an invalid enum label",
 			prompt:
-				"Try to recruit **Pip** as a `paladin` (level 1, joined `2026-10-31`) into `heroes` **without** changing the enum. The insert must be refused with the invalid label error.",
+				"Insert **Pip** into `heroes` with class `paladin` (level 1, joined `2026-10-31`) **without** changing the enum. The insert must be refused with the invalid label error.",
 			difficulty: 1,
 			kind: "mutation",
 			concepts: ["enum-types"],
@@ -319,11 +308,11 @@ const chapter: Chapter = {
 				"Columns: name, class, level, joined_on.",
 				"INSERT INTO heroes (name, class, level, joined_on) VALUES ('Pip', 'paladin', 1, '2026-10-31');",
 			],
-			explanation: "22P02, *invalid input value for enum hero_class*. The enum is a gatekeeper: typos never reach the table.",
+			explanation: "22P02, *invalid input value for enum hero_class*. The enum rejects typos before they reach the table.",
 		},
 		{
 			id: "ch30-pr04",
-			title: "Apprentice levels",
+			title: "A domain with a range check",
 			setupSql: TRY_SQLSTATE,
 			prompt:
 				"Create a domain **level_20** over `int` that only accepts values **from 1 to 20**, then a table **apprentices** with columns `name text` and `level level_20`.",
@@ -342,11 +331,11 @@ const chapter: Chapter = {
 				"Inside the CHECK, refer to the value as VALUE.",
 				"CHECK (VALUE BETWEEN 1 AND 20)",
 			],
-			explanation: "Levels 0 and 21 bounce off with 23514; 1 and 20 get in. The same domain can now guard heroes, apprentices and any future table.",
+			explanation: "Levels 0 and 21 are rejected with 23514; 1 and 20 are accepted. The same domain can now constrain heroes, apprentices and any future table.",
 		},
 		{
 			id: "ch30-pr05",
-			title: "Brawn over grace",
+			title: "Compare two composite fields",
 			prompt: "Return the **name** of every hero whose strength is **greater than** their dexterity.",
 			difficulty: 1,
 			kind: "query",
@@ -358,11 +347,11 @@ const chapter: Chapter = {
 				"Fields need parentheses around the column.",
 				"WHERE (stats).str > (stats).dex",
 			],
-			explanation: "Eight brawlers. Bors's NULL stats give an unknown comparison, so he is left out.",
+			explanation: "Eight heroes. Bors's NULL stats give an unknown comparison, so he is left out.",
 		},
 		{
 			id: "ch30-pr06",
-			title: "Forge a stat block",
+			title: "Build a composite value",
 			prompt:
 				"Return the **dex** field of the stat block built from str 10, dex 12, wis 14 (`ROW(10, 12, 14)::stat_block`).",
 			difficulty: 2,
@@ -379,7 +368,7 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch30-pr07",
-			title: "Kindred spirits",
+			title: "Arrays that overlap",
 			prompt:
 				"Return the **name** of every hero who shares **at least one tag** with Aldric Stormborn (hero 1), Aldric excluded.",
 			difficulty: 2,
@@ -393,11 +382,11 @@ const chapter: Chapter = {
 				"`&&` means overlap: at least one element in common.",
 				"WHERE tags && (SELECT tags FROM heroes WHERE id = 1) AND id <> 1",
 			],
-			explanation: "Brynja, Hilde and Ulfric (veterans) and Morwen (leader).",
+			explanation: "Brynja, Hilde and Ulfric (veteran) and Morwen (leader).",
 		},
 		{
 			id: "ch30-pr08",
-			title: "Counting tags",
+			title: "Count array elements",
 			prompt: "Return each hero's **name** and number of tags, showing **0** for heroes whose tags are NULL.",
 			difficulty: 2,
 			kind: "query",
@@ -413,7 +402,7 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch30-pr09",
-			title: "Fire in the blood",
+			title: "Test one value with ANY",
 			prompt: "Return the **name** of every hero tagged **fire**.",
 			difficulty: 1,
 			kind: "query",

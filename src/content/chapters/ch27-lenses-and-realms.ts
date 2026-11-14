@@ -54,19 +54,19 @@ const chapter: Chapter = {
 	lesson: [
 		{
 			kind: "explain",
-			title: "A lens on the tables",
-			body: "A **view** is a query with a name:\n```sql\nCREATE VIEW wanderers AS\nSELECT name, level FROM heroes WHERE guild_id IS NULL;\n```\nYou then `SELECT * FROM wanderers` like a table. A view **stores no rows**: each read runs the query again, so it is always up to date. It is a lens, not a copy.",
+			title: "Views",
+			body: "A **view** is a query with a name:\n```sql\nCREATE VIEW wanderers AS\nSELECT name, level FROM heroes WHERE guild_id IS NULL;\n```\nYou then `SELECT * FROM wanderers` like a table. A view **stores no rows**: each read runs the query again, so it is always up to date. It is a saved query, not a copy.",
 		},
 		{
 			kind: "example",
-			title: "Hero cards",
-			body: "One view hides a join for every future reader. Wanderers show a NULL guild thanks to the LEFT JOIN inside.",
+			title: "A view over a join",
+			body: "A view can hide a join from every query that reads it. Heroes without a guild show a NULL guild because of the LEFT JOIN inside.",
 			sql: "CREATE VIEW hero_cards AS\nSELECT h.name, g.name AS guild, h.level\nFROM heroes h\nLEFT JOIN guilds g ON g.id = h.guild_id;\n\nSELECT * FROM hero_cards ORDER BY level DESC, name LIMIT 6;",
 		},
 		{
 			kind: "explain",
 			title: "Writing through a view",
-			body: "A **simple** view (one table, no grouping, no DISTINCT) is updatable: INSERT and UPDATE go to the table below.\n\nBut a row written through `WHERE level < 10` could land outside the view and vanish from it. `WITH CHECK OPTION` refuses such rows (44000):\n```sql\nCREATE VIEW apprentices AS\nSELECT id, name, level FROM heroes WHERE level < 10\nWITH CHECK OPTION;\n```",
+			body: "A **simple** view (one table, no grouping, no DISTINCT) is updatable: INSERT and UPDATE go to the table below.\n\nBut a row written through `WHERE level < 10` could fall outside the view and disappear from it. `WITH CHECK OPTION` refuses such rows (44000):\n```sql\nCREATE VIEW apprentices AS\nSELECT id, name, level FROM heroes WHERE level < 10\nWITH CHECK OPTION;\n```",
 		},
 		{
 			kind: "quiz",
@@ -85,27 +85,27 @@ const chapter: Chapter = {
 		{
 			kind: "explain",
 			title: "Materialized views: a snapshot",
-			body: "A **materialized view** runs its query once and **stores** the result. Reads are fast, but the data is frozen until you ask:\n```sql\nREFRESH MATERIALIZED VIEW quest_board;\n```\nA plain refresh blocks readers while it runs. `REFRESH ... CONCURRENTLY` does not, but needs a **unique index** on the view (55000 otherwise). Nothing refreshes it automatically.",
+			body: "A **materialized view** runs its query once and **stores** the result. Reads are fast, but the data does not change until you refresh it:\n```sql\nREFRESH MATERIALIZED VIEW quest_board;\n```\nA plain refresh blocks readers while it runs. `REFRESH ... CONCURRENTLY` does not, but needs a **unique index** on the view (55000 otherwise). Nothing refreshes it automatically.",
 		},
 		{
 			kind: "explain",
-			title: "Schemas: realms inside the database",
-			body: "A **schema** is a namespace. Your tables live in `public`.\n```sql\nCREATE SCHEMA archive;\nALTER TABLE hero_attributes SET SCHEMA archive;\nSELECT * FROM archive.hero_attributes;\n```\nAn unqualified name is looked up along the **search_path** (`SHOW search_path;`). Off the path, the table seems not to exist (42P01). `SET search_path TO public, archive;` adds the realm for this session.",
+			title: "Schemas and the search_path",
+			body: "A **schema** is a namespace. Your tables live in `public`.\n```sql\nCREATE SCHEMA archive;\nALTER TABLE hero_attributes SET SCHEMA archive;\nSELECT * FROM archive.hero_attributes;\n```\nAn unqualified name is looked up along the **search_path** (`SHOW search_path;`). Off the path, the table seems not to exist (42P01). `SET search_path TO public, archive;` adds the schema for this session.",
 		},
 		{
 			kind: "example",
-			title: "Every table, from the catalog",
-			body: "There is no `\\d` here: ask the catalog with SQL. `information_schema` is the portable, standard view of it.",
+			title: "Listing tables from the catalog",
+			body: "There is no `\\d` here: query the catalog with SQL. `information_schema` is the portable, standard view of it.",
 			sql: "SELECT table_schema, table_name, table_type\nFROM information_schema.tables\nWHERE table_schema NOT IN ('pg_catalog', 'information_schema')\nORDER BY table_schema, table_name;",
 		},
 		{
 			kind: "explain",
-			title: "Reading the map of the realm",
-			body: "| question | ask |\n|---|---|\n| columns of a table | `information_schema.columns` |\n| its indexes | `pg_indexes` |\n| its constraints | `pg_constraint` + `pg_get_constraintdef(oid)` |\n| table by name | `'heroes'::regclass` |\n| a comment | `obj_description('heroes'::regclass, 'pg_class')` |\n\nCatalog names are stored in lower case: `'Heroes'::regclass` fails.",
+			title: "Catalog queries",
+			body: "| question | query |\n|---|---|\n| columns of a table | `information_schema.columns` |\n| its indexes | `pg_indexes` |\n| its constraints | `pg_constraint` + `pg_get_constraintdef(oid)` |\n| table by name | `'heroes'::regclass` |\n| a comment | `obj_description('heroes'::regclass, 'pg_class')` |\n\nCatalog names are stored in lower case: `'Heroes'::regclass` fails.",
 		},
 		{
 			kind: "try",
-			title: "Your turn: the wanderers",
+			title: "Create a view",
 			prompt:
 				"Create a view **wanderers** with the **name** and **level** of every hero who has **no guild**.",
 			starterSql: "CREATE TABLE wanderers AS\nSELECT name, level FROM heroes WHERE guild_id IS NULL;",
@@ -119,7 +119,7 @@ const chapter: Chapter = {
 				),
 			},
 			hints: [
-				"The starter makes a copy: heroes arriving tomorrow will not appear.",
+				"The starter makes a copy: heroes inserted later will not appear.",
 				"CREATE VIEW wanderers AS SELECT name, level FROM heroes WHERE guild_id IS NULL;",
 			],
 		},
@@ -127,9 +127,7 @@ const chapter: Chapter = {
 	exercises: [
 		{
 			id: "ch27-ex01",
-			title: "Guild rosters",
-			story:
-				"Every guild master wants a roster. You give them one lens instead of teaching each of them the join.",
+			title: "View over a join",
 			prompt:
 				"Create a view **guild_rosters** with three columns: **guild** (the guild's name), **hero** (the hero's name) and **class**, for every hero who **belongs to a guild**.",
 			difficulty: 2,
@@ -147,17 +145,15 @@ const chapter: Chapter = {
 			},
 			hints: [
 				"Write the SELECT first, run it, then put `CREATE VIEW guild_rosters AS` in front.",
-				"An inner join drops the wanderers; aliases name the columns.",
+				"An inner join drops the heroes without a guild; aliases name the columns.",
 				"CREATE VIEW guild_rosters AS SELECT g.name AS guild, h.name AS hero, h.class FROM heroes h JOIN guilds g ON g.id = h.guild_id;",
 			],
 			explanation:
-				"The view keeps the join in one place, and because it stores nothing, the hero who joined the Quiet Bell *after* it was created shows up at once.\n\n**Pitfall:** `CREATE TABLE guild_rosters AS ...` looks the same on day one, then never changes again. A LEFT JOIN would list the wanderers with an empty guild.\n\n**Alternative:** `CREATE VIEW guild_rosters (guild, hero, class) AS SELECT g.name, h.name, h.class ...` names the columns up front.",
+				"The view keeps the join in one place, and because it stores nothing, a hero added to guild 6 *after* the view was created shows up at once.\n\n**Pitfall:** `CREATE TABLE guild_rosters AS ...` returns the same rows at first, then never changes again. A LEFT JOIN would list the heroes without a guild, with a NULL guild.\n\n**Alternative:** `CREATE VIEW guild_rosters (guild, hero, class) AS SELECT g.name, h.name, h.class ...` names the columns up front.",
 		},
 		{
 			id: "ch27-ex02",
-			title: "The apprentice gate",
-			story:
-				"The apprentice master may register and train apprentices through his own view, but must never be able to create or promote a hero past level 9 with it.",
+			title: "Updatable view with CHECK OPTION",
 			prompt:
 				"Create a view **apprentices** with **id**, **name**, **class**, **level** and **joined_on** of every hero **below level 10**, refusing any insert or update made through it that would produce a hero the view cannot see.",
 			difficulty: 3,
@@ -181,15 +177,13 @@ const chapter: Chapter = {
 				"... WHERE level < 10 WITH CHECK OPTION;",
 			],
 			explanation:
-				"Inserts and updates pass through the simple view to heroes, and `WITH CHECK OPTION` re-checks the view's WHERE on the new row: level 15 and the promotion to 12 fail with 44000, level 9 is fine.\n\n**Pitfall:** without the option, Big Bertha is inserted and immediately disappears from the view that created her. `level <= 10` lets Dagny (level 10) in.\n\n**Alternative:** a CHECK on heroes would block everyone, not just this gate; the view limits only its own users.",
+				"Inserts and updates pass through the simple view to heroes, and `WITH CHECK OPTION` re-checks the view's WHERE on the new row: level 15 and the promotion to 12 fail with 44000, level 9 is fine.\n\n**Pitfall:** without the option, the level 15 row is inserted and immediately disappears from the view it was inserted through. `level <= 10` includes heroes at level 10.\n\n**Alternative:** a CHECK on heroes would apply to every write; the view limits only writes made through it.",
 		},
 		{
 			id: "ch27-ex03",
-			title: "The quest board",
-			story:
-				"The tavern's quest board is read a thousand times a day and changes rarely. The innkeeper wants it precomputed, and updated when he says so.",
+			title: "Create and refresh a materialized view",
 			prompt:
-				"1. Create a **materialized view** **quest_board** with **title** and **completions** (the number of completions, **0** for quests nobody finished) for every quest.\n2. Record that **Bors the Bold** (hero 24) completed **Rats in the Cellar** (quest 1) at **2026-10-31 12:00 UTC**.\n3. Bring the board up to date.",
+				"A materialized view suits data that is read often and changes rarely.\n\n1. Create a **materialized view** **quest_board** with **title** and **completions** (the number of completions, **0** for quests nobody finished) for every quest.\n2. Record that **Bors the Bold** (hero 24) completed **Rats in the Cellar** (quest 1) at **2026-10-31 12:00 UTC**.\n3. Bring the board up to date.",
 			difficulty: 3,
 			kind: "ddl",
 			concepts: ["materialized-views"],
@@ -204,18 +198,16 @@ const chapter: Chapter = {
 				),
 			},
 			hints: [
-				"Three statements: create, insert, refresh. Check the board between steps 2 and 3.",
+				"Three statements: create, insert, refresh. Query the view between steps 2 and 3.",
 				"A LEFT JOIN and `count(c.hero_id)` give 0 for unfinished quests.",
 				"CREATE MATERIALIZED VIEW quest_board AS SELECT ... ; INSERT ...; REFRESH MATERIALIZED VIEW quest_board;",
 			],
 			explanation:
-				"The materialized view stored the counts once; after the insert it still said 4 for Rats in the Cellar until `REFRESH` recomputed it to 5.\n\n**Pitfall:** forgetting the refresh: no error, just a stale board. A plain view would be fresh but recompute the join on every read; an inner join hides the two quests nobody finished.\n\n**Alternative:** a unique index on title plus `REFRESH ... CONCURRENTLY` keeps the board readable during the refresh.",
+				"The materialized view stored the counts once; after the insert it still said 4 for Rats in the Cellar until `REFRESH` recomputed it to 5.\n\n**Pitfall:** forgetting the refresh: no error, just stale data. A plain view would be fresh but recompute the join on every read; an inner join hides the two quests nobody finished.\n\n**Alternative:** a unique index on title plus `REFRESH ... CONCURRENTLY` keeps the view readable during the refresh.",
 		},
 		{
 			id: "ch27-ex04",
-			title: "Refresh without a key",
-			story:
-				"The treasurer heard that `CONCURRENTLY` keeps readers happy and wants it on his reward summary right away.",
+			title: "CONCURRENTLY without a unique index",
 			prompt:
 				"The materialized view **region_rewards** has no index. Refresh it **concurrently**. This mission succeeds when your statement **fails** with the right error.",
 			difficulty: 2,
@@ -230,13 +222,11 @@ const chapter: Chapter = {
 				"REFRESH MATERIALIZED VIEW CONCURRENTLY region_rewards;",
 			],
 			explanation:
-				"A concurrent refresh compares old and new rows by a unique key so readers never see an empty view. Without a unique index it has no key: 55000, *object not in prerequisite state*.\n\n**Pitfall:** a plain `REFRESH` succeeds and locks out readers meanwhile; fine at night, painful at noon.\n\n**Alternative:** `CREATE UNIQUE INDEX ON region_rewards (region);` first, then the concurrent refresh works.",
+				"A concurrent refresh compares old and new rows by a unique key so readers never see an empty view. Without a unique index it has no key: 55000, *object not in prerequisite state*.\n\n**Pitfall:** a plain `REFRESH` succeeds and locks out readers meanwhile; acceptable off hours, a problem under load.\n\n**Alternative:** `CREATE UNIQUE INDEX ON region_rewards (region);` first, then the concurrent refresh works.",
 		},
 		{
 			id: "ch27-ex05",
-			title: "The archive realm",
-			story:
-				"The cursed legacy tables clutter the main hall. Elders want them moved to a realm of their own, untouched.",
+			title: "Move tables to a schema",
 			prompt:
 				"Create a schema **archive** and move the tables **adventurer_sheet_legacy** and **hero_attributes** into it, with all their rows.",
 			difficulty: 2,
@@ -262,11 +252,9 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch27-ex06",
-			title: "Lost in another realm",
-			story:
-				"The attributes were moved to `archive` yesterday. This morning the scribe's favourite report fails.",
+			title: "Fix the search_path",
 			prompt:
-				"The starter fails with 42P01. Make it work by adding **archive** to the **search_path** (keep `public` on it), then run the report: **attr** and **entries** (number of rows) per attribute of `hero_attributes`.",
+				"The table `hero_attributes` was moved to the schema `archive`, and the starter now fails with 42P01. Make it work by adding **archive** to the **search_path** (keep `public` on it), then run the report: **attr** and **entries** (number of rows) per attribute of `hero_attributes`.",
 			difficulty: 3,
 			kind: "query",
 			concepts: ["schemas-search-path"],
@@ -285,9 +273,7 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch27-ex07",
-			title: "Ask the catalog",
-			story:
-				"A new archivist asks what a hero record looks like. You answer with a query, not a drawing.",
+			title: "List the columns of a table",
 			prompt:
 				"Return **column_name**, **data_type** and **is_nullable**, as `information_schema.columns` reports them, for every column of the table **heroes**, in the order the columns appear in the table.",
 			difficulty: 2,
@@ -308,7 +294,7 @@ const chapter: Chapter = {
 			id: "ch27-ex08",
 			title: "The Grand Lens",
 			story:
-				"The Head Architect wants a living map of how the archive's tables point at each other, one that redraws itself when new tables appear.",
+				"Combines catalog queries, aggregation and a view that stays current as tables are added.",
 			prompt:
 				"Create a view **fk_map** with one row per table of schema **public** that has at least one foreign key, and three columns:\n\n- **table_name**\n- **fk_count**: the number of foreign key constraints of that table\n- **referenced**: the tables they point to, each **once**, sorted A to Z, separated by `', '` (comma and space)\n\nThen return `SELECT * FROM fk_map` sorted by **table_name**.",
 			difficulty: 5,
@@ -335,7 +321,7 @@ const chapter: Chapter = {
 	practice: [
 		{
 			id: "ch27-pr01",
-			title: "One more column on the card",
+			title: "Add a column to a view",
 			prompt:
 				"The view **hero_cards** shows **name** and **level**. Add **gold** as a **third** column, keeping the same view name.",
 			difficulty: 2,
@@ -357,7 +343,7 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch27-pr02",
-			title: "Training through the lens",
+			title: "Update through a view",
 			prompt:
 				"Through the view **hero_levels** (not the table), set the level of **Bors the Bold** (id 24) to **2**.",
 			difficulty: 1,
@@ -376,7 +362,7 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch27-pr03",
-			title: "An empty snapshot",
+			title: "Read an unpopulated materialized view",
 			prompt:
 				"Create a materialized view **rich_heroes** (name and gold of heroes with more than 1000 gold) **WITH NO DATA**, then select from it. This mission succeeds when the script **fails** with the right error.",
 			difficulty: 2,
@@ -395,11 +381,9 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch27-pr04",
-			title: "Refresh, gently",
-			story:
-				"A new quest, Dragon Tea Party, was posted after **region_rewards** was computed.",
+			title: "Enable a concurrent refresh",
 			prompt:
-				"Make **region_rewards** refreshable **concurrently** (one row per region), then refresh it concurrently.",
+				"A new quest, Dragon Tea Party, was inserted after **region_rewards** was computed. Make **region_rewards** refreshable **concurrently** (one row per region), then refresh it concurrently.",
 			difficulty: 3,
 			kind: "ddl",
 			concepts: ["materialized-views"],
@@ -419,11 +403,11 @@ const chapter: Chapter = {
 				"CREATE UNIQUE INDEX ON region_rewards (region); REFRESH MATERIALIZED VIEW CONCURRENTLY region_rewards;",
 			],
 			explanation:
-				"With the unique index, the concurrent refresh can diff old and new rows: Highmoor's total grows by 99 while readers keep reading.\n\n**Pitfall:** a plain refresh also updates the numbers, but locks readers out, and leaves the view unable to refresh concurrently tomorrow.\n\n**Alternative:** the index can cover several columns, as long as it is unique and has no WHERE clause.",
+				"With the unique index, the concurrent refresh can compare old and new rows: the Highmoor total grows by 99 while readers keep reading.\n\n**Pitfall:** a plain refresh also updates the numbers, but locks readers out, and leaves the view unable to refresh concurrently later.\n\n**Alternative:** the index can cover several columns, as long as it is unique and has no WHERE clause.",
 		},
 		{
 			id: "ch27-pr05",
-			title: "The vault",
+			title: "Create a table in a schema",
 			prompt:
 				"Create a schema **vault**, a table **relics** in it with a single column **name** (`text`), and store the relic **Silver Scale**.",
 			difficulty: 1,
@@ -448,7 +432,7 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch27-pr06",
-			title: "Indexes of the armory",
+			title: "List the indexes of a table",
 			prompt:
 				"Return **indexname** and **indexdef** of every index on the table **items**.",
 			difficulty: 1,
@@ -466,7 +450,7 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch27-pr07",
-			title: "Leave a note",
+			title: "Comment on a table",
 			prompt:
 				"Attach the comment **Missions posted by the guild** to the table **quests**, then return it read back from the catalog.",
 			difficulty: 2,
@@ -484,7 +468,7 @@ const chapter: Chapter = {
 				"SELECT obj_description('quests'::regclass, 'pg_class');",
 			],
 			explanation:
-				"Comments live in the catalog next to the object and travel with backups: documentation that cannot get lost.\n\n**Pitfall:** `'Quests'::regclass` fails: catalog names are lower case.\n\n**Alternative:** `COMMENT ON COLUMN quests.region IS ...` and `col_description` for columns.",
+				"Comments live in the catalog next to the object and travel with backups: documentation stored with the schema.\n\n**Pitfall:** `'Quests'::regclass` fails: catalog names are lower case.\n\n**Alternative:** `COMMENT ON COLUMN quests.region IS ...` and `col_description` for columns.",
 		},
 	],
 };

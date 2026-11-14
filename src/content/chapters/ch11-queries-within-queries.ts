@@ -8,7 +8,7 @@ const chapter: Chapter = {
 	track: "query",
 	title: "Queries within Queries",
 	subtitle:
-		"A query inside a query: as a value, as a list, as a table, and one that looks back at you",
+		"Scalar subqueries, IN (SELECT ...), derived tables and correlated subqueries",
 	emoji: "🪆",
 	datasetId: "guild",
 	concepts: [
@@ -21,18 +21,18 @@ const chapter: Chapter = {
 	lesson: [
 		{
 			kind: "explain",
-			title: "Welcome, archivist",
-			body: "You leave the Starport for the **Guild of the Silver Dragon**, whose records fill the catacombs under Highmoor. Old Aldric Stormborn hands you the keys:\n\n- `guilds`: six guilds and the region of their hall\n- `heroes`: thirty adventurers, their level, gold, guild and mentor\n- `quests`: twenty quests across six regions, with rewards\n- `quest_completions`: who finished which quest\n\nSome heroes belong to no guild (`guild_id` NULL), and two never declared their gold.",
+			title: "The guild dataset",
+			body: "From this chapter on, the examples use the **guild** dataset:\n\n- `guilds`: six guilds and the region of their hall\n- `heroes`: thirty adventurers, their level, gold, guild and mentor\n- `quests`: twenty quests across six regions, with rewards\n- `quest_completions`: who finished which quest\n\nSome heroes belong to no guild (`guild_id` NULL), and two have a NULL `gold`.",
 		},
 		{
 			kind: "explain",
 			title: "A query as a value",
-			body: "A SELECT in parentheses that returns **one row and one column** is a **scalar subquery**. Use it anywhere a single value fits:\n```sql\nSELECT name, gold\nFROM heroes\nWHERE gold > (SELECT avg(gold) FROM heroes);\n```\nThe inner query runs first and becomes a number. No need to copy 646.27 by hand, and the answer stays right when the gold changes.",
+			body: "A SELECT in parentheses that returns **one row and one column** is a **scalar subquery**. Use it anywhere a single value fits:\n```sql\nSELECT name, gold\nFROM heroes\nWHERE gold > (SELECT avg(gold) FROM heroes);\n```\nThe inner query runs first and becomes a number. You do not need to copy 646.27 by hand, and the query stays correct when the data changes.",
 		},
 		{
 			kind: "example",
-			title: "Richer than average",
-			body: "The subquery can sit in SELECT too: here it shows the average next to each rich hero. Note that `avg` ignores the two heroes with NULL gold.",
+			title: "A scalar subquery in SELECT",
+			body: "The subquery can also go in SELECT: here it shows the average next to each hero above it. Note that `avg` ignores the two heroes with NULL gold.",
 			sql: "SELECT name, gold,\n       (SELECT avg(gold) FROM heroes) AS average\nFROM heroes\nWHERE gold > (SELECT avg(gold) FROM heroes);",
 		},
 		{
@@ -47,7 +47,7 @@ const chapter: Chapter = {
 			],
 			answerIndex: 1,
 			explanation:
-				"The Silver Dragon and the Order of the Quiet Bell both live in Highmoor, so the subquery returns two rows: *more than one row returned by a subquery used as an expression*. For a list, use `IN (SELECT ...)`.",
+				"The Silver Dragon and the Order of the Quiet Bell both have `hall_region` Highmoor, so the subquery returns two rows: *more than one row returned by a subquery used as an expression*. For a list, use `IN (SELECT ...)`.",
 		},
 		{
 			kind: "explain",
@@ -56,24 +56,24 @@ const chapter: Chapter = {
 		},
 		{
 			kind: "example",
-			title: "Filtering a summary",
-			body: "The inner query makes one row per guild; the outer query filters those rows like any table. Notice the row with an empty guild_id: the wanderers form their own group.",
+			title: "Filtering a derived table",
+			body: "The inner query makes one row per guild; the outer query filters those rows like any table. Note the row with a NULL guild_id: heroes with no guild form their own group.",
 			sql: "SELECT g.guild_id, round(g.avg_level, 1) AS avg_level\nFROM (SELECT guild_id, avg(level) AS avg_level\n      FROM heroes\n      GROUP BY guild_id) AS g\nWHERE g.avg_level > 10;",
 		},
 		{
 			kind: "explain",
-			title: "A query that looks back",
-			body: "A **correlated** subquery mentions a column of the **outer** row, so it is re-run for every row:\n```sql\nSELECT h.name,\n       (SELECT max(x.gold) FROM heroes x\n        WHERE x.guild_id = h.guild_id) AS guild_max\nFROM heroes h;\n```\n`h` is the outer hero, `x` the heroes searched inside. Qualify both: an unqualified `guild_id` inside would mean `x.guild_id` and break the link.",
+			title: "Correlated subqueries",
+			body: "A **correlated** subquery mentions a column of the **outer** row, so it is re-run for every row:\n```sql\nSELECT h.name,\n       (SELECT max(x.gold) FROM heroes x\n        WHERE x.guild_id = h.guild_id) AS guild_max\nFROM heroes h;\n```\n`h` is the outer row, `x` the rows searched by the inner query. Qualify both: an unqualified `guild_id` inside would mean `x.guild_id` and break the link.",
 		},
 		{
 			kind: "example",
-			title: "The richest of my guild",
-			body: "Each hero next to the biggest purse of their own guild. Surprise: every wanderer gets NULL, because `x.guild_id = NULL` never matches anyone, not even another wanderer.",
+			title: "Max gold of each hero's guild",
+			body: "Each hero next to the highest gold of their own guild. Every hero with a NULL guild_id gets NULL, because `x.guild_id = NULL` never matches any row, not even another hero with no guild.",
 			sql: "SELECT h.name, h.gold,\n       (SELECT max(x.gold) FROM heroes x\n        WHERE x.guild_id = h.guild_id) AS guild_max\nFROM heroes h;",
 		},
 		{
 			kind: "try",
-			title: "Your turn: above the bar",
+			title: "Try it: above the average level",
 			prompt:
 				"Return the **name** and **level** of every hero whose level is **above the average level** of all heroes.",
 			starterSql: "SELECT name, level\nFROM heroes\nWHERE level > avg(level);",
@@ -89,9 +89,7 @@ const chapter: Chapter = {
 	exercises: [
 		{
 			id: "ch11-ex01",
-			title: "Heavy purses",
-			story:
-				"The quartermaster wants to tax the rich, and to know by how much each one beats the average purse.",
+			title: "Gold above the average",
 			prompt:
 				"Return the **name**, the **gold** and the **amount above the average gold** (gold minus the average) of every hero whose gold is **above the average gold**. Heroes with unknown gold do not count in the average and are not listed.",
 			difficulty: 2,
@@ -103,16 +101,14 @@ const chapter: Chapter = {
 			hints: [
 				"You need the average gold twice: once to filter, once to subtract.",
 				"`(SELECT avg(gold) FROM heroes)` is a single value you can use in WHERE and in SELECT.",
-				"SELECT name, gold, gold - (SELECT avg(gold) FROM heroes) ... WHERE gold > (SELECT avg(gold) FROM heroes)",
+				"`SELECT name, gold, gold - (SELECT avg(gold) FROM heroes) ... WHERE gold > (SELECT avg(gold) FROM heroes)`",
 			],
 			explanation:
-				"The scalar subquery is computed once and used like a constant. `avg` skips Xander and Rhiannon, whose gold is unknown: the average is about 646.27.\n\n**Pitfall:** `avg(COALESCE(gold, 0))` treats the unknown purses as empty and lowers the average to about 603.18, so every difference is wrong.",
+				"The scalar subquery is computed once and used like a constant. `avg` skips Xander and Rhiannon, whose gold is NULL: the average is about 646.27.\n\n**Pitfall:** `avg(COALESCE(gold, 0))` treats the unknown values as 0 and lowers the average to about 603.18, so every difference is wrong.",
 		},
 		{
 			id: "ch11-ex02",
-			title: "Sons and daughters of Highmoor",
-			story:
-				"Aldric wants to invite every hero whose guild hall stands in Highmoor.",
+			title: "Heroes of the Highmoor guilds",
 			prompt:
 				"Return the **name** of every hero whose guild has its **hall in Highmoor**. Use `IN (SELECT ...)`.",
 			difficulty: 2,
@@ -127,13 +123,11 @@ const chapter: Chapter = {
 				"WHERE guild_id IN (SELECT id FROM guilds WHERE hall_region = 'Highmoor')",
 			],
 			explanation:
-				"The subquery returns guilds 1 and 6; `IN` accepts the whole list. The Quiet Bell has no members, so only the five Silver Dragons come back.\n\n**Alternative:** `JOIN guilds g ON g.id = h.guild_id WHERE g.hall_region = 'Highmoor'` gives the same rows here, because each hero has one guild.",
+				"The subquery returns guilds 1 and 6; `IN` accepts the whole list. The Quiet Bell has no members, so only the five members of the Silver Dragon come back.\n\n**Alternative:** `JOIN guilds g ON g.id = h.guild_id WHERE g.hall_region = 'Highmoor'` gives the same rows here, because each hero has one guild.",
 		},
 		{
 			id: "ch11-ex03",
-			title: "Too many answers",
-			story:
-				"The census of young guilds crashes with *more than one row returned by a subquery*. The scribe swears it worked last year, when only one guild was that young.",
+			title: "Replace = with IN",
 			prompt:
 				"Fix the query: return the **name** of every hero whose guild was **founded on or after 1 January 2021**.",
 			difficulty: 2,
@@ -154,7 +148,7 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch11-ex04",
-			title: "Distance to the summit",
+			title: "Levels below the maximum",
 			prompt:
 				"Return every hero's **name**, **level**, and how many **levels they are below the highest level** of any hero (the maximum level minus their level).",
 			difficulty: 2,
@@ -166,16 +160,14 @@ const chapter: Chapter = {
 			hints: [
 				"The maximum level is a single number. Where can a single number go?",
 				"Put a scalar subquery inside the SELECT expression.",
-				"(SELECT max(level) FROM heroes) - level",
+				"`(SELECT max(level) FROM heroes) - level`",
 			],
 			explanation:
 				"The scalar subquery returns 20, and every row subtracts its own level: Aldric and Nyx show 0.\n\n**Pitfall:** `max(level) - level` without a subquery mixes an aggregate with a plain column and fails with 42803 (must appear in GROUP BY).",
 		},
 		{
 			id: "ch11-ex05",
-			title: "Seasoned halls",
-			story:
-				"The council ranks guilds by experience. Only guilds whose heroes average **more than level 12** get a seat.",
+			title: "Filter averages in a derived table",
 			prompt:
 				"Return the **guild_id** and the **average level** of its heroes, for every guild whose average level is **greater than 12**. Build the averages in a **subquery in FROM**, then filter outside.",
 			difficulty: 3,
@@ -185,18 +177,16 @@ const chapter: Chapter = {
 				"SELECT g.guild_id, g.avg_level\nFROM (SELECT guild_id, avg(level) AS avg_level\n      FROM heroes\n      GROUP BY guild_id) AS g\nWHERE g.avg_level > 12;",
 			check: { type: "result" },
 			hints: [
-				"Step 1: one row per guild with its average level. Step 2: keep the big ones.",
+				"Step 1: one row per guild with its average level. Step 2: keep the averages above 12.",
 				"Wrap step 1 in parentheses in FROM, give it an alias, and filter its column in WHERE.",
 				"FROM (SELECT guild_id, avg(level) AS avg_level FROM heroes GROUP BY guild_id) AS g WHERE g.avg_level > 12",
 			],
 			explanation:
-				"The derived table is a real table for the outer query: its `avg_level` column can be filtered by WHERE. Guilds 1, 2 and 3 qualify.\n\n**Pitfall:** `WHERE level > 12` inside the subquery averages only the strong heroes, which is a different question.\n\n**Alternative:** `GROUP BY guild_id HAVING avg(level) > 12` does it in one level.",
+				"The derived table is a real table for the outer query: its `avg_level` column can be filtered by WHERE. Guilds 1, 2 and 3 qualify.\n\n**Pitfall:** `WHERE level > 12` inside the subquery averages only the heroes above level 12, which is a different question.\n\n**Alternative:** `GROUP BY guild_id HAVING avg(level) > 12` does it in one level.",
 		},
 		{
 			id: "ch11-ex06",
-			title: "Quest tally",
-			story:
-				"The archive needs a card per hero with their number of completed quests. Lazy heroes get a 0.",
+			title: "Completed quests per hero",
 			prompt:
 				"Return every hero's **name** and their **number of completed quests**, with **0** for heroes who completed none. Use a **correlated subquery** in the SELECT list.",
 			difficulty: 3,
@@ -211,13 +201,11 @@ const chapter: Chapter = {
 				"(SELECT count(*) FROM quest_completions qc WHERE qc.hero_id = h.id)",
 			],
 			explanation:
-				"The subquery runs once per hero with that hero's `h.id`. `count(*)` over zero rows is 0, so idle heroes get a real zero.\n\n**Pitfall:** forgetting the correlation (`SELECT count(*) FROM quest_completions`) gives every hero 46, the total for the whole guild.\n\n**Alternative:** `LEFT JOIN quest_completions ... GROUP BY h.id, h.name` with `count(qc.quest_id)`.",
+				"The subquery runs once per hero with that hero's `h.id`. `count(*)` over zero rows is 0, so heroes with no completion get a real 0.\n\n**Pitfall:** forgetting the correlation (`SELECT count(*) FROM quest_completions`) gives every hero 46, the total number of rows in the table.\n\n**Alternative:** `LEFT JOIN quest_completions ... GROUP BY h.id, h.name` with `count(qc.quest_id)`.",
 		},
 		{
 			id: "ch11-ex07",
-			title: "Above the local rate",
-			story:
-				"A quest pays well or badly depending on where it is. Morwen wants the quests that pay more than is usual **in their own region**.",
+			title: "Reward above the regional average",
 			prompt:
 				"Return the **title**, **region** and **reward_gold** of every quest whose reward is **above the average reward of quests in the same region**.",
 			difficulty: 3,
@@ -232,13 +220,13 @@ const chapter: Chapter = {
 				"WHERE q.reward_gold > (SELECT avg(x.reward_gold) FROM quests x WHERE x.region = q.region)",
 			],
 			explanation:
-				"Each quest is compared with its own region's average. The Bandit King (150) beats Highmoor's average of 124, while the Ice Witch's Riddle (500) does not beat Frostspire's 587.\n\n**Pitfall:** without `WHERE x.region = q.region` you compare with the global average: the Bandit King drops out and the Riddle sneaks in.",
+				"Each quest is compared with its own region's average. The Bandit King (150) beats Highmoor's average of 124, while the Ice Witch's Riddle (500) does not beat Frostspire's 587.\n\n**Pitfall:** without `WHERE x.region = q.region` you compare with the global average: the Bandit King drops out and the Riddle is wrongly included.",
 		},
 		{
 			id: "ch11-ex08",
 			title: "Boss: The Archivist's Ledger",
 			story:
-				"Aldric wants the ledger of champions: for every guild, its richest member and the size of the guild. If two members of a guild ever share the top purse, both are champions.",
+				"Combines a correlated max per guild, a correlated count and a join, with ties kept.",
 			prompt:
 				"For each guild that **has heroes**, return:\n\n1. the **guild name**\n2. the **name** of its richest hero (every hero tied for the top gold of that guild)\n3. that hero's **gold**\n4. the guild's **number of heroes** (all members, including those with unknown gold)",
 			difficulty: 4,
@@ -253,19 +241,19 @@ const chapter: Chapter = {
 				"SELECT g.name AS guild, h.name, h.gold,\n       (SELECT count(*) FROM heroes x WHERE x.guild_id = g.id) AS members\nFROM guilds g\nJOIN heroes h ON h.guild_id = g.id\nWHERE h.gold = (SELECT max(x.gold) FROM heroes x WHERE x.guild_id = g.id);",
 			check: { type: "result" },
 			hints: [
-				"Ulfric (Ember Fang) and Morwen (Moonlit Veil) both hold 2100.00 gold, in different guilds. A champion must be the richest of **their own** guild.",
+				"Ulfric (Ember Fang) and Morwen (Moonlit Veil) both have 2100.00 gold, in different guilds. Each returned hero must be the richest of **their own** guild.",
 				"Keep a hero when their gold equals the max gold of their guild (correlated), and count members with another correlated subquery.",
 				"WHERE h.gold = (SELECT max(x.gold) FROM heroes x WHERE x.guild_id = g.id), plus (SELECT count(*) FROM heroes x WHERE x.guild_id = g.id)",
 			],
 			explanation:
-				"The correlated `max` is recomputed per guild, so each hero is measured against their own hall. `count(*)` counts every member, gold or not. The Quiet Bell has no heroes, so the inner join leaves it out.\n\n**Pitfall:** computing `max(gold)` per guild in a derived table and joining back **on gold only** pairs Ember Fang's 2100.00 with Morwen of the Moonlit Veil too. Join back on guild **and** gold.\n\n**Alternative:** a derived table `(SELECT guild_id, max(gold) AS top, count(*) AS members FROM heroes GROUP BY guild_id)` joined on both columns.",
+				"The correlated `max` is recomputed per guild, so each hero is compared with their own guild. `count(*)` counts every member, gold or not. The Quiet Bell has no heroes, so the inner join leaves it out.\n\n**Pitfall:** computing `max(gold)` per guild in a derived table and joining back **on gold only** pairs Ember Fang's 2100.00 with Morwen of the Moonlit Veil too. Join back on guild **and** gold.\n\n**Alternative:** a derived table `(SELECT guild_id, max(gold) AS top, count(*) AS members FROM heroes GROUP BY guild_id)` joined on both columns.",
 			boss: true,
 		},
 	],
 	practice: [
 		{
 			id: "ch11-pr01",
-			title: "The grand prize",
+			title: "Quests with the highest reward",
 			prompt:
 				"Return the **title** and **reward_gold** of the quest(s) paying the **highest reward** (all of them if several tie).",
 			difficulty: 1,
@@ -284,7 +272,7 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch11-pr02",
-			title: "Veterans of the Siege",
+			title: "Heroes who completed quest 3",
 			prompt:
 				"Return the **name** of every hero who completed **quest 3** (Siege of Highmoor Keep). Use `IN (SELECT ...)`.",
 			difficulty: 1,
@@ -298,11 +286,11 @@ const chapter: Chapter = {
 				"Select the hero ids who did quest 3, then test membership.",
 				"WHERE id IN (SELECT hero_id FROM quest_completions WHERE quest_id = 3)",
 			],
-			explanation: "Aldric and Hilde held the walls of Highmoor Keep together.",
+			explanation: "The subquery returns the hero ids of quest 3, and `IN` keeps the matching heroes: Aldric and Hilde.",
 		},
 		{
 			id: "ch11-pr03",
-			title: "Heavy kinds",
+			title: "Rarities of heavy items",
 			prompt:
 				"Return the **name** and **rarity** of every item whose rarity is **one of the rarities of items weighing more than 3** pounds.",
 			difficulty: 2,
@@ -321,7 +309,7 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch11-pr04",
-			title: "Crowded quests",
+			title: "Average party size above 3",
 			prompt:
 				"Return the **quest_id** and the **average party size** of every quest whose average party size is **greater than 3** (unknown party sizes are ignored). Compute the averages in a subquery in FROM.",
 			difficulty: 2,
@@ -340,7 +328,7 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch11-pr05",
-			title: "Best of their class",
+			title: "Highest xp per class",
 			prompt:
 				"Return the **name**, **class** and **xp** of every hero whose xp is the **highest xp of their own class** (all of them in case of a tie).",
 			difficulty: 3,
@@ -355,11 +343,11 @@ const chapter: Chapter = {
 				"WHERE h.xp = (SELECT max(x.xp) FROM heroes x WHERE x.class = h.class)",
 			],
 			explanation:
-				"One champion per class. Without the correlation you would get only the two heroes at 98000 xp overall: Aldric and Nyx.",
+				"One row per class, or more when heroes tie. Without the correlation you would get only the two heroes at 98000 xp overall: Aldric and Nyx.",
 		},
 		{
 			id: "ch11-pr06",
-			title: "Fresh blood",
+			title: "Latest join date per guild",
 			prompt:
 				"Return every guild's **name** and the **join date of its newest hero** (the latest `joined_on`), with NULL for a guild without heroes. Use a correlated subquery.",
 			difficulty: 2,
@@ -374,7 +362,7 @@ const chapter: Chapter = {
 				"(SELECT max(h.joined_on) FROM heroes h WHERE h.guild_id = g.id)",
 			],
 			explanation:
-				"A scalar subquery that finds no row returns NULL, so the Order of the Quiet Bell keeps its place with an empty date. An inner join with GROUP BY would drop it.",
+				"A scalar subquery that finds no row returns NULL, so the Order of the Quiet Bell is still listed, with a NULL date. An inner join with GROUP BY would drop it.",
 		},
 	],
 };

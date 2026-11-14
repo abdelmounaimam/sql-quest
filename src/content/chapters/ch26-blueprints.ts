@@ -37,7 +37,7 @@ const chapter: Chapter = {
 	tier: "adept",
 	track: "schema",
 	title: "Blueprints",
-	subtitle: "From the old scribe's ledger to a clean, normalized design",
+	subtitle: "ER modeling, cardinality and normalization from 1NF to BCNF",
 	emoji: "📐",
 	datasetId: "guild",
 	concepts: [
@@ -51,8 +51,8 @@ const chapter: Chapter = {
 	lesson: [
 		{
 			kind: "explain",
-			title: "Draw before you dig",
-			body: "Before any DDL, the architect sketches:\n\n1. **Entities**: the things the guild keeps facts about (hero, guild, quest).\n2. **Attributes**: the facts about each (a hero's level, a guild's motto).\n3. **Relationships**: how entities connect (a hero belongs to a guild).\n4. **Business rules**: what must always hold (a quest is completed once per hero).\n\nModel the facts, not the reports: a report is a query.",
+			title: "Entities, attributes, relationships",
+			body: "Before writing any DDL, sketch the model:\n\n1. **Entities**: the things you store facts about (hero, guild, quest).\n2. **Attributes**: the facts about each (a hero's level, a guild's motto).\n3. **Relationships**: how entities connect (a hero belongs to a guild).\n4. **Business rules**: what must always hold (a quest is completed once per hero).\n\nModel the facts, not the reports: a report is a query.",
 		},
 		{
 			kind: "quiz",
@@ -75,14 +75,14 @@ const chapter: Chapter = {
 		},
 		{
 			kind: "example",
-			title: "The old scribe's ledger",
-			body: "Meet the legacy sheet. Spot the curses: a comma list of party members, three numbered item columns, and the guild hall repeated on every row.",
+			title: "A denormalized legacy table",
+			body: "The `adventurer_sheet_legacy` table has three design problems: a comma list of party members, three numbered item columns, and the guild hall repeated on every row.",
 			sql: "SELECT * FROM adventurer_sheet_legacy ORDER BY sheet_id;",
 		},
 		{
 			kind: "explain",
 			title: "First normal form: one value per cell",
-			body: "**1NF**: every cell holds a single value, and no column group repeats (`item1, item2, item3`). A comma list cannot be joined, indexed or constrained.\n\nTo break a list into rows:\n```sql\nSELECT sheet_id, trim(m) AS member\nFROM adventurer_sheet_legacy,\n     string_to_table(party_members, ',') AS m;\n```\n`trim` matters: the scribe typed `'Hilde,Ælfric, Odo'`.",
+			body: "**1NF**: every cell holds a single value, and no column group repeats (`item1, item2, item3`). A comma list cannot be joined, indexed or constrained.\n\nTo break a list into rows:\n```sql\nSELECT sheet_id, trim(m) AS member\nFROM adventurer_sheet_legacy,\n     string_to_table(party_members, ',') AS m;\n```\n`trim` matters: the data contains `'Hilde,Ælfric, Odo'`, with a space before `Odo`.",
 		},
 		{
 			kind: "example",
@@ -93,22 +93,22 @@ const chapter: Chapter = {
 		{
 			kind: "explain",
 			title: "2NF and 3NF: nothing but the key",
-			body: "A **functional dependency** `A → B` means: knowing A fixes B. Every non-key column must depend on\n\n- **the key** (1NF gives us a key),\n- **the whole key** (2NF: no column depending on half of a composite key),\n- **nothing but the key** (3NF: no column depending on another non-key column).\n\nOn the legacy sheet, `guild_hall` depends on `guild_name`, not on the sheet: it belongs in a guild table.",
+			body: "A **functional dependency** `A → B` means: knowing A fixes B. Every non-key column must depend on\n\n- **the key** (1NF gives you a key),\n- **the whole key** (2NF: no column depending on half of a composite key),\n- **nothing but the key** (3NF: no column depending on another non-key column).\n\nOn the legacy sheet, `guild_hall` depends on `guild_name`, not on the sheet: it belongs in a guild table.",
 		},
 		{
 			kind: "example",
 			title: "The update anomaly",
-			body: "When a fact is copied on many rows, the copies drift. One clerk typed 'High Moor'.",
+			body: "When a fact is copied on many rows, the copies drift apart. One row has 'High Moor' instead of 'Highmoor'.",
 			sql: "SELECT guild_name, count(DISTINCT guild_hall) AS spellings,\n       string_agg(DISTINCT guild_hall, ' / ') AS halls\nFROM adventurer_sheet_legacy\nGROUP BY guild_name\nHAVING count(DISTINCT guild_hall) > 1;",
 		},
 		{
 			kind: "explain",
-			title: "BCNF, 4NF, 5NF in one breath",
+			title: "BCNF, 4NF and 5NF",
 			body: "**BCNF**: *every* determinant is a key. 3NF has a loophole when a non-key column determines part of the key: in `lessons(student, subject, teacher)` where each teacher teaches one subject, `teacher → subject` but teacher is no key.\n\n**4NF**: two independent lists about the same thing (a hero's skills, a hero's languages) go in two tables, not one table of every combination.\n\n**5NF**: split further only when a table is the join of three smaller facts.",
 		},
 		{
 			kind: "try",
-			title: "Your turn: break the list",
+			title: "Split a comma list into rows",
 			prompt:
 				"Return **sheet_id** and **member** (with no surrounding spaces) for every party member listed on every legacy sheet.",
 			starterSql:
@@ -125,9 +125,7 @@ const chapter: Chapter = {
 	exercises: [
 		{
 			id: "ch26-ex01",
-			title: "Name the bond",
-			story:
-				"Aldric sketches two lines on the blueprint and asks you to label them.",
+			title: "Relationship cardinality",
 			prompt:
 				"Return **one row** with two text columns: **heroes_guilds**, the cardinality between heroes and guilds, and **heroes_quests**, the cardinality between heroes and quests (through completions). Choose each from `'1:1'`, `'1:N'` and `'M:N'` (a guild has the N side in the first one).",
 			difficulty: 1,
@@ -145,11 +143,9 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch26-ex02",
-			title: "Skills on the junction",
-			story:
-				"Heroes learn skills from the skill tree; a skill can be learned by many heroes. Morwen wants the record.",
+			title: "Create a junction table",
 			prompt:
-				"Create table **hero_skills** with **hero_id** (`int`, an existing hero), **skill_id** (`int`, an existing `skill_tree` row) and **learned_on** (`date`, optional). A hero learns a given skill **at most once**, and both ids are required.",
+				"A hero learns many skills from `skill_tree`, and a skill can be learned by many heroes. Create table **hero_skills** with **hero_id** (`int`, an existing hero), **skill_id** (`int`, an existing `skill_tree` row) and **learned_on** (`date`, optional). A hero learns a given skill **at most once**, and both ids are required.",
 			difficulty: 3,
 			kind: "ddl",
 			concepts: ["relationship-cardinality"],
@@ -178,9 +174,7 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch26-ex03",
-			title: "Names to keys",
-			story:
-				"The party lists hold first names. The new design will link sheets to hero ids, so each name must be resolved.",
+			title: "Resolve names to hero ids",
 			prompt:
 				"For every party member on every legacy sheet, return **sheet_id** and the **hero_id** of the matching hero. A member matches the hero whose name **equals** the member or **starts with** the member followed by a space (`'Hilde'` is `'Hilde Ødegård'`). Members carry stray spaces in the list.",
 			difficulty: 3,
@@ -195,13 +189,13 @@ const chapter: Chapter = {
 				"JOIN heroes h ON h.name = trim(m) OR h.name LIKE trim(m) || ' %'",
 			],
 			explanation:
-				"Once the list is rows, it can be joined like any column: the 16 members resolve to 16 hero ids, ready for a `(sheet_id, hero_id)` junction table.\n\n**Pitfall:** forgetting `trim` silently drops Odo, Ælfric, Morwen and the others typed after a space: no error, just missing rows.\n\n**Alternative:** `regexp_split_to_table(party_members, '\\s*,\\s*')` splits and trims in one go.",
+				"Once the list is rows, it can be joined like any column: the 16 members resolve to 16 hero ids, ready for a `(sheet_id, hero_id)` junction table.\n\n**Pitfall:** forgetting `trim` silently drops Odo, Ælfric, Morwen and the other members preceded by a space: no error, just missing rows.\n\n**Alternative:** `regexp_split_to_table(party_members, '\\s*,\\s*')` splits and trims in one go.",
 		},
 		{
 			id: "ch26-ex04",
-			title: "Empty the numbered slots",
+			title: "Unpivot the item columns",
 			prompt:
-				"Return **sheet_id**, **slot** (1, 2 or 3, from `item1`, `item2`, `item3`) and **item** for every **non NULL** item column of the legacy sheets. Keep duplicates: two daggers are two daggers.",
+				"Return **sheet_id**, **slot** (1, 2 or 3, from `item1`, `item2`, `item3`) and **item** for every **non NULL** item column of the legacy sheets. Keep duplicates: the same item in two slots gives two rows.",
 			difficulty: 3,
 			kind: "query",
 			concepts: ["normalization-1nf"],
@@ -214,15 +208,13 @@ const chapter: Chapter = {
 				"CROSS JOIN LATERAL (VALUES (1, a.item1), (2, a.item2), (3, a.item3)) AS s(slot, item) WHERE s.item IS NOT NULL",
 			],
 			explanation:
-				"Each sheet produces up to three rows, one per filled slot: 18 rows. Now the inventory can grow past three items without a schema change.\n\n**Pitfall:** `UNION` instead of `UNION ALL` (or a DISTINCT) merges Vesper's two Nightshade Daggers only if the slot is dropped; keep the slot and keep duplicates.\n\n**Alternative:** `SELECT sheet_id, 1, item1 FROM ... WHERE item1 IS NOT NULL UNION ALL ...` three times.",
+				"Each sheet produces up to three rows, one per filled slot: 18 rows. Now the inventory can grow past three items without a schema change.\n\n**Pitfall:** `UNION` instead of `UNION ALL` (or a DISTINCT) merges the two Nightshade Daggers of sheet 105 only if the slot is dropped; keep the slot and keep duplicates.\n\n**Alternative:** `SELECT sheet_id, 1, item1 FROM ... WHERE item1 IS NOT NULL UNION ALL ...` three times.",
 		},
 		{
 			id: "ch26-ex05",
-			title: "Spelled two ways",
-			story:
-				"If `guild_name → guild_hall` held, each guild would have exactly one hall spelling. The archivist suspects it does not.",
+			title: "Find inconsistent copies",
 			prompt:
-				"Return **guild_name** and **halls**, the number of **different** hall spellings, for every guild of the legacy sheets that has **more than one** spelling.",
+				"If the dependency `guild_name → guild_hall` held, each guild would have exactly one hall spelling. Return **guild_name** and **halls**, the number of **different** hall spellings, for every guild of the legacy sheets that has **more than one** spelling.",
 			difficulty: 3,
 			kind: "query",
 			concepts: ["normalization-2nf-3nf"],
@@ -235,13 +227,11 @@ const chapter: Chapter = {
 				"GROUP BY guild_name HAVING count(DISTINCT guild_hall) > 1",
 			],
 			explanation:
-				"Silver Dragon has 2 spellings: a fact stored three times drifted once. That is the update anomaly 3NF prevents by storing the hall once, in a guild table.\n\n**Pitfall:** `count(guild_hall)` counts rows, not spellings, and flags every guild with two sheets.\n\n**Alternative:** `HAVING min(guild_hall) <> max(guild_hall)` detects the same thing.",
+				"Silver Dragon has 2 spellings: a fact stored three times was typed differently once. That is the update anomaly 3NF prevents by storing the hall once, in a guild table.\n\n**Pitfall:** `count(guild_hall)` counts rows, not spellings, and flags every guild with two sheets.\n\n**Alternative:** `HAVING min(guild_hall) <> max(guild_hall)` detects the same thing.",
 		},
 		{
 			id: "ch26-ex06",
-			title: "One hall per guild",
-			story:
-				"Time to fix the anomaly at its root: the hall becomes a fact about the guild, stored once.",
+			title: "Extract a guild table",
 			prompt:
 				"Create **legacy_guilds** with **guild_name** (`text`, primary key) and **guild_hall** (`text`, required), and fill it with one row per guild of `adventurer_sheet_legacy`. When a guild's hall is spelled several ways, keep the **most frequent** spelling.",
 			difficulty: 4,
@@ -262,15 +252,13 @@ const chapter: Chapter = {
 				"WITH spellings AS (SELECT guild_name, guild_hall, count(*) AS n FROM adventurer_sheet_legacy GROUP BY 1, 2) SELECT ... WHERE n = (SELECT max(n) FROM spellings x WHERE x.guild_name = s.guild_name)",
 			],
 			explanation:
-				"Four guilds, four rows, and the Silver Dragon lives in 'Highmoor' (2 sheets against 1). The primary key now makes a second, contradictory hall impossible.\n\n**Pitfall:** `min(guild_hall)` picks 'High Moor' (a space sorts before a letter); `max` picks the right one only by luck of the alphabet.\n\n**Alternative:** `SELECT DISTINCT ON (guild_name) guild_name, guild_hall ... ORDER BY guild_name, count(*) DESC`, or `mode() WITHIN GROUP (ORDER BY guild_hall)`.",
+				"Four guilds, four rows, and Silver Dragon gets 'Highmoor' (2 sheets against 1). The primary key now makes a second, contradictory hall impossible.\n\n**Pitfall:** `min(guild_hall)` picks 'High Moor' (a space sorts before a letter); `max` picks the right one only by luck of the alphabet.\n\n**Alternative:** `SELECT DISTINCT ON (guild_name) guild_name, guild_hall ... ORDER BY guild_name, count(*) DESC`, or `mode() WITHIN GROUP (ORDER BY guild_hall)`.",
 		},
 		{
 			id: "ch26-ex07",
-			title: "Half a key",
-			story:
-				"An apprentice built `hero_class_skills(hero_id, class, skill_id)` with the key `(hero_id, skill_id)`. The class is copied on every skill row, and one row already claims Morwen is a warrior.",
+			title: "Fix a 2NF violation",
 			prompt:
-				"The starter keeps the bad column. Instead, create **hero_skill_list** with **hero_id** and **skill_id** (both `int`, together the primary key) and no other column, fill it with every pair of `hero_class_skills`, then **drop** `hero_class_skills`. A hero's class already lives in `heroes`.",
+				"Table `hero_class_skills(hero_id, class, skill_id)` has the key `(hero_id, skill_id)`. The class is copied on every skill row, and one row already says hero 3 is a warrior while the others say mage. The starter keeps the bad column. Instead, create **hero_skill_list** with **hero_id** and **skill_id** (both `int`, together the primary key) and no other column, fill it with every pair of `hero_class_skills`, then **drop** `hero_class_skills`. A hero's class already lives in `heroes`.",
 			difficulty: 4,
 			kind: "ddl",
 			concepts: ["normalization-2nf-3nf"],
@@ -294,15 +282,15 @@ const chapter: Chapter = {
 				"INSERT INTO hero_skill_list (hero_id, skill_id) SELECT hero_id, skill_id FROM hero_class_skills; DROP TABLE hero_class_skills;",
 			],
 			explanation:
-				"`hero_id → class` is a partial dependency: class depends on half of the key, so it repeated per skill and drifted ('warrior' Morwen). Keeping only the pair, and reading the class from heroes, leaves one place for each fact.\n\n**Pitfall:** `CREATE TABLE AS SELECT *` copies the bad column *and* loses the primary key: CTAS never copies constraints.\n\n**Alternative:** `CREATE TABLE hero_skill_list AS SELECT hero_id, skill_id FROM ...` followed by `ALTER TABLE ... ADD PRIMARY KEY (hero_id, skill_id)`.",
+				"`hero_id → class` is a partial dependency: class depends on half of the key, so it repeated per skill and became inconsistent ('warrior' for hero 3). Keeping only the pair, and reading the class from heroes, leaves one place for each fact.\n\n**Pitfall:** `CREATE TABLE AS SELECT *` copies the bad column *and* loses the primary key: CTAS never copies constraints.\n\n**Alternative:** `CREATE TABLE hero_skill_list AS SELECT hero_id, skill_id FROM ...` followed by `ALTER TABLE ... ADD PRIMARY KEY (hero_id, skill_id)`.",
 		},
 		{
 			id: "ch26-ex08",
 			title: "The Scribe's Redemption",
 			story:
-				"The old scribe retires. As a farewell, you rebuild his whole ledger as a clean design, losing nothing and repeating nothing.",
+				"Combines 1NF splitting, unpivoting, 3NF extraction, foreign keys and a lossless decomposition.",
 			prompt:
-				"Create and fill four tables from `adventurer_sheet_legacy`:\n\n1. **legacy_guilds**: **guild_name** text primary key, **guild_hall** text required (most frequent spelling).\n2. **legacy_sheets**: **sheet_id** int primary key, **hero_name** text required, **guild_name** text required, an existing legacy guild.\n3. **legacy_party**: **sheet_id** (an existing sheet) and **member** text (trimmed), together the primary key.\n4. **legacy_items**: **sheet_id** (an existing sheet), **slot** int **between 1 and 3**, **item** text required; primary key (sheet_id, slot). Only filled slots.",
+				"Rebuild `adventurer_sheet_legacy` as a normalized design that loses no data and repeats no fact. Create and fill four tables:\n\n1. **legacy_guilds**: **guild_name** text primary key, **guild_hall** text required (most frequent spelling).\n2. **legacy_sheets**: **sheet_id** int primary key, **hero_name** text required, **guild_name** text required, an existing legacy guild.\n3. **legacy_party**: **sheet_id** (an existing sheet) and **member** text (trimmed), together the primary key.\n4. **legacy_items**: **sheet_id** (an existing sheet), **slot** int **between 1 and 3**, **item** text required; primary key (sheet_id, slot). Only filled slots.",
 			difficulty: 5,
 			kind: "ddl",
 			concepts: ["normalization-1nf", "normalization-2nf-3nf", "relationship-cardinality"],
@@ -329,19 +317,19 @@ const chapter: Chapter = {
 			},
 			hints: [
 				"Create the tables parent first (guilds, sheets, then party and items), and fill them in the same order: a foreign key needs its parent row.",
-				"Reuse your work: the most frequent hall from the halls mission, `trim` + `string_to_table` for the party, the LATERAL VALUES unpivot for items.",
+				"Reuse your earlier queries: the most frequent hall from *Extract a guild table*, `trim` + `string_to_table` for the party, the LATERAL VALUES unpivot for items.",
 				"legacy_items: slot int CHECK (slot BETWEEN 1 AND 3), PRIMARY KEY (sheet_id, slot). Fill order: legacy_guilds, legacy_sheets, legacy_party, legacy_items.",
 			],
 			explanation:
-				"The join of your four tables rebuilds every sheet, with the hall stored once per guild, one row per member and one row per filled slot: a **lossless** decomposition. And the constraints now refuse what the old ledger let through.\n\n**Pitfall:** filling a child before its parent fails with 23503; splitting members without `trim` stores ' Odo' and 'Odo' as two people.\n\n**Alternative:** the party could reference real heroes by id (as in the names mission) instead of storing names.",
+				"The join of your four tables rebuilds every sheet, with the hall stored once per guild, one row per member and one row per filled slot: a **lossless** decomposition. And the constraints now refuse what the legacy table accepted.\n\n**Pitfall:** filling a child before its parent fails with 23503; splitting members without `trim` stores ' Odo' and 'Odo' as two people.\n\n**Alternative:** the party could reference real heroes by id (as in *Resolve names to hero ids*) instead of storing names.",
 		},
 	],
 	practice: [
 		{
 			id: "ch26-pr01",
-			title: "Thing or trait?",
+			title: "Entity or attribute",
 			prompt:
-				"The spec says: *the guild tracks heroes, the pets they own, and each pet's color.* Return one row with one text column: the word, among `'hero'`, `'pet'` and `'color'`, that names an **attribute** rather than an entity.",
+				"The spec says: *the system tracks heroes, the pets they own, and each pet's color.* Return one row with one text column: the word, among `'hero'`, `'pet'` and `'color'`, that names an **attribute** rather than an entity.",
 			difficulty: 1,
 			kind: "query",
 			concepts: ["er-modeling"],
@@ -349,7 +337,7 @@ const chapter: Chapter = {
 			check: { type: "result" },
 			hints: [
 				"Entities have facts of their own; attributes are facts.",
-				"Does a color have attributes the guild cares about?",
+				"Does a color have attributes of its own that you need to store?",
 				"SELECT 'color';",
 			],
 			explanation:
@@ -357,7 +345,7 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch26-pr02",
-			title: "A report, not a fact",
+			title: "Find the derived column",
 			prompt:
 				"A draft table reads `guild_report(guild_name, hall_region, hero_count)`. Return one row with one text column: the name of the column that is **derived** from other facts and should be computed by a query instead of stored.",
 			difficulty: 1,
@@ -371,11 +359,11 @@ const chapter: Chapter = {
 				"SELECT 'hero_count';",
 			],
 			explanation:
-				"`hero_count` is a report: `count(*)` over heroes. Stored, it goes stale the moment a hero joins.\n\n**Pitfall:** modeling reports instead of facts; the copy drifts and nobody knows which number is true.\n\n**Alternative:** if it must be fast, cache it on purpose (Cursed Designs chapter) and keep it in sync.",
+				"`hero_count` is a report: `count(*)` over heroes. Stored, it becomes wrong as soon as a hero joins.\n\n**Pitfall:** modeling reports instead of facts; the copy drifts and nobody knows which number is true.\n\n**Alternative:** if it must be fast, cache it on purpose (deliberate denormalization, covered in *Cursed Designs*) and keep it in sync.",
 		},
 		{
 			id: "ch26-pr03",
-			title: "One story per hero",
+			title: "One-to-one relationship",
 			prompt:
 				"Create **hero_biographies** with **hero_id** (`int`, primary key, an existing hero) and **story** (`text`, required): each hero has **at most one** biography.",
 			difficulty: 2,
@@ -398,11 +386,11 @@ const chapter: Chapter = {
 				"hero_id int PRIMARY KEY REFERENCES heroes (id), story text NOT NULL",
 			],
 			explanation:
-				"Making the FK the primary key turns one-to-many into one-to-one: a second biography for Aldric is refused (23505).\n\n**Pitfall:** an identity id plus a plain hero_id FK allows many biographies per hero.\n\n**Alternative:** `hero_id int UNIQUE NOT NULL REFERENCES heroes` with a separate id.",
+				"Making the FK the primary key turns one-to-many into one-to-one: a second biography for hero 1 is refused (23505).\n\n**Pitfall:** an identity id plus a plain hero_id FK allows many biographies per hero.\n\n**Alternative:** `hero_id int UNIQUE NOT NULL REFERENCES heroes` with a separate id.",
 		},
 		{
 			id: "ch26-pr04",
-			title: "How big is each party?",
+			title: "Count list items",
 			prompt:
 				"Return **sheet_id** and **party_size**, the number of members in the comma list, for **every** legacy sheet (an empty list counts 0).",
 			difficulty: 2,
@@ -412,16 +400,16 @@ const chapter: Chapter = {
 				"SELECT sheet_id,\n       (SELECT count(*) FROM string_to_table(party_members, ',')) AS party_size\nFROM adventurer_sheet_legacy;",
 			check: { type: "result" },
 			hints: [
-				"Count the pieces of each list, without losing Cedric's empty one.",
+				"Count the pieces of each list, without losing sheet 107, whose list is empty.",
 				"A correlated subquery over string_to_table returns 0 for an empty list.",
 				"(SELECT count(*) FROM string_to_table(party_members, ',')) AS party_size",
 			],
 			explanation:
-				"Splitting inside a scalar subquery keeps every sheet, and Cedric's empty party counts 0.\n\n**Pitfall:** joining the split rows then grouping drops Cedric entirely; counting commas plus one gives Cedric 1.\n\n**Alternative:** `cardinality(string_to_array(party_members, ','))`.",
+				"Splitting inside a scalar subquery keeps every sheet, and the empty list of sheet 107 counts 0.\n\n**Pitfall:** joining the split rows then grouping drops sheet 107 entirely; counting commas plus one gives it 1.\n\n**Alternative:** `cardinality(string_to_array(party_members, ','))`.",
 		},
 		{
 			id: "ch26-pr05",
-			title: "Two of the same",
+			title: "Duplicate items per sheet",
 			prompt:
 				"Return **sheet_id** and **item** for every legacy sheet that lists the **same item** in two or more of its item columns.",
 			difficulty: 2,
@@ -436,11 +424,11 @@ const chapter: Chapter = {
 				"... GROUP BY a.sheet_id, s.item HAVING count(*) > 1",
 			],
 			explanation:
-				"Vesper carries two Nightshade Daggers and Brynja two Iron Shields. With numbered columns this needed `item1 = item2 OR item1 = item3 OR item2 = item3`; with rows it is one GROUP BY.\n\n**Pitfall:** comparing only `item1 = item2` misses pairs in other slots.\n\n**Alternative:** the three OR comparisons work for exactly three columns, and break the day a fourth appears.",
+				"Sheet 105 lists two Nightshade Daggers and sheet 108 two Iron Shields. With numbered columns this needed `item1 = item2 OR item1 = item3 OR item2 = item3`; with rows it is one GROUP BY.\n\n**Pitfall:** comparing only `item1 = item2` misses pairs in other slots.\n\n**Alternative:** the three OR comparisons work for exactly three columns, and break the day a fourth appears.",
 		},
 		{
 			id: "ch26-pr06",
-			title: "Does the region decide?",
+			title: "Test a functional dependency",
 			prompt:
 				"Test the dependency `region → difficulty` on **quests**: return **region** and **difficulties** (the number of different difficulties) for every region with **more than one** difficulty.",
 			difficulty: 2,
@@ -455,11 +443,11 @@ const chapter: Chapter = {
 				"GROUP BY region HAVING count(DISTINCT difficulty) > 1",
 			],
 			explanation:
-				"Every region has several difficulties, so region does not determine difficulty: storing difficulty on quests is right.\n\n**Pitfall:** concluding a dependency from data that happens to agree today. Dependencies come from the rules of the world; data can only disprove them.\n\n**Alternative:** `HAVING min(difficulty) <> max(difficulty)`.",
+				"Every region has several difficulties, so region does not determine difficulty: storing difficulty on quests is right.\n\n**Pitfall:** concluding a dependency from data that happens to agree today. Dependencies come from the business rules; data can only disprove them.\n\n**Alternative:** `HAVING min(difficulty) <> max(difficulty)`.",
 		},
 		{
 			id: "ch26-pr07",
-			title: "The ledger against the registry",
+			title: "Compare copies to the source",
 			prompt:
 				"Return **sheet_id**, **guild_hall** (from the legacy sheet) and **hall_region** (from `guilds`) for every legacy sheet whose hall **differs** from its guild's hall in `guilds` (match `guild_name` to `guilds.name`).",
 			difficulty: 2,
@@ -474,11 +462,11 @@ const chapter: Chapter = {
 				"JOIN guilds g ON g.name = a.guild_name WHERE a.guild_hall <> g.hall_region",
 			],
 			explanation:
-				"Sheet 103 says 'High Moor' where the registry says 'Highmoor': a copied fact that drifted.\n\n**Pitfall:** normalising both sides first (lower case, spaces removed) hides exactly the typo you are hunting: compare exactly.\n\n**Alternative:** `IS DISTINCT FROM` if either side could be NULL.",
+				"Sheet 103 says 'High Moor' where `guilds` says 'Highmoor': a copied fact that drifted.\n\n**Pitfall:** normalising both sides first (lower case, spaces removed) hides exactly the difference you are looking for: compare exactly.\n\n**Alternative:** `IS DISTINCT FROM` if either side could be NULL.",
 		},
 		{
 			id: "ch26-pr08",
-			title: "The teacher loophole",
+			title: "Identify a BCNF violation",
 			prompt:
 				"Table `lessons(student, subject, teacher)` has the key `(student, subject)`. Each teacher teaches exactly one subject. Return one row with one text column: the **lowest** normal form it violates, among `'2NF'`, `'3NF'` and `'BCNF'`.",
 			difficulty: 3,
@@ -492,7 +480,7 @@ const chapter: Chapter = {
 				"SELECT 'BCNF';",
 			],
 			explanation:
-				"`teacher → subject` has a determinant (teacher) that is not a key, which BCNF forbids, but subject is a key attribute, so 3NF tolerates it. The cure: `teachers(teacher PK, subject)` and `enrolments(student, teacher)`.\n\n**Pitfall:** believing 3NF always equals BCNF; they differ exactly when overlapping candidate keys appear.\n\n**Alternative:** some designs keep the 3NF table to enforce *one teacher per student and subject* with a simple key.",
+				"`teacher → subject` has a determinant (teacher) that is not a key, which BCNF forbids, but subject is a key attribute, so 3NF tolerates it. The fix: `teachers(teacher PK, subject)` and `enrolments(student, teacher)`.\n\n**Pitfall:** believing 3NF always equals BCNF; they differ exactly when overlapping candidate keys appear.\n\n**Alternative:** some designs keep the 3NF table to enforce *one teacher per student and subject* with a simple key.",
 		},
 	],
 };

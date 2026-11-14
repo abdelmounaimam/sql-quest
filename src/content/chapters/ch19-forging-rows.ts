@@ -12,7 +12,7 @@ const chapter: Chapter = {
 	tier: "novice",
 	track: "mutation",
 	title: "Forging Rows",
-	subtitle: "INSERT new pilots, planets and cargo, and get their ids back",
+	subtitle: "INSERT, multi-row VALUES, DEFAULT, RETURNING, INSERT ... SELECT and sequences",
 	emoji: "⚒️",
 	datasetId: "starport",
 	concepts: [
@@ -27,19 +27,19 @@ const chapter: Chapter = {
 	lesson: [
 		{
 			kind: "explain",
-			title: "Welcome to the Forge",
-			body: "Until now you only **read** the Starport's registers. The dock chief now hands you the hammer: you will **write** them.\n\n```sql\nINSERT INTO planets (name, sector)\nVALUES ('Nova Prime', 'Frontier');\n```\nName the table, list the columns, then give one value per column, **in the same order**. Text goes in single quotes. Every mission runs on a fresh copy of the Starport, so break things freely.",
+			title: "INSERT: add rows to a table",
+			body: "So far every query only **read** data. `INSERT` **writes** new rows into a table:\n\n```sql\nINSERT INTO planets (name, sector)\nVALUES ('Nova Prime', 'Frontier');\n```\nName the table, list the columns, then give one value per column, **in the same order**. Text values go in single quotes. Every exercise runs on a fresh copy of the database, so you can experiment freely.",
 		},
 		{
 			kind: "example",
-			title: "A new world on the map",
-			body: "Run it: the INSERT adds the row, the SELECT shows it. Look at the columns you did **not** mention: the id appeared by itself, `has_spaceport` is false, the rest is NULL.",
+			title: "Insert one planet",
+			body: "Run it: the INSERT adds the row, the SELECT shows it. Look at the columns that are **not** in the list: `id` was generated automatically, `has_spaceport` is false, the others are NULL.",
 			sql: "INSERT INTO planets (name, sector)\nVALUES ('Nova Prime', 'Frontier');\n\nSELECT * FROM planets WHERE name = 'Nova Prime';",
 		},
 		{
 			kind: "quiz",
 			question:
-				"A clerk writes `INSERT INTO planets (name, sector) VALUES ('Frontier', 'Nova Prime');`. What happens?",
+				"You run `INSERT INTO planets (name, sector) VALUES ('Frontier', 'Nova Prime');`. What happens?",
 			choices: [
 				"Postgres notices the mix-up and swaps the values back",
 				"An error: 'Frontier' is not a valid planet name",
@@ -48,39 +48,39 @@ const chapter: Chapter = {
 			],
 			answerIndex: 2,
 			explanation:
-				"Values are matched to columns **by position only**. Both are text, so Postgres happily stores the swap. Always read your VALUES against the column list.",
+				"Values are matched to columns **by position only**. Both columns are text, so PostgreSQL stores the swapped values without complaint. Always check your VALUES against the column list.",
 		},
 		{
 			kind: "explain",
-			title: "Defaults: what you leave out",
-			body: "A column you leave out gets its **DEFAULT**: `has_spaceport` defaults to `false`, `pilots.reputation` to `0`, ids come from a counter. Columns without a default get NULL.\n\nYou can also ask for it explicitly: `VALUES ('Dusk', DEFAULT)`.\n\n**Careful:** writing `NULL` is not the same as the default. On a NOT NULL column it fails with **23502**.",
+			title: "Defaults: columns you leave out",
+			body: "A column you leave out gets its **DEFAULT**: `has_spaceport` defaults to `false`, `pilots.reputation` to `0`, and ids come from a sequence. Columns without a default get NULL.\n\nYou can also request the default explicitly: `VALUES ('Dusk', DEFAULT)`.\n\n**Careful:** writing `NULL` is not the same as using the default. On a NOT NULL column it fails with **23502**.",
 		},
 		{
 			kind: "explain",
-			title: "Many rows at once",
-			body: "One INSERT can carry many rows, separated by commas:\n```sql\nINSERT INTO routes (from_planet_id, to_planet_id, distance_ly)\nVALUES (11, 2, 3.9),\n       (2, 11, 3.9);\n```\nThe statement is **all or nothing**: if one row breaks a rule, none of them is inserted.",
+			title: "Several rows in one INSERT",
+			body: "One INSERT can add several rows, separated by commas:\n```sql\nINSERT INTO routes (from_planet_id, to_planet_id, distance_ly)\nVALUES (11, 2, 3.9),\n       (2, 11, 3.9);\n```\nThe statement is **all or nothing**: if one row violates a constraint, none of the rows is inserted.",
 		},
 		{
 			kind: "example",
-			title: "Get the new id back",
-			body: "`RETURNING` makes the INSERT answer like a SELECT, with the values that were really stored. No need for a second query to discover the new id.",
+			title: "RETURNING: get the new id back",
+			body: "`RETURNING` makes the INSERT return rows like a SELECT, with the values that were actually stored. You do not need a second query to find the new id.",
 			sql: "INSERT INTO factions (name, founded_year)\nVALUES ('Comet Riders', 2078)\nRETURNING id, name;",
 		},
 		{
 			kind: "explain",
 			title: "INSERT ... SELECT",
-			body: "Instead of VALUES, feed the INSERT with a query:\n```sql\nINSERT INTO watchlist (pilot, credits)\nSELECT name, credits\nFROM pilots\nWHERE reputation < 0;\n```\nEvery row of the SELECT becomes a new row. Columns are matched **by position**, not by name, exactly like VALUES.",
+			body: "Instead of VALUES, the rows to insert can come from a query:\n```sql\nINSERT INTO watchlist (pilot, credits)\nSELECT name, credits\nFROM pilots\nWHERE reputation < 0;\n```\nEvery row returned by the SELECT becomes a new row. Columns are matched **by position**, not by name, exactly like VALUES.",
 		},
 		{
 			kind: "explain",
 			title: "Sequences and gaps",
-			body: "Ids come from a **sequence**, a counter that hands out the next number with `nextval`. It never takes a number back: a deleted row, a failed insert or a rollback leaves a **gap**.\n\nGaps are normal. Never reuse a missing id by hand: the sequence will hand it out later and collide (23505).\n\n`currval(...)` repeats the last number *this session* got; before any `nextval` it fails with **55000**.",
+			body: "Generated ids come from a **sequence**, a counter that returns the next number with `nextval`. A sequence never takes a number back: a deleted row, a failed insert or a rollback leaves a **gap**.\n\nGaps are normal. Never reuse a missing id manually: the sequence will return that number later and the insert will fail with 23505.\n\n`currval(...)` returns the last number obtained *in this session*; before any `nextval` it fails with **55000**.",
 		},
 		{
 			kind: "try",
-			title: "Your turn: Glimmerfall",
+			title: "Try it: insert one planet",
 			prompt:
-				"Register the planet **Glimmerfall** in sector **Frontier**. Leave every other column to its default.",
+				"Insert the planet **Glimmerfall** in sector **Frontier**. Leave every other column to its default.",
 			starterSql:
 				"INSERT INTO planets (name, sector)\nVALUES ('Frontier', 'Glimmerfall');",
 			solutionSql:
@@ -95,11 +95,9 @@ const chapter: Chapter = {
 	exercises: [
 		{
 			id: "ch19-ex01",
-			title: "A planet called Nova Prime",
-			story:
-				"The Census Bureau charted a new world and wants it on the registers before lunch.",
+			title: "Insert a planet with four columns",
 			prompt:
-				"Register the planet **Nova Prime**: sector **Frontier**, population **12000**, gravity **0.88**. Every other column keeps its default.",
+				"Insert the planet **Nova Prime**: sector **Frontier**, population **12000**, gravity **0.88**. Every other column keeps its default.",
 			difficulty: 1,
 			kind: "mutation",
 			concepts: ["insert-basic"],
@@ -107,20 +105,18 @@ const chapter: Chapter = {
 				"INSERT INTO planets (name, sector, population, gravity)\nVALUES ('Nova Prime', 'Frontier', 12000, 0.88);",
 			check: { type: "state", verifySql: PLANETS_STATE },
 			hints: [
-				"Four columns to fill, the rest takes care of itself.",
+				"Four columns to fill; the others get their defaults.",
 				"INSERT INTO planets (name, sector, population, gravity) VALUES (...)",
 				"VALUES ('Nova Prime', 'Frontier', 12000, 0.88)",
 			],
 			explanation:
-				"Naming the four columns lets Postgres fill the others: a fresh id from the sequence, `has_spaceport = false`, NULL for the discovery date.\n\n**Pitfall:** listing the values in another order than the columns. Text into text never complains, so a swap is stored silently.\n\n**Alternative:** `has_spaceport` could be written explicitly as `DEFAULT` or `false`.",
+				"Naming the four columns lets PostgreSQL fill the others: a new id from the sequence, `has_spaceport = false`, NULL for the discovery date.\n\n**Pitfall:** listing the values in a different order than the columns. Text into text never raises an error, so a swap is stored silently.\n\n**Alternative:** `has_spaceport` could be written explicitly as `DEFAULT` or `false`.",
 		},
 		{
 			id: "ch19-ex02",
-			title: "Moon Cheese",
-			story:
-				"A trader wants to sell Moon Cheese. The clerk's INSERT explodes with `invalid input syntax for type integer: \"Moon Cheese\"`.",
+			title: "Fix: INSERT without a column list",
 			prompt:
-				"Fix the INSERT: add the commodity **Moon Cheese**, category **food**, base price **14.00**, **legal**, sold by the **wheel** (unit).",
+				"The starter fails with `invalid input syntax for type integer: \"Moon Cheese\"`. Fix the INSERT: add the commodity **Moon Cheese**, category **food**, base price **14.00**, **legal**, unit **wheel**.",
 			difficulty: 1,
 			kind: "mutation",
 			concepts: ["insert-basic"],
@@ -139,15 +135,13 @@ const chapter: Chapter = {
 				"INSERT INTO commodities (name, category, base_price, legal, unit) VALUES (...)",
 			],
 			explanation:
-				"Without a column list, VALUES must match **every** column in table order, starting with `id`. With a list, you choose the columns and the id comes from the sequence.\n\n**Pitfall:** relying on column order. Even when it works today, a new column added tomorrow breaks the INSERT or, worse, shifts values silently.",
+				"Without a column list, VALUES must match **every** column in table order, starting with `id`. With a list, you choose the columns and the id comes from the sequence.\n\n**Pitfall:** relying on column order. Even when it works today, a column added later breaks the INSERT or, worse, shifts values silently.",
 		},
 		{
 			id: "ch19-ex03",
-			title: "Three new cadets",
-			story:
-				"The academy shuttle drops three cadets at the docks. The dock chief wants them registered in one go.",
+			title: "Insert three pilots in one statement",
 			prompt:
-				"In **one INSERT**, register three pilots: **Ivy Starling**, **Bo Ruckus** and **Mox**. All three are **Human** **cadet**s who joined at **2078-01-10 00:00 UTC**, with no faction and no callsign (other columns default).",
+				"In **one INSERT**, add three pilots: **Ivy Starling**, **Bo Ruckus** and **Mox**. All three are **Human** **cadet**s who joined at **2078-01-10 00:00 UTC**, with no faction and no callsign (other columns default).",
 			difficulty: 2,
 			kind: "mutation",
 			concepts: ["insert-multi-row"],
@@ -160,15 +154,13 @@ const chapter: Chapter = {
 				"VALUES ('Ivy Starling', 'Human', 'cadet', '2078-01-10 00:00:00+00'), ('Bo Ruckus', ...), ('Mox', ...)",
 			],
 			explanation:
-				"A multi-row VALUES sends the three cadets in one statement and one round trip. If one row had been invalid, none of the three would be registered.\n\n**Pitfall:** forgetting the comma between two rows is a syntax error (42601); forgetting `+00` stores the time in the session time zone (GMT here, so it works, but be explicit).",
+				"A multi-row VALUES sends the three rows in one statement and one round trip. If one row had been invalid, none of the three would be inserted.\n\n**Pitfall:** a missing comma between two rows is a syntax error (42601). Without `+00` the time is interpreted in the session time zone (GMT here, so it works, but be explicit).",
 		},
 		{
 			id: "ch19-ex04",
-			title: "NULL is not the default",
-			story:
-				"The clerk's INSERT for Kip Lanyard fails with `null value in column \"reputation\" violates not-null constraint`. He swears he wanted the default.",
+			title: "Fix: explicit NULL instead of DEFAULT",
 			prompt:
-				"Fix the INSERT: register **Kip Lanyard**, a **Vulpine** **ensign** who joined at **2078-02-01 00:00 UTC**. His **reputation** must be the column's default and his **credits** unknown (NULL). Nothing else is set.",
+				"The starter fails with `null value in column \"reputation\" violates not-null constraint`. Fix the INSERT: add **Kip Lanyard**, a **Vulpine** **ensign** who joined at **2078-02-01 00:00 UTC**. **reputation** must be the column's default and **credits** unknown (NULL). Nothing else is set.",
 			difficulty: 2,
 			kind: "mutation",
 			concepts: ["default-values"],
@@ -178,20 +170,18 @@ const chapter: Chapter = {
 				"INSERT INTO pilots (name, species, rank, joined_at)\nVALUES ('Kip Lanyard', 'Vulpine', 'ensign', '2078-02-01 00:00:00+00');",
 			check: { type: "state", verifySql: PILOTS_STATE },
 			hints: [
-				"Which value did the clerk give reputation? Is that the default?",
+				"Which value does the starter give reputation? Is that the default?",
 				"An explicit NULL is a value. The default is used only when you leave the column out, or write DEFAULT.",
-				"Drop reputation from the list, or write DEFAULT in its place.",
+				"Remove reputation from the list, or write DEFAULT in its place.",
 			],
 			explanation:
-				"`NULL` means *I know this is unknown*; it never triggers the default. Leaving the column out (or writing `DEFAULT`) gives reputation `0`. Credits has no default, so leaving it out stores NULL, which is what the mission wants.\n\n**Pitfall:** replacing NULL by `0` for credits. 0 means *broke*, NULL means *unknown*: different facts.",
+				"`NULL` means *this value is unknown*; it never triggers the default. Leaving the column out (or writing `DEFAULT`) gives reputation `0`. `credits` has no default, so leaving it out stores NULL, which is what the prompt asks.\n\n**Pitfall:** replacing NULL with `0` for credits. 0 means *no credits*, NULL means *unknown*: different facts.",
 		},
 		{
 			id: "ch19-ex05",
-			title: "Dawn Treader's papers",
-			story:
-				"Dax Morrow buys a second courier. The Harbor Master needs the registration number for the paperwork, right now.",
+			title: "Insert a ship and return its id",
 			prompt:
-				"Register the ship **Dawn Treader**: model **Courier Mk II**, pilot **4**, cargo capacity **40**. In the same statement, **return** its **id** and **name**.",
+				"Insert the ship **Dawn Treader**: model **Courier Mk II**, pilot **4**, cargo capacity **40**. In the same statement, **return** its **id** and **name**.",
 			difficulty: 2,
 			kind: "mutation",
 			concepts: ["returning-clause"],
@@ -208,15 +198,13 @@ const chapter: Chapter = {
 				"... VALUES ('Dawn Treader', 'Courier Mk II', 4, 40) RETURNING id, name;",
 			],
 			explanation:
-				"`RETURNING id, name` hands back the stored row, generated id included (22), with no second query.\n\n**Pitfall:** `SELECT max(id) FROM ships` afterwards. With two clerks inserting at the same time, the max may be the *other* clerk's ship.\n\n**Alternative:** RETURNING also works on UPDATE and DELETE, as you will see in the next chapter.",
+				"`RETURNING id, name` returns the stored row, including the generated id (22), without a second query.\n\n**Pitfall:** `SELECT max(id) FROM ships` afterwards. With two sessions inserting at the same time, the maximum may belong to the *other* session's row.\n\n**Alternative:** RETURNING also works on UPDATE and DELETE, covered in *Reforging and Banishing*.",
 		},
 		{
 			id: "ch19-ex06",
-			title: "The contraband archive",
-			story:
-				"Customs keeps a separate archive of every forbidden good. The table `contraband_archive (commodity_id, name, base_price)` has just been created, empty.",
+			title: "Copy illegal commodities with INSERT ... SELECT",
 			prompt:
-				"Copy every **illegal** commodity (`legal` is false) into `contraband_archive`: its **id** goes into `commodity_id`, plus its **name** and **base_price**.",
+				"The empty table `contraband_archive (commodity_id, name, base_price)` has just been created. Copy every **illegal** commodity (`legal` is false) into it: its **id** goes into `commodity_id`, plus its **name** and **base_price**.",
 			difficulty: 3,
 			kind: "mutation",
 			concepts: ["insert-select"],
@@ -235,15 +223,13 @@ const chapter: Chapter = {
 				"... SELECT id, name, base_price FROM commodities WHERE NOT legal;",
 			],
 			explanation:
-				"INSERT ... SELECT turns every row of the query into a new row: three illegal goods, one statement.\n\n**Pitfall:** filtering on `category = 'contraband'` misses the Antimatter Pods, illegal but filed under fuel. Filter on the rule (`legal`), not on a label.\n\n**Alternative:** `WHERE legal = false` is the same test.",
+				"INSERT ... SELECT turns every row of the query into a new row: three illegal commodities, one statement.\n\n**Pitfall:** filtering on `category = 'contraband'` misses Antimatter Pods, which is illegal but in the fuel category. Filter on the actual rule (`legal`), not on a label.\n\n**Alternative:** `WHERE legal = false` is the same test.",
 		},
 		{
 			id: "ch19-ex07",
-			title: "Mind the gap",
-			story:
-				"This morning a clerk registered a test planet called Temp, then deleted it. Now the register jumps from 12 to... well, you'll see.",
+			title: "Observe a sequence gap",
 			prompt:
-				"Register the planet **Sable Spire** in sector **Frontier** (other columns default) and **return** its **id**.",
+				"Before your statement runs, a planet named Temp is inserted and then deleted. Insert the planet **Sable Spire** in sector **Frontier** (other columns default) and **return** its **id**.",
 			difficulty: 3,
 			kind: "mutation",
 			concepts: ["sequences"],
@@ -256,20 +242,20 @@ const chapter: Chapter = {
 				verifySql: "SELECT id, name, sector FROM planets ORDER BY id;",
 			},
 			hints: [
-				"Before inserting, guess the id. Then let RETURNING tell you the truth.",
-				"Temp consumed id 13 and the sequence never gives a number back.",
+				"Before inserting, predict the id. Then check it with RETURNING.",
+				"Temp used id 13, and the sequence never gives a number back.",
 				"Do not write the id yourself: INSERT ... VALUES ('Sable Spire', 'Frontier') RETURNING id;",
 			],
 			explanation:
-				"Sable Spire gets **14**: id 13 was handed to Temp and burned for good. The sequence only moves forward, which keeps it fast and safe with many clerks at once.\n\n**Pitfall:** forcing `id = 13` to \"fill the hole\". It works once, then the sequence hands out 13 again some day and the insert fails with 23505. Gaps are harmless; ids are labels, not counts.",
+				"Sable Spire gets **14**: id 13 was given to Temp and is never reused. The sequence only moves forward, which keeps it fast and safe with many concurrent sessions.\n\n**Pitfall:** forcing `id = 13` to \"fill the gap\". It works once, then the sequence returns 13 again later and that insert fails with 23505. Gaps are harmless: ids are identifiers, not counts.",
 		},
 		{
 			id: "ch19-ex08",
 			title: "Boss: The New Arrivals",
 			story:
-				"A convoy lands at Bay 7. Customs left their list in the table `arrivals (name, species, rank, callsign, cleared)`. Only cleared pilots may register, and the Harbor Master hands out ids in alphabetical order, as tradition demands.",
+				"Combines INSERT ... SELECT with a filter, ORDER BY to control sequence order, column defaults and RETURNING.",
 			prompt:
-				"In **one statement**, register every arrival whose `cleared` is true as a pilot, keeping their **name**, **species**, **rank** and **callsign**, with `joined_at` = **2078-03-01 00:00 UTC**. Every other column keeps its default. Ids must be handed out in **name order A to Z**. **Return** the new **id**, **name** and **callsign**.",
+				"The table `arrivals (name, species, rank, callsign, cleared)` lists candidate pilots. In **one statement**, insert every arrival whose `cleared` is true into `pilots`, keeping their **name**, **species**, **rank** and **callsign**, with `joined_at` = **2078-03-01 00:00 UTC**. Every other column keeps its default. Ids must be assigned in **name order A to Z**. **Return** the new **id**, **name** and **callsign**.",
 			difficulty: 4,
 			kind: "mutation",
 			concepts: ["insert-select", "returning-clause", "default-values", "sequences"],
@@ -284,20 +270,20 @@ const chapter: Chapter = {
 			},
 			hints: [
 				"Start with the SELECT: the cleared arrivals, sorted by name, plus the join date as a constant column.",
-				"Then INSERT INTO pilots (name, species, rank, callsign, joined_at) in front of it, and RETURNING at the end.",
+				"Then put INSERT INTO pilots (name, species, rank, callsign, joined_at) in front of it, and RETURNING at the end.",
 				"... SELECT name, species, rank, callsign, '2078-03-01 00:00:00+00' FROM arrivals WHERE cleared ORDER BY name RETURNING id, name, callsign;",
 			],
 			explanation:
-				"The SELECT decides which rows come in and **in which order**, so `ORDER BY name` makes the sequence hand out 25 to Ansel, 26 to Kestrel, 27 to Moss and 28 to Zara. Reputation takes its default 0 and credits stays NULL.\n\n**Pitfall:** without ORDER BY, rows arrive in storage order (Zara first) and the ids land on the wrong pilots. Forgetting `WHERE cleared` lets Juno slip through Customs.",
+				"The SELECT decides which rows are inserted and **in which order**, so `ORDER BY name` makes the sequence assign 25 to Ansel, 26 to Kestrel, 27 to Moss and 28 to Zara. Reputation takes its default 0 and credits stays NULL.\n\n**Pitfall:** without ORDER BY, rows arrive in storage order (Zara first) and the ids go to the wrong pilots. Without `WHERE cleared`, Juno is inserted too.",
 			boss: true,
 		},
 	],
 	practice: [
 		{
 			id: "ch19-pr01",
-			title: "The Comet Riders",
+			title: "Insert a faction with a NULL column",
 			prompt:
-				"Register the faction **Comet Riders**, founded in **2078**, with homeworld **Zephyria** (planet id 5) and no motto.",
+				"Insert the faction **Comet Riders**, founded in **2078**, with homeworld **Zephyria** (planet id 5) and no motto.",
 			difficulty: 1,
 			kind: "mutation",
 			concepts: ["insert-basic"],
@@ -313,13 +299,13 @@ const chapter: Chapter = {
 				"INSERT INTO factions (name, founded_year, homeworld_id) VALUES ('Comet Riders', 2078, 5);",
 			],
 			explanation:
-				"Motto has no default, so leaving it out stores NULL, like the silent Void Monks.\n\n**Pitfall:** writing the homeworld name instead of its id: `homeworld_id` is an integer key, so `'Zephyria'` fails with 22P02.",
+				"`motto` has no default, so leaving it out stores NULL, as for the existing Void Monks faction.\n\n**Pitfall:** writing the planet name instead of its id: `homeworld_id` is an integer key, so `'Zephyria'` fails with 22P02.",
 		},
 		{
 			id: "ch19-pr02",
-			title: "A two-way lane",
+			title: "Insert two routes in one statement",
 			prompt:
-				"In **one INSERT**, open the lanes **11 → 2** and **2 → 11**, both **3.9** light years long, with no hazard.",
+				"In **one INSERT**, add the routes **11 → 2** and **2 → 11**, both **3.9** light years long, with no hazard.",
 			difficulty: 1,
 			kind: "mutation",
 			concepts: ["insert-multi-row"],
@@ -336,15 +322,13 @@ const chapter: Chapter = {
 				"VALUES (11, 2, 3.9), (2, 11, 3.9)",
 			],
 			explanation:
-				"Both lanes arrive together or not at all.\n\n**Pitfall:** giving the same pair twice would break the primary key (23505) and neither lane would be opened.",
+				"Both rows are inserted together or not at all.\n\n**Pitfall:** giving the same pair twice would violate the primary key (23505) and neither route would be inserted.",
 		},
 		{
 			id: "ch19-pr03",
-			title: "All or nothing",
-			story:
-				"A supplier sends three goods, but its catalogue lists a Water Ice the Starport already knows.",
+			title: "Multi-row INSERT fails on a duplicate",
 			prompt:
-				"In **one INSERT**, try to add the commodities **Ion Salt** (unit `sack`), **Star Anise** (unit `jar`) and **Water Ice** (unit `ton`). The statement must **fail** on the duplicate name: write it and watch the error code.",
+				"In **one INSERT**, try to add the commodities **Ion Salt** (unit `sack`), **Star Anise** (unit `jar`) and **Water Ice** (unit `ton`). Water Ice already exists, so the statement must **fail** on the duplicate name: write it and read the error code.",
 			difficulty: 2,
 			kind: "mutation",
 			concepts: ["insert-multi-row"],
@@ -357,11 +341,11 @@ const chapter: Chapter = {
 				"INSERT INTO commodities (name, unit) VALUES ('Ion Salt', 'sack'), ('Star Anise', 'jar'), ('Water Ice', 'ton');",
 			],
 			explanation:
-				"23505 is a unique violation, and it cancels the **whole** statement: Ion Salt and Star Anise are not inserted either.\n\n**Pitfall:** believing the first two rows went in. Check with a SELECT: they did not. The next chapter's ON CONFLICT will let you skip the duplicates instead.",
+				"23505 is a unique violation, and it cancels the **whole** statement: Ion Salt and Star Anise are not inserted either.\n\n**Pitfall:** assuming the first two rows were inserted. Check with a SELECT: they were not. ON CONFLICT, covered in *Merge and Upsert*, lets you skip the duplicates instead.",
 		},
 		{
 			id: "ch19-pr04",
-			title: "Ion Salt, by default",
+			title: "Use the DEFAULT keyword",
 			prompt:
 				"Add the commodity **Ion Salt**: category **essentials**, base price **22.00**, unit **sack**. Write the `legal` column in your list and give it the keyword **DEFAULT**.",
 			difficulty: 1,
@@ -380,13 +364,13 @@ const chapter: Chapter = {
 				"VALUES ('Ion Salt', 'essentials', 22.00, DEFAULT, 'sack')",
 			],
 			explanation:
-				"`DEFAULT` fetches the column's default, here `true`. It is handy in multi-row VALUES where some rows need a value and others the default.\n\n**Pitfall:** `'DEFAULT'` in quotes is a string and fails on a boolean column (22P02).",
+				"`DEFAULT` uses the column's default, here `true`. It is useful in multi-row VALUES where some rows need a value and others the default.\n\n**Pitfall:** `'DEFAULT'` in quotes is a string and fails on a boolean column (22P02).",
 		},
 		{
 			id: "ch19-pr05",
-			title: "Deal value at once",
+			title: "Return a computed expression",
 			prompt:
-				"Record a trade: ship **13** sells **20** units of commodity **12** on planet **2** at **101.00** each, at **2078-01-05 10:00 UTC**. **Return** its **id** and its **value** (`qty * unit_price`).",
+				"Insert a trade: ship **13** sells **20** units of commodity **12** on planet **2** at **101.00** each, at **2078-01-05 10:00 UTC**. **Return** its **id** and its **value** (`qty * unit_price`).",
 			difficulty: 2,
 			kind: "mutation",
 			concepts: ["returning-clause"],
@@ -403,11 +387,11 @@ const chapter: Chapter = {
 				"... RETURNING id, qty * unit_price AS value;",
 			],
 			explanation:
-				"RETURNING evaluates expressions on the stored row: trade 41 is worth 2020.00.\n\n**Pitfall:** `RETURNING *` sends back eight columns instead of the two asked for.",
+				"RETURNING evaluates expressions on the stored row: trade 41 has a value of 2020.00.\n\n**Pitfall:** `RETURNING *` returns eight columns instead of the two requested.",
 		},
 		{
 			id: "ch19-pr06",
-			title: "Frontier watch",
+			title: "Fill a table from a SELECT",
 			prompt:
 				"The table `frontier_watch (planet)` is empty. Fill it with the **name** of every planet in sector **Frontier**.",
 			difficulty: 2,
@@ -423,13 +407,13 @@ const chapter: Chapter = {
 				"INSERT INTO frontier_watch (planet) SELECT name FROM planets WHERE sector = 'Frontier';",
 			],
 			explanation:
-				"Zephyria, Mirage and Rust Gulch are copied in one statement.\n\n**Pitfall:** running it twice copies them twice: INSERT ... SELECT does not know what is already there.",
+				"Zephyria, Mirage and Rust Gulch are copied in one statement.\n\n**Pitfall:** running it twice copies them twice: INSERT ... SELECT does not check what is already in the target table.",
 		},
 		{
 			id: "ch19-pr07",
-			title: "What did the counter say?",
+			title: "Read the last value with currval",
 			prompt:
-				"Register a ship named **Firefly** (no other column). Then, in a second statement, **return** the number the ships id sequence just handed out, using `currval(pg_get_serial_sequence('ships', 'id'))`.",
+				"Insert a ship named **Firefly** (no other column). Then, in a second statement, **return** the number the ships id sequence just generated, using `currval(pg_get_serial_sequence('ships', 'id'))`.",
 			difficulty: 2,
 			kind: "mutation",
 			concepts: ["sequences"],
@@ -445,13 +429,13 @@ const chapter: Chapter = {
 				"SELECT currval(pg_get_serial_sequence('ships', 'id'));",
 			],
 			explanation:
-				"The INSERT called `nextval` behind the scenes (22), so currval can repeat it. currval is per session: another clerk's inserts never change it.\n\n**Pitfall:** `SELECT max(id) FROM ships` gives the same number here, but not when other sessions insert at the same time.",
+				"The INSERT called `nextval` implicitly (22), so currval can return it. currval is per session: inserts in other sessions never change it.\n\n**Pitfall:** `SELECT max(id) FROM ships` gives the same number here, but not when other sessions insert at the same time.",
 		},
 		{
 			id: "ch19-pr08",
-			title: "Too early for currval",
+			title: "currval before nextval",
 			prompt:
-				"In a fresh session, ask `currval(pg_get_serial_sequence('planets', 'id'))` without inserting anything first. It must **fail**: write it and read the error code.",
+				"In a fresh session, call `currval(pg_get_serial_sequence('planets', 'id'))` without inserting anything first. It must **fail**: write it and read the error code.",
 			difficulty: 2,
 			kind: "query",
 			concepts: ["sequences"],
@@ -459,11 +443,11 @@ const chapter: Chapter = {
 			check: { type: "error", sqlstate: "55000" },
 			hints: [
 				"Just the SELECT, nothing before it.",
-				"currval only knows numbers this session obtained with nextval.",
+				"currval only returns numbers this session obtained with nextval.",
 				"SELECT currval(pg_get_serial_sequence('planets', 'id'));",
 			],
 			explanation:
-				"55000 means *object not in prerequisite state*: the session never called nextval on that sequence, so it has nothing to repeat.\n\n**Pitfall:** using currval to guess the *next* id. Use RETURNING on the INSERT instead.",
+				"55000 means *object not in prerequisite state*: the session never called nextval on that sequence, so there is no current value.\n\n**Pitfall:** using currval to guess the *next* id. Use RETURNING on the INSERT instead.",
 		},
 	],
 };

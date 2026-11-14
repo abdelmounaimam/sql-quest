@@ -52,7 +52,7 @@ const chapter: Chapter = {
 	tier: "expert",
 	track: "schema",
 	title: "Cursed Designs",
-	subtitle: "EAV, polymorphic ids, cached counters and trees: break the curses",
+	subtitle: "Design antipatterns, deliberate denormalization and tree models",
 	emoji: "💀",
 	datasetId: "guild",
 	concepts: ["design-antipatterns", "denormalization", "hierarchy-models"],
@@ -60,13 +60,13 @@ const chapter: Chapter = {
 	lesson: [
 		{
 			kind: "explain",
-			title: "The cursed scrolls",
-			body: "Some designs look flexible and slowly poison the archive (Bill Karwin calls them antipatterns):\n\n- **EAV**: one `(entity, attribute, value)` table for everything, all text.\n- **Polymorphic links**: `target_type` + `target_id` pointing at *some* table.\n- **Comma lists** and **item1, item2, item3** columns (last chapter).\n- **One table per year** (`quests_2025`, `quests_2026`).\n\nAll share one curse: the database can no longer enforce types or keys.",
+			title: "Design antipatterns",
+			body: "Some designs look flexible but degrade data quality over time (Bill Karwin calls them SQL antipatterns):\n\n- **EAV**: one `(entity, attribute, value)` table for everything, all text.\n- **Polymorphic links**: `target_type` + `target_id` pointing at *some* table.\n- **Comma lists** and **item1, item2, item3** columns (covered in *Blueprints*).\n- **One table per year** (`quests_2025`, `quests_2026`).\n\nAll share one problem: the database can no longer enforce types or keys.",
 		},
 		{
 			kind: "example",
-			title: "Meet the EAV table",
-			body: "Every value is text. Look at Morwen's height, Cedric's birthday, and two heroes whose value is NULL: is the attribute unknown, or absent?",
+			title: "An EAV table",
+			body: "In `hero_attributes`, every value is text. Look at the `height_cm` of hero 3, the `birthday` values, and the two rows whose value is NULL: is the attribute unknown, or absent?",
 			sql: "SELECT hero_id, attr, value\nFROM hero_attributes\nORDER BY hero_id, attr;",
 		},
 		{
@@ -81,27 +81,27 @@ const chapter: Chapter = {
 			],
 			answerIndex: 1,
 			explanation:
-				"A CHECK can restrict target_type, but a foreign key references exactly one table. So orphan notes (hero 99, quest 42) creep in silently. The cure: one link table per target, each with a real FK.",
+				"A CHECK can restrict target_type, but a foreign key references exactly one table. So orphan notes (hero 99, quest 42) are accepted silently. The fix: one link table per target, each with a real FK.",
 		},
 		{
 			kind: "explain",
-			title: "Lifting the EAV curse",
-			body: "Give each attribute its own **typed column**: `birthday date`, `height_cm int CHECK (height_cm > 0)`. Types and CHECKs come back for free.\n\nBut the old text holds garbage, and `value::date` aborts the whole query on the first bad value (22008). Sort it first:\n```sql\npg_input_is_valid(value, 'date')   -- true or false, never an error\n```\nThen keep only what is valid, and turn the rest into NULL.",
+			title: "Replacing EAV with typed columns",
+			body: "Give each attribute its own **typed column**: `birthday date`, `height_cm int CHECK (height_cm > 0)`. Types and CHECKs apply again.\n\nBut the old text contains invalid values, and `value::date` aborts the whole query on the first bad value (22008). Test the values first:\n```sql\npg_input_is_valid(value, 'date')   -- true or false, never an error\n```\nThen keep only what is valid, and turn the rest into NULL.",
 		},
 		{
 			kind: "explain",
 			title: "Denormalization: a deliberate copy",
-			body: "Sometimes you *choose* to store a derived fact for speed: a `guilds.hero_count` read a thousand times a day instead of counting heroes each time.\n\nThe price: every write to heroes must update the copy, or it **drifts**. Keep the source of truth normalized, measure before you cache, and plan how the copy stays in sync (one transaction, later a trigger in World 11). A materialized view is a denormalization too.",
+			body: "Sometimes you *choose* to store a derived fact for speed: a `guilds.hero_count` read very often, instead of counting heroes each time.\n\nThe price: every write to heroes must update the copy, or it **drifts**. Keep the source of truth normalized, measure before you cache, and plan how the copy stays in sync (one transaction, or a trigger, covered in World 11). A materialized view is a denormalization too.",
 		},
 		{
 			kind: "explain",
 			title: "Four ways to store a tree",
-			body: "| model | stores | subtree query |\n|---|---|---|\n| **adjacency list** | `parent_id` | recursive CTE |\n| **materialized path** | `'mage.fire.fireball'` | `LIKE 'mage.fire.%'` |\n| **nested sets** | `lft, rgt` numbers | `BETWEEN`, but inserts renumber half the tree |\n| **closure table** | every (ancestor, descendant, depth) pair | one join |\n\n`skill_tree` keeps both `parent_id` and `path`. Whatever the model, guard against cycles.",
+			body: "| model | stores | subtree query |\n|---|---|---|\n| **adjacency list** | `parent_id` | recursive CTE |\n| **materialized path** | `'mage.fire.fireball'` | `LIKE 'mage.fire.%'` |\n| **nested sets** | `lft, rgt` numbers | `BETWEEN`, but inserts renumber half the tree |\n| **closure table** | every (ancestor, descendant, depth) pair | one join |\n\n`skill_tree` keeps both `parent_id` and `path`. Whatever the model, protect against cycles.",
 		},
 		{
 			kind: "example",
 			title: "A subtree without recursion",
-			body: "`path` is an `ltree` (a type you meet in World 8); read as text, a prefix test finds a whole branch in one pass.",
+			body: "`path` is an `ltree` (a type covered in World 8); read as text, a prefix test finds a whole branch in one pass.",
 			sql: "SELECT name, path\nFROM skill_tree\nWHERE path::text LIKE 'mage.ice.%'\nORDER BY path;",
 		},
 		{
@@ -120,7 +120,7 @@ const chapter: Chapter = {
 		},
 		{
 			kind: "try",
-			title: "Your turn: impossible birthdays",
+			title: "Find invalid dates",
 			prompt:
 				"Return **hero_id** and **value** of every **birthday** in `hero_attributes` whose value is not NULL and is **not a valid date**.",
 			starterSql:
@@ -129,7 +129,7 @@ const chapter: Chapter = {
 				"SELECT hero_id, value\nFROM hero_attributes\nWHERE attr = 'birthday'\n  AND value IS NOT NULL\n  AND NOT pg_input_is_valid(value, 'date');",
 			check: { type: "result" },
 			hints: [
-				"Run the starter: the cast explodes on the first bad value.",
+				"Run the starter: the cast fails on the first bad value.",
 				"NOT pg_input_is_valid(value, 'date') tests without casting.",
 			],
 		},
@@ -137,9 +137,7 @@ const chapter: Chapter = {
 	exercises: [
 		{
 			id: "ch28-ex01",
-			title: "Un-EAV the heroes",
-			story:
-				"Before rebuilding the attributes, the archivist wants to see them as a normal table.",
+			title: "Pivot an EAV table",
 			prompt:
 				"Return one row per hero present in `hero_attributes`, with **hero_id**, **birthday**, **height_cm** and **favorite_color** (the text values; NULL when the hero has no such attribute or its value is NULL). Ignore other attributes.",
 			difficulty: 3,
@@ -154,13 +152,11 @@ const chapter: Chapter = {
 				"max(value) FILTER (WHERE attr = 'birthday') AS birthday, ...",
 			],
 			explanation:
-				"Grouping by hero and filtering each aggregate on one attribute pivots rows into columns: 7 heroes, holes as NULL.\n\n**Pitfall:** filtering `WHERE value IS NOT NULL` first drops Nyx entirely (her only attribute is a NULL birthday); joining three copies of the table with INNER JOINs drops every hero missing one attribute.\n\n**Alternative:** `max(CASE WHEN attr = 'birthday' THEN value END)`, the pre FILTER spelling.",
+				"Grouping by hero and filtering each aggregate on one attribute pivots rows into columns: 7 heroes, holes as NULL.\n\n**Pitfall:** filtering `WHERE value IS NOT NULL` first drops one hero entirely (its only attribute is a NULL birthday); joining three copies of the table with INNER JOINs drops every hero missing one attribute.\n\n**Alternative:** `max(CASE WHEN attr = 'birthday' THEN value END)`, the pre FILTER spelling.",
 		},
 		{
 			id: "ch28-ex02",
-			title: "Typed at last",
-			story:
-				"Morwen burns the EAV scroll and dictates proper columns. Garbage does not make the trip.",
+			title: "Migrate EAV to typed columns",
 			prompt:
 				"Create **hero_profiles** with **hero_id** (`int` primary key, an existing hero), **birthday** (`date`), **height_cm** (`int`, **greater than 0**) and **favorite_color** (`text`). Fill it with one row per hero of `hero_attributes`:\n\n- **birthday**: only values written exactly as `YYYY-MM-DD` that are valid dates, otherwise NULL ('05/04/1995' is ambiguous: NULL);\n- **height_cm**: only valid integers, otherwise NULL;\n- **favorite_color**: as is.",
 			difficulty: 4,
@@ -181,20 +177,18 @@ const chapter: Chapter = {
 				),
 			},
 			hints: [
-				"Start from the pivot of the previous mission, then cast only the values that survive the tests.",
+				"Start from the pivot of *Pivot an EAV table*, then cast only the values that survive the tests.",
 				"Inside the FILTER: a regex for the shape `^[0-9]{4}-[0-9]{2}-[0-9]{2}$` and `pg_input_is_valid(value, 'date')`; for heights `pg_input_is_valid(value, 'integer')`.",
 				"max(value) FILTER (WHERE attr = 'birthday' AND value ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' AND pg_input_is_valid(value, 'date'))::date",
 			],
 			explanation:
-				"The FILTER keeps only clean values, so the cast after `max()` never meets garbage. Now the table itself refuses 'someday', 0 cm and hero 999: the types and keys the EAV had thrown away are back.\n\n**Pitfall:** `value::date` straight away aborts on '2041-02-30' (22008); trusting `pg_input_is_valid` alone keeps '05/04/1995', read as May 4 under this server's DateStyle, maybe wrongly.\n\n**Alternative:** `CASE WHEN ... THEN value::date END` inside the aggregate.",
+				"The FILTER keeps only valid values, so the cast after `max()` never meets an invalid one. Now the table itself refuses 'someday', 0 cm and hero 999: the types and keys the EAV design had lost are back.\n\n**Pitfall:** `value::date` straight away aborts on '2041-02-30' (22008); trusting `pg_input_is_valid` alone keeps '05/04/1995', read as May 4 under this server's DateStyle, maybe wrongly.\n\n**Alternative:** `CASE WHEN ... THEN value::date END` inside the aggregate.",
 		},
 		{
 			id: "ch28-ex03",
-			title: "Notes that point nowhere",
-			story:
-				"The scribe's `notes` table points at heroes or quests through `target_type` and `target_id`. Someone tried to protect it with a foreign key.",
+			title: "Replace a polymorphic link",
 			prompt:
-				"The starter fails. Replace the polymorphic table instead: create **hero_notes** (**hero_id** `int` required, an existing hero; **body** `text` required) and **quest_notes** (**quest_id** `int` required, an existing quest; **body** `text` required), each with an identity **id** primary key. Copy every note whose target **exists** (orphans are lost causes), then **drop** `notes`.",
+				"The `notes` table points at heroes or quests through `target_type` and `target_id`. The starter tries to add a foreign key and fails. Replace the polymorphic table instead: create **hero_notes** (**hero_id** `int` required, an existing hero; **body** `text` required) and **quest_notes** (**quest_id** `int` required, an existing quest; **body** `text` required), each with an identity **id** primary key. Copy every note whose target **exists** (orphan notes are not copied), then **drop** `notes`.",
 			difficulty: 4,
 			kind: "ddl",
 			concepts: ["design-antipatterns"],
@@ -219,15 +213,13 @@ const chapter: Chapter = {
 				"INSERT INTO hero_notes (hero_id, body) SELECT n.target_id, n.body FROM notes n JOIN heroes h ON h.id = n.target_id WHERE n.target_type = 'hero';",
 			],
 			explanation:
-				"Each note now has a real foreign key, so ghosts like hero 999 are refused forever, and the two orphans of the old table stayed behind.\n\n**Pitfall:** copying without the existence test fails on the orphans (23503); forgetting the target_type filter turns quest 3 into a note about Morwen (hero 3).\n\n**Alternative:** one `notes` table with two nullable FKs `hero_id` and `quest_id` plus `CHECK (num_nonnulls(hero_id, quest_id) = 1)`.",
+				"Each note now has a real foreign key, so a note on hero 999 is refused, and the two orphans of the old table were not copied.\n\n**Pitfall:** copying without the existence test fails on the orphans (23503); forgetting the target_type filter turns the note on quest 3 into a note on hero 3.\n\n**Alternative:** one `notes` table with two nullable FKs `hero_id` and `quest_id` plus `CHECK (num_nonnulls(hero_id, quest_id) = 1)`.",
 		},
 		{
 			id: "ch28-ex04",
-			title: "The guild counter",
-			story:
-				"The herald reads guild sizes on every page of the guild almanac. You agree to cache them, on purpose.",
+			title: "Add a cached counter",
 			prompt:
-				"Add to **guilds** a column **hero_count** (`int`, required, default **0**) and fill it with each guild's real number of heroes (guilds without heroes stay at 0).",
+				"Guild sizes are read very often, so you cache them on purpose. Add to **guilds** a column **hero_count** (`int`, required, default **0**) and fill it with each guild's real number of heroes (guilds without heroes stay at 0).",
 			difficulty: 3,
 			kind: "ddl",
 			concepts: ["denormalization"],
@@ -248,13 +240,11 @@ const chapter: Chapter = {
 				"UPDATE guilds g SET hero_count = (SELECT count(*) FROM heroes h WHERE h.guild_id = g.id);",
 			],
 			explanation:
-				"The correlated `count(*)` returns 0 for the Quiet Bell, and NOT NULL DEFAULT 0 keeps future guilds consistent. The copy is correct *today*: every hero insert, delete or transfer must now update it too.\n\n**Pitfall:** `count(*)` over a LEFT JOIN counts the guild's own row for the Quiet Bell: 1 instead of 0. Use `count(h.id)`.\n\n**Alternative:** `UPDATE guilds g SET hero_count = c.n FROM (SELECT guild_id, count(*) AS n FROM heroes GROUP BY guild_id) c WHERE c.guild_id = g.id` (empty guilds keep the default 0).",
+				"The correlated `count(*)` returns 0 for guild 6, which has no heroes, and NOT NULL DEFAULT 0 keeps future guilds consistent. The copy is correct *today*: every hero insert, delete or transfer must now update it too.\n\n**Pitfall:** `count(*)` over a LEFT JOIN counts the guild's own row for guild 6: 1 instead of 0. Use `count(h.id)`.\n\n**Alternative:** `UPDATE guilds g SET hero_count = c.n FROM (SELECT guild_id, count(*) AS n FROM heroes GROUP BY guild_id) c WHERE c.guild_id = g.id` (empty guilds keep the default 0).",
 		},
 		{
 			id: "ch28-ex05",
-			title: "Drift detector",
-			story:
-				"Weeks later, someone forgot to update the counter. The almanac lies.",
+			title: "Detect a stale cache",
 			prompt:
 				"**guilds.hero_count** is a cached copy. Return **guild_id**, **cached** (the stored count) and **actual** (the real number of heroes, 0 when none) for every guild whose cache is **wrong**.",
 			difficulty: 3,
@@ -270,15 +260,13 @@ const chapter: Chapter = {
 				"... GROUP BY g.id, g.hero_count HAVING g.hero_count <> count(h.id)",
 			],
 			explanation:
-				"Three guilds drifted, including the Quiet Bell whose cache claims 1 member it never had.\n\n**Pitfall:** `count(*)` with the LEFT JOIN counts 1 for the empty guild and hides its drift; an INNER JOIN forgets empty guilds altogether.\n\n**Alternative:** compare with a correlated `(SELECT count(*) FROM heroes h WHERE h.guild_id = g.id)` in WHERE.",
+				"Three guilds are wrong, including guild 6, whose cache says 1 hero although it has none.\n\n**Pitfall:** `count(*)` with the LEFT JOIN counts 1 for the empty guild and hides its drift; an INNER JOIN forgets empty guilds altogether.\n\n**Alternative:** compare with a correlated `(SELECT count(*) FROM heroes h WHERE h.guild_id = g.id)` in WHERE.",
 		},
 		{
 			id: "ch28-ex06",
-			title: "Every flame below",
-			story:
-				"A new branch, Firestorm Lore, sits next to Fire Magic in the tree. The mage master wants only what grows under Fire Magic.",
+			title: "Subtree with a path prefix",
 			prompt:
-				"Using **skill_tree.path**, return the **name** of every skill **below** Fire Magic (path `mage.fire`), at any depth, **Fire Magic itself excluded**.",
+				"The setup adds a skill Firestorm Lore (path `mage.firestorm`) next to Fire Magic. Using **skill_tree.path**, return the **name** of every skill **below** Fire Magic (path `mage.fire`), at any depth, **Fire Magic itself excluded**.",
 			difficulty: 2,
 			kind: "query",
 			concepts: ["hierarchy-models"],
@@ -288,7 +276,7 @@ const chapter: Chapter = {
 			solutionSql: "SELECT name\nFROM skill_tree\nWHERE path::text LIKE 'mage.fire.%';",
 			check: { type: "result" },
 			hints: [
-				"Run the starter: two intruders. Which ones, and why?",
+				"Run the starter: it returns two extra rows. Which ones, and why?",
 				"A child's path is the parent's path plus a dot plus a label.",
 				"LIKE 'mage.fire.%'",
 			],
@@ -297,9 +285,7 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch28-ex07",
-			title: "The closure scroll",
-			story:
-				"The skill master is tired of recursion. He wants every ancestor and descendant pair written down once and for all.",
+			title: "Build a closure table",
 			prompt:
 				"Create **skill_closure** with **ancestor_id** and **descendant_id** (`int`, both existing skills, together the primary key) and **depth** (`int`, required), and fill it from **skill_tree.parent_id** with **every** pair where the descendant is under the ancestor, at any depth, **plus** each skill paired with itself at depth **0**.",
 			difficulty: 4,
@@ -331,9 +317,9 @@ const chapter: Chapter = {
 			id: "ch28-ex08",
 			title: "Raise the Tower",
 			story:
-				"The final blueprint. Aldric, Morwen and the quartermaster dictate the spec of the guild's dungeon tower; hidden tests will hammer it with good and bad rows.",
+				"Combines keys, composite UNIQUEs, CHECKs, ON DELETE actions and a self referencing tree in one schema.",
 			prompt:
-				"Write the DDL for four tables, each with an **id** `int` identity primary key unless stated:\n\n1. **towers**: **name** text, required, unique.\n2. **floors**: **tower_id** (required, an existing tower), **floor_no** int **1 to 50**, unique **within** a tower, **danger** int **1 to 5**, **guardian_hero_id** (required, an existing hero; a hero may guard several floors). A tower that still has floors **cannot be deleted**.\n3. **rooms**: **floor_id** (required, an existing floor), **name** text required and unique **within** a floor, **parent_room_id** (optional, an existing room: secret chambers live inside rooms). A room is **never its own parent**. Deleting a floor **deletes its rooms**; deleting a room **deletes its chambers**.\n4. **room_treasures** (no id): **room_id** (an existing room, deleted with it), **item_id** (an existing item), **qty** int required **above 0**; each item **once** per room.",
+				"Write the DDL for four tables (hidden tests insert valid and invalid rows), each with an **id** `int` identity primary key unless stated:\n\n1. **towers**: **name** text, required, unique.\n2. **floors**: **tower_id** (required, an existing tower), **floor_no** int **1 to 50**, unique **within** a tower, **danger** int **1 to 5**, **guardian_hero_id** (required, an existing hero; a hero may guard several floors). A tower that still has floors **cannot be deleted**.\n3. **rooms**: **floor_id** (required, an existing floor), **name** text required and unique **within** a floor, **parent_room_id** (optional, an existing room: a chamber can sit inside another room). A room is **never its own parent**. Deleting a floor **deletes its rooms**; deleting a room **deletes its chambers**.\n4. **room_treasures** (no id): **room_id** (an existing room, deleted with it), **item_id** (an existing item), **qty** int required **above 0**; each item **once** per room.",
 			difficulty: 5,
 			kind: "ddl",
 			concepts: ["design-antipatterns", "hierarchy-models"],
@@ -384,13 +370,13 @@ const chapter: Chapter = {
 				"floors: UNIQUE (tower_id, floor_no), CHECK (floor_no BETWEEN 1 AND 50). rooms: parent_room_id int REFERENCES rooms (id) ON DELETE CASCADE, UNIQUE (floor_id, name). room_treasures: PRIMARY KEY (room_id, item_id), qty CHECK (qty > 0).",
 			],
 			explanation:
-				"Every rule of the spec lives in the schema: composite UNIQUEs for *unique within*, CHECKs for ranges, FKs for every link with the action the spec asked for, a self FK for the room tree. No EAV, no polymorphic ids, no comma lists: the hidden tests found nothing to exploit.\n\n**Pitfall:** `UNIQUE (floor_no)` alone forbids floor 1 in a second tower; `ON DELETE SET NULL` on parent_room_id leaves orphan chambers floating; CASCADE on tower_id would let one DELETE erase a whole tower.\n\n**Alternative:** natural keys such as `PRIMARY KEY (tower_id, floor_no)` for floors work too, if the hidden tests could find the rows; the CHECK only stops one-step cycles, longer ones need a trigger or a closure check.",
+				"Every rule of the spec lives in the schema: composite UNIQUEs for *unique within*, CHECKs for ranges, FKs for every link with the action the spec asked for, a self FK for the room tree. No EAV, no polymorphic ids, no comma lists: every invalid row in the hidden tests is refused.\n\n**Pitfall:** `UNIQUE (floor_no)` alone forbids floor 1 in a second tower; `ON DELETE SET NULL` on parent_room_id leaves chambers without a parent; CASCADE on tower_id would let one DELETE erase a whole tower.\n\n**Alternative:** natural keys such as `PRIMARY KEY (tower_id, floor_no)` for floors work too, if the hidden tests could find the rows; the CHECK only stops one-step cycles, longer ones need a trigger or a closure check.",
 		},
 	],
 	practice: [
 		{
 			id: "ch28-pr01",
-			title: "Census of the EAV",
+			title: "Count rows per attribute",
 			prompt: "Return **attr** and **entries**, the number of rows of `hero_attributes` for each attribute.",
 			difficulty: 1,
 			kind: "query",
@@ -403,11 +389,11 @@ const chapter: Chapter = {
 				"SELECT attr, count(*) FROM hero_attributes GROUP BY attr;",
 			],
 			explanation:
-				"Only Finn has an instrument: in an EAV table, the set of columns is whatever someone typed, typos included.\n\n**Pitfall:** `count(value)` skips the NULL values and undercounts birthdays.\n\n**Alternative:** `SELECT DISTINCT attr` to list the would-be columns.",
+				"Only one hero has an `instrument` row: in an EAV table, the set of columns is whatever someone typed, typos included.\n\n**Pitfall:** `count(value)` skips the NULL values and undercounts birthdays.\n\n**Alternative:** `SELECT DISTINCT attr` to list the would-be columns.",
 		},
 		{
 			id: "ch28-pr02",
-			title: "Heights that are not numbers",
+			title: "Find invalid integers",
 			prompt:
 				"Return **hero_id** and **value** of every **height_cm** in `hero_attributes` that is **not a valid integer**.",
 			difficulty: 2,
@@ -423,11 +409,11 @@ const chapter: Chapter = {
 				"AND NOT pg_input_is_valid(value, 'integer')",
 			],
 			explanation:
-				"Morwen is 'tall enough': a typed column would never have accepted it.\n\n**Pitfall:** the cast raises 22P02 and kills the whole query.\n\n**Alternative:** `value !~ '^[0-9]+$'` checks the shape with a regex.",
+				"Hero 3 has 'tall enough': a typed column would never have accepted it.\n\n**Pitfall:** the cast raises 22P02 and aborts the whole query.\n\n**Alternative:** `value !~ '^[0-9]+$'` checks the shape with a regex.",
 		},
 		{
 			id: "ch28-pr03",
-			title: "Resync the counter",
+			title: "Recompute a cached counter",
 			prompt:
 				"**guilds.hero_count** has drifted. With **one** UPDATE, set it back to each guild's real number of heroes (0 when none).",
 			difficulty: 2,
@@ -443,11 +429,11 @@ const chapter: Chapter = {
 				"UPDATE guilds g SET hero_count = (SELECT count(*) FROM heroes h WHERE h.guild_id = g.id);",
 			],
 			explanation:
-				"Recomputing every row from the source is the simplest repair, and safe to run any time.\n\n**Pitfall:** an `UPDATE ... FROM (grouped heroes)` skips the empty guild, leaving the Quiet Bell at 1.\n\n**Alternative:** run it inside the same transaction as each hero change, or move it into a trigger (World 11).",
+				"Recomputing every row from the source is the simplest repair, and safe to run any time.\n\n**Pitfall:** an `UPDATE ... FROM (grouped heroes)` skips the empty guild, leaving guild 6 at 1.\n\n**Alternative:** run it inside the same transaction as each hero change, or move it into a trigger (triggers are covered in World 11).",
 		},
 		{
 			id: "ch28-pr04",
-			title: "Gold that went missing",
+			title: "Detect a stale sum",
 			prompt:
 				"**guilds.total_gold** caches the sum of its heroes' gold. Return **guild_id**, **cached** and **actual** (sum of known gold, **0** for a guild with no heroes or no known gold) for every guild whose cache is wrong.",
 			difficulty: 3,
@@ -459,16 +445,16 @@ const chapter: Chapter = {
 				"SELECT g.id AS guild_id, g.total_gold AS cached, coalesce(sum(h.gold), 0) AS actual\nFROM guilds g\nLEFT JOIN heroes h ON h.guild_id = g.id\nGROUP BY g.id, g.total_gold\nHAVING g.total_gold <> coalesce(sum(h.gold), 0);",
 			check: { type: "result" },
 			hints: [
-				"Same shape as the drift detector, with sum instead of count.",
+				"Same shape as *Detect a stale cache*, with sum instead of count.",
 				"sum over no rows is NULL, and `500 <> NULL` is unknown: coalesce it.",
 				"HAVING g.total_gold <> coalesce(sum(h.gold), 0)",
 			],
 			explanation:
-				"Morwen's raise never reached the Moonlit Veil's cache, and the Quiet Bell claims 500 gold it never had.\n\n**Pitfall:** without coalesce, the empty guild's NULL sum makes the comparison unknown and hides its drift.\n\n**Alternative:** `IS DISTINCT FROM` instead of `<>`, still with coalesce for the 0.",
+				"The 100 gold added to hero 3 never reached the cache of its guild (Moonlit Veil), and guild 6 has a cached 500 gold with no heroes.\n\n**Pitfall:** without coalesce, the empty guild's NULL sum makes the comparison unknown and hides its drift.\n\n**Alternative:** `IS DISTINCT FROM` instead of `<>`, still with coalesce for the 0.",
 		},
 		{
 			id: "ch28-pr05",
-			title: "Depth from the path",
+			title: "Depth from a materialized path",
 			prompt:
 				"Return **name** and **depth** of every skill, where depth is the number of labels in its **path** (`'mage'` is 1, `'mage.fire'` is 2).",
 			difficulty: 2,
@@ -487,7 +473,7 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch28-pr06",
-			title: "Ancestors of the Meteor",
+			title: "Ancestors with a recursive CTE",
 			prompt:
 				"Using **parent_id** (the adjacency list), return **name** and **distance** of every ancestor of **Meteor** (id 4): its parent at distance 1, and so on up to the root.",
 			difficulty: 3,

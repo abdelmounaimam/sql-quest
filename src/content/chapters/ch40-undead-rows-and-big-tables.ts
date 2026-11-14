@@ -27,7 +27,7 @@ const chapter: Chapter = {
 	tier: "master",
 	track: "performance",
 	title: "Undead Rows and Big Tables",
-	subtitle: "MVCC, VACUUM, keyset pages, N+1, write costs, partitions and stats views",
+	subtitle: "MVCC and dead tuples, VACUUM, keyset pagination, N+1 queries, index write cost, partitioning, statistics views",
 	emoji: "🧟",
 	datasetId: "dungeon",
 	concepts: [
@@ -43,24 +43,24 @@ const chapter: Chapter = {
 	lesson: [
 		{
 			kind: "explain",
-			title: "Rows that refuse to die",
-			body: "PostgreSQL never edits a row in place. An `UPDATE` writes a **new version** of the row and marks the old one as expired; a `DELETE` only marks. Readers who started earlier keep seeing the old version: readers never block writers. This is **MVCC**.\n\nTwo hidden columns tell the story: `ctid` (where a version lives: page, slot) and `xmin` (the transaction that wrote it). Expired versions are **dead tuples**: the undead rows of the Engine.",
+			title: "MVCC and dead tuples",
+			body: "PostgreSQL never edits a row in place. An `UPDATE` writes a **new version** of the row and marks the old one as expired; a `DELETE` only marks it. Transactions that started earlier keep seeing the old version, so readers never block writers. This is **MVCC** (multiversion concurrency control).\n\nTwo hidden columns show it: `ctid` (where a version is stored: page, slot) and `xmin` (the transaction that wrote it). Expired versions are **dead tuples**.",
 		},
 		{
 			kind: "example",
-			title: "NightOwl moves house",
-			body: "One statement: the CTE `before` still sees the old version, `UPDATE ... RETURNING` shows the new one. Same row, new address `(0,26)`, new writer `xmin`. The old version is still sitting at `(0,1)`, dead.",
+			title: "An UPDATE creates a new row version",
+			body: "One statement: the CTE `before` still sees the old version, `UPDATE ... RETURNING` shows the new one. Same row, new address `(0,26)`, new writer `xmin`. The old version is still stored at `(0,1)`, as a dead tuple.",
 			sql: "WITH before AS (\n  SELECT ctid, xmin FROM players WHERE id = 1\n), moved AS (\n  UPDATE players SET region = 'na' WHERE id = 1\n  RETURNING ctid, xmin\n)\nSELECT before.ctid AS old_ctid, before.xmin AS old_xmin,\n       moved.ctid AS new_ctid, moved.xmin AS new_xmin\nFROM before, moved;",
 		},
 		{
 			kind: "explain",
-			title: "VACUUM, the gravedigger",
-			body: "`VACUUM run_archive;` removes dead tuples, records their space as **reusable** for future rows, and fills the **visibility map** (the one index-only scans need).\n\n`VACUUM FULL` rewrites the whole table compactly and gives disk space back, but locks the table for the whole time.\n\nAutovacuum never runs in this sandbox. And VACUUM refuses to run inside `BEGIN ... COMMIT` (25001): send it as its own statement.",
+			title: "VACUUM and VACUUM FULL",
+			body: "`VACUUM run_archive;` removes dead tuples, records their space as **reusable** for future rows, and fills the **visibility map** (needed by index only scans).\n\n`VACUUM FULL` rewrites the whole table compactly and returns disk space to the operating system, but locks the table for the whole time.\n\nAutovacuum never runs in this sandbox. VACUUM cannot run inside `BEGIN ... COMMIT` (25001): send it as its own statement.",
 		},
 		{
 			kind: "quiz",
 			question:
-				"`run_archive` takes 14 630 912 bytes. You delete the 10 000 abandoned runs (10% of the rows). What does `pg_relation_size('run_archive')` say right after?",
+				"`run_archive` takes 14 630 912 bytes. You delete the 10 000 abandoned runs (10% of the rows). What does `pg_relation_size('run_archive')` return right after?",
 			choices: [
 				"About 13 200 000: 10% smaller",
 				"Exactly 14 630 912: deleted rows only become dead tuples",
@@ -73,35 +73,35 @@ const chapter: Chapter = {
 		},
 		{
 			kind: "explain",
-			title: "Pages without OFFSET",
-			body: "`LIMIT 20 OFFSET 50000` still reads and throws away 50 000 rows: deep pages get slower and slower.\n\n**Keyset pagination** continues after the last row shown:\n```sql\nWHERE (score, id) < (3000, 77630)\nORDER BY score DESC, id DESC\nLIMIT 20\n```\nThe unique `id` breaks ties, the row comparison handles them, and an index on `(score, id)` jumps straight to the spot.",
+			title: "Keyset pagination",
+			body: "`LIMIT 20 OFFSET 50000` still reads and discards 50 000 rows: deep pages get slower and slower.\n\n**Keyset pagination** continues after the last row shown:\n```sql\nWHERE (score, id) < (3000, 77630)\nORDER BY score DESC, id DESC\nLIMIT 20\n```\nThe unique `id` breaks ties, the row comparison handles them, and an index on `(score, id)` jumps straight to the right position.",
 		},
 		{
 			kind: "explain",
-			title: "The N+1 curse",
-			body: "The app asks for the top 10 runs (1 query), then loops: `SELECT handle FROM players WHERE id = $1` for each run (10 queries). That is **N+1**: each round trip costs far more than the work itself.\n\nOne JOIN does it in a single query. For a list of ids from the app, use `WHERE id = ANY (ARRAY[4, 8, 15])`. A correlated subquery per row is the same curse in disguise.",
+			title: "The N+1 query problem",
+			body: "An application asks for the top 10 runs (1 query), then loops: `SELECT handle FROM players WHERE id = $1` for each run (10 queries). That is **N+1**: each round trip costs far more than the work itself.\n\nOne JOIN does it in a single query. For a list of ids from the application, use `WHERE id = ANY (ARRAY[4, 8, 15])`. A correlated subquery per row is the same problem in another form.",
 		},
 		{
 			kind: "explain",
-			title: "Every index has a price",
-			body: "Each INSERT, DELETE, and each UPDATE that cannot stay on the same page (HOT), must also update **every** index of the table. More indexes, slower writes.\n\nHunt the useless ones:\n- **redundant prefixes**: `(player_id)` next to `(player_id, started_at)`;\n- **never used**: `idx_scan = 0` in `pg_stat_user_indexes` after a real workload.\n\nAnd write in batches: one multi-row INSERT beats a thousand single ones.",
+			title: "The write cost of indexes",
+			body: "Each INSERT, DELETE, and each UPDATE that cannot stay on the same page (HOT), must also update **every** index of the table. More indexes means slower writes.\n\nLook for unnecessary ones:\n- **redundant prefixes**: `(player_id)` next to `(player_id, started_at)`;\n- **never used**: `idx_scan = 0` in `pg_stat_user_indexes` after a real workload.\n\nAlso write in batches: one multirow INSERT beats a thousand single ones.",
 		},
 		{
 			kind: "explain",
-			title: "Partitions: one big table, many small ones",
-			body: "```sql\nCREATE TABLE runs_by_season (LIKE run_archive)\n  PARTITION BY LIST (season_id);\nCREATE TABLE runs_s1 PARTITION OF runs_by_season\n  FOR VALUES IN (1);\n```\nRows land in the right partition automatically. A query filtering on `season_id` skips the others (**pruning**), and retiring a season is `DROP TABLE runs_s1`, instantly. A `DEFAULT` partition catches the rest.\n\nPitfall: queries without the partition key get no faster.",
+			title: "Partitioning",
+			body: "```sql\nCREATE TABLE runs_by_season (LIKE run_archive)\n  PARTITION BY LIST (season_id);\nCREATE TABLE runs_s1 PARTITION OF runs_by_season\n  FOR VALUES IN (1);\n```\nRows are routed to the right partition automatically. A query filtering on `season_id` skips the others (**pruning**), and removing a season is `DROP TABLE runs_s1`, which is instant. A `DEFAULT` partition receives all other values.\n\nPitfall: queries without the partition key get no faster.",
 		},
 		{
 			kind: "example",
-			title: "The Engine's own ledger",
-			body: "`pg_stat_user_tables` counts scans and rows per table. Surprise: `n_live_tup` is 0. Counters start fresh in every sandbox, and pending counts only appear after `pg_stat_force_next_flush()`.\n\nOn a real server, `pg_stat_statements` ranks queries by **total** time (calls x mean): it is not installed here, so World 10 measures plans and buffers instead.",
+			title: "Statistics views",
+			body: "`pg_stat_user_tables` counts scans and rows per table. Note that `n_live_tup` is 0: counters start fresh in every sandbox, and pending counts only appear after `pg_stat_force_next_flush()`.\n\nOn a real server, `pg_stat_statements` ranks queries by **total** time (calls x mean). It is not installed here, so World 10 measures plans and buffers instead.",
 			sql: "SELECT count(*) FROM players;\nSELECT pg_stat_force_next_flush();\nSELECT relname, seq_scan, idx_scan, n_live_tup\nFROM pg_stat_user_tables\nWHERE relname IN ('players', 'run_archive');",
 		},
 		{
 			kind: "try",
-			title: "Your turn: count the undead",
+			title: "Try it: count dead tuples",
 			prompt:
-				"Delete the **abandoned** runs from `run_archive`, then return the table's **n_dead_tup** from `pg_stat_user_tables`. Do not forget to flush the counters first.",
+				"Delete the **abandoned** runs from `run_archive`, then return the table's **n_dead_tup** from `pg_stat_user_tables`. Flush the counters first.",
 			starterSql:
 				"DELETE FROM run_archive WHERE status = 'abandoned';\nSELECT n_dead_tup FROM pg_stat_user_tables WHERE relname = 'run_archive';",
 			solutionSql:
@@ -116,11 +116,9 @@ const chapter: Chapter = {
 	exercises: [
 		{
 			id: "ch40-ex01",
-			title: "A new address",
-			story:
-				"NightOwl moved to the North American servers. The commissioner bets the row stays where it was. Prove him wrong.",
+			title: "Compare ctid before and after an UPDATE",
 			prompt:
-				"Set NightOwl's (player 1) **region** to `'na'` and return one row: the row's **old ctid** and its **new ctid**.",
+				"Set the **region** of player 1 (NightOwl) to `'na'` and return one row: the row's **old ctid** and its **new ctid**.",
 			difficulty: 2,
 			kind: "mutation",
 			concepts: ["mvcc-concept"],
@@ -130,17 +128,15 @@ const chapter: Chapter = {
 			check: { type: "result+state", verifySql: "SELECT id, region FROM players WHERE id = 1;" },
 			hints: [
 				"After the UPDATE, the old version is invisible: read the old ctid before, or in the same statement.",
-				"A data-modifying CTE sees the old row in one branch and returns the new one with RETURNING.",
+				"A data modifying CTE sees the old row in one branch and returns the new one with RETURNING.",
 				"WITH before AS (SELECT ctid ...), moved AS (UPDATE ... RETURNING ctid) SELECT before.ctid, moved.ctid FROM before, moved;",
 			],
 			explanation:
-				"Old version at `(0,1)`, new version at `(0,26)`: the UPDATE appended a new tuple at the end of the page. The old one stays until VACUUM, a dead tuple.\n\n**Pitfall:** believing UPDATE edits in place. That belief hides bloat, HOT updates and why VACUUM exists.\n\n**Alternative:** save the old ctid first in a temporary table (`CREATE TEMP TABLE before AS ...`), then update and join.",
+				"Old version at `(0,1)`, new version at `(0,26)`: the UPDATE appended a new tuple at the end of the page. The old one stays until VACUUM, as a dead tuple.\n\n**Pitfall:** believing UPDATE edits in place. That belief hides bloat, HOT updates and the reason VACUUM exists.\n\n**Alternative:** save the old ctid first in a temporary table (`CREATE TEMP TABLE before AS ...`), then update and join.",
 		},
 		{
 			id: "ch40-ex02",
-			title: "Lay them to rest",
-			story:
-				"The anti-cheat bot purges the abandoned runs. The commissioner wants the space ready for next season's runs, without locking the archive.",
+			title: "VACUUM after a DELETE",
 			prompt:
 				"The starter deletes the abandoned runs. Complete it so the dead tuples are cleaned up and their space becomes **reusable**, without rewriting the table.",
 			difficulty: 2,
@@ -155,19 +151,17 @@ const chapter: Chapter = {
 			},
 			hints: [
 				"After the DELETE, 10 000 dead tuples still occupy their pages.",
-				"Autovacuum never runs here: call the gravedigger yourself.",
+				"Autovacuum never runs here: run VACUUM yourself.",
 				"Add VACUUM run_archive; as its own statement (not VACUUM FULL).",
 			],
 			explanation:
-				"VACUUM removes the dead tuples, records the free space for reuse and marks every page all-visible in the visibility map (`relallvisible` goes from 0 to 1786). The file keeps its size, but new runs will fill the holes.\n\n**Pitfall:** treating VACUUM as optional. Without it (and with autovacuum off or overwhelmed) tables bloat forever and index-only scans never appear.",
+				"VACUUM removes the dead tuples, records the free space for reuse and marks every page all visible in the visibility map (`relallvisible` goes from 0 to 1786). The file keeps its size, but new rows will fill the free space.\n\n**Pitfall:** treating VACUUM as optional. Without it (and with autovacuum off or overloaded) tables bloat indefinitely and index only scans never appear.",
 		},
 		{
 			id: "ch40-ex03",
-			title: "Shrink the archive",
-			story:
-				"Disk is running out on the leaderboard server. An apprentice wrote the starter to give the space of the abandoned runs back to the disk. It crashes with 25001.",
+			title: "Run VACUUM FULL outside a transaction",
 			prompt:
-				"Fix the starter so the abandoned runs are deleted and `run_archive` is **rewritten compactly**, giving the space back to the disk.",
+				"The starter fails with 25001. Fix it so the abandoned runs are deleted and `run_archive` is **rewritten compactly**, returning the space to the disk.",
 			difficulty: 3,
 			kind: "mutation",
 			concepts: ["vacuum-mvcc"],
@@ -185,15 +179,13 @@ const chapter: Chapter = {
 				"DELETE ...; then VACUUM FULL run_archive; alone.",
 			],
 			explanation:
-				"`VACUUM FULL` copies the live rows into a fresh file and drops the old one: 14 630 912 bytes become 13 410 304. It needs its own transaction, hence the 25001 inside BEGIN.\n\n**Pitfall:** plain `VACUUM` here: the space becomes reusable but the file does not shrink. And on a live server, VACUUM FULL locks out every reader for the whole rewrite: a last resort, not a routine.",
+				"`VACUUM FULL` copies the live rows into a new file and drops the old one: 14 630 912 bytes become 13 410 304. It needs its own transaction, hence the 25001 inside BEGIN.\n\n**Pitfall:** plain `VACUUM` here: the space becomes reusable but the file does not shrink. On a live server, VACUUM FULL blocks every reader for the whole rewrite: use it as a last resort, not routinely.",
 		},
 		{
 			id: "ch40-ex04",
-			title: "The next page, the fast way",
-			story:
-				"The global leaderboard shows 20 runs per page, by score then id, both descending. The last run on screen is run **77630** with score **3000**.",
+			title: "Keyset pagination with a tie breaker",
 			prompt:
-				"Return the **id** and **score** of the next 20 runs, in the leaderboard order (score highest first, ties by id highest first), using **keyset** pagination from that last run.",
+				"Pages show 20 runs each, ordered by score then id, both descending. The last row on the current page is run **77630** with score **3000**. Return the **id** and **score** of the next 20 runs, in that order (score highest first, ties by id highest first), using **keyset** pagination from that last row.",
 			difficulty: 3,
 			kind: "query",
 			concepts: ["pagination-performance"],
@@ -207,12 +199,11 @@ const chapter: Chapter = {
 				"WHERE (score, id) < (3000, 77630) ORDER BY score DESC, id DESC LIMIT 20",
 			],
 			explanation:
-				"The row comparison `(score, id) < (3000, 77630)` means: lower score, or same score and lower id. It continues exactly after the last row, ties included, without reading the previous pages.\n\n**Pitfall:** `score <= 3000 AND id < 77630` drops every lower score with a larger id; and mixing `id ASC` with `score DESC` breaks the row comparison.\n\n**Alternative:** `score < 3000 OR (score = 3000 AND id < 77630)` says the same thing longhand.",
+				"The row comparison `(score, id) < (3000, 77630)` means: lower score, or same score and lower id. It continues exactly after the last row, ties included, without reading the previous pages.\n\n**Pitfall:** `score <= 3000 AND id < 77630` drops every lower score with a larger id; and mixing `id ASC` with `score DESC` breaks the row comparison.\n\n**Alternative:** `score < 3000 OR (score = 3000 AND id < 77630)` expresses the same condition in long form.",
 		},
 		{
 			id: "ch40-ex05",
-			title: "An index for every page",
-			story: "Keyset pages are correct now. Make them instant.",
+			title: "Index for keyset pagination",
 			prompt: `Create an index so that \`${Q_KEY}\` uses it and needs **no Sort** of any kind.`,
 			difficulty: 3,
 			kind: "ddl",
@@ -233,11 +224,9 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch40-ex06",
-			title: "Ten handles, one trip",
-			story:
-				"The season 3 podium page fetches the top 10 runs, then asks for each player's handle in its own query: 11 round trips per refresh.",
+			title: "Replace N+1 lookups with a JOIN",
 			prompt:
-				"Return the **id**, **score** and player **handle** of the **10 best-scoring runs of season 3** in the archive, in **one** query.",
+				"The starter returns the top 10 runs, and the application then fetched each player's handle in a separate query. Return the **id**, **score** and player **handle** of the **10 best-scoring runs of season 3** in `run_archive`, in **one** query.",
 			difficulty: 2,
 			kind: "query",
 			concepts: ["n-plus-one"],
@@ -247,20 +236,18 @@ const chapter: Chapter = {
 				"SELECT r.id, r.score, p.handle\nFROM run_archive r\nJOIN players p ON p.id = r.player_id\nWHERE r.season_id = 3\nORDER BY r.score DESC\nLIMIT 10;",
 			check: { type: "result" },
 			hints: [
-				"The starter is the \"1\" of N+1; the app then looked up each handle separately.",
+				"The starter is the \"1\" of N+1; the application then looked up each handle separately.",
 				"Join players once instead.",
 				"JOIN players p ON p.id = r.player_id, keep the WHERE, ORDER BY and LIMIT.",
 			],
 			explanation:
-				"One JOIN brings the handles along: one round trip instead of eleven. The top 10 is exactly the runs scoring 5229 and 5228, so no tie decides who gets in.\n\n**Pitfall:** ORMs produce N+1 silently (lazy loading); each query is fast, so nobody notices until the page needs 500 of them.\n\n**Alternative:** if the app already holds the ids, `WHERE p.id = ANY (ARRAY[...])` fetches all handles at once.",
+				"One JOIN brings the handles along: one round trip instead of eleven. The top 10 is exactly the runs scoring 5229 and 5228, so no tie decides which rows get in.\n\n**Pitfall:** ORMs produce N+1 silently (lazy loading); each query is fast, so nobody notices until a page needs 500 of them.\n\n**Alternative:** if the application already holds the ids, `WHERE p.id = ANY (ARRAY[...])` fetches all handles at once.",
 		},
 		{
 			id: "ch40-ex07",
-			title: "Too many keys on the ring",
-			story:
-				"Inserting new runs got slow: four indexes were forged over the years, `ra_player`, `ra_player_started`, `ra_season` and `ra_season_score`. The starter drops one... the wrong one.",
+			title: "Drop redundant prefix indexes",
 			prompt:
-				"Drop every index that is made **redundant** by a longer index starting with the same column, and keep the others.",
+				"Four indexes exist on `run_archive`: `ra_player`, `ra_player_started`, `ra_season` and `ra_season_score`. The starter drops the wrong one. Drop every index that is made **redundant** by a longer index starting with the same column, and keep the others.",
 			difficulty: 3,
 			kind: "ddl",
 			concepts: ["write-performance"],
@@ -276,18 +263,16 @@ const chapter: Chapter = {
 			hints: [
 				"Look at the definitions: SELECT indexname, indexdef FROM pg_indexes WHERE tablename = 'run_archive';",
 				"A B-tree on (a, b) also serves every query on a alone: (a) is then a redundant prefix.",
-				"Drop the two single-column indexes, keep the composites and the primary key.",
+				"Drop the two single column indexes, keep the composites and the primary key.",
 			],
 			explanation:
 				"`(player_id, started_at)` answers every `player_id = ...` query that `(player_id)` could, so the short one only costs writes and space. Same for `ra_season`. Two fewer indexes to update on every insert.\n\n**Pitfall:** dropping the longer index (the starter): queries on the second column lose their index, and nothing is saved on the prefix.\n\n**Alternative:** on a real server, also check `idx_scan` in `pg_stat_user_indexes` before dropping anything.",
 		},
 		{
 			id: "ch40-ex08",
-			title: "One vault per season",
-			story:
-				"The archive will keep growing for years. The commissioner wants it split by season, so old seasons can be retired with a single command.",
+			title: "Create a list partitioned table",
 			prompt:
-				"Create **runs_by_season** with the same columns as `run_archive`, **partitioned by LIST on season_id**, with partitions **runs_s1**, **runs_s2** and **runs_s3** for seasons 1, 2 and 3, then copy every run of `run_archive` into it.",
+				"Create **runs_by_season** with the same columns as `run_archive`, **partitioned by LIST on season_id**, with partitions **runs_s1**, **runs_s2** and **runs_s3** for seasons 1, 2 and 3, then copy every row of `run_archive` into it.",
 			difficulty: 4,
 			kind: "ddl",
 			concepts: ["partitioning"],
@@ -300,16 +285,16 @@ const chapter: Chapter = {
 			hints: [
 				"`CREATE TABLE runs_by_season (LIKE run_archive) PARTITION BY LIST (season_id);` creates the parent, which holds no rows itself.",
 				"Each partition: CREATE TABLE runs_s1 PARTITION OF runs_by_season FOR VALUES IN (1);",
-				"Then INSERT INTO runs_by_season SELECT * FROM run_archive; the rows route themselves.",
+				"Then INSERT INTO runs_by_season SELECT * FROM run_archive; the rows are routed automatically.",
 			],
 			explanation:
-				"The parent routes each row to its season (25 919, 26 208 and 47 873 runs), and a query on `season_id = 2` reads only `runs_s2`: the planner prunes the other two. Retiring season 1 later is `DROP TABLE runs_s1`, instant, instead of a 26 000 row DELETE plus VACUUM.\n\n**Pitfall:** a query without `season_id` scans all partitions: partitioning is for data management and pruning, not a general speed-up.\n\n**Alternative:** `PARTITION BY RANGE (season_id)` with `FOR VALUES FROM (1) TO (2)` works too.",
+				"The parent routes each row to its season (25 919, 26 208 and 47 873 rows), and a query on `season_id = 2` reads only `runs_s2`: the planner prunes the other two. Removing season 1 later is `DROP TABLE runs_s1`, which is instant, instead of a 26 000 row DELETE plus VACUUM.\n\n**Pitfall:** a query without `season_id` scans all partitions: partitioning is for data management and pruning, not a general speedup.\n\n**Alternative:** `PARTITION BY RANGE (season_id)` with `FOR VALUES FROM (1) TO (2)` works too.",
 		},
 		{
 			id: "ch40-ex09",
 			title: "Boss: Overclock the Engine",
 			story:
-				"Final overhaul of the Clockwork Engine. The season 3 leaderboard pages with a deep OFFSET and fetches handles one by one, the live board sorts on every refresh, and the commissioner allows only **two** new indexes.",
+				"Combines a keyset pagination index, a partial index and a JOIN that replaces N+1 lookups, under a budget of two indexes.",
 			prompt: `1. Create **at most 2 indexes** on \`run_archive\` so that \`${Q_SEASON_KEY}\` uses an index with **no Sort**, and \`SELECT id, started_at FROM run_archive WHERE status = 'in_progress' ORDER BY started_at\` uses a **partial** index with **no Sort**.\n2. End with **one query** returning the **id**, **score** and player **handle** of that season 3 page: the 20 runs after (score 5000, id 60000), score highest first, ties by id highest first.`,
 			difficulty: 5,
 			kind: "ddl",
@@ -324,19 +309,19 @@ const chapter: Chapter = {
 				verifySql: `SELECT ${usesIndex(Q_SEASON_KEY)} AND ${noSort(Q_SEASON_KEY)} AS season_pages,\n       ${usesPartial(Q_LIVE)} AND ${noSort(Q_LIVE)} AS live_board,\n       (SELECT count(*) FROM pg_index WHERE indrelid = 'run_archive'::regclass AND NOT indisprimary) <= 2 AS within_budget;`,
 			},
 			hints: [
-				"Three fixes: an index for the season pages, a partial index for the live board, and a keyset query joined to players.",
+				"Three fixes: an index for the season pages, a partial index for the in progress query, and a keyset query joined to players.",
 				"The season pages filter on season_id, then sort by score and id: all three belong in one index, in that order.",
 				"(season_id, score, id) and (started_at) WHERE status = 'in_progress'; then WHERE r.season_id = 3 AND (r.score, r.id) < (5000, 60000) with JOIN players.",
 			],
 			explanation:
-				"`(season_id, score, id)` turns the season filter plus keyset condition into one index range read backwards: any page costs about 20 entries. The partial index serves the live board, the JOIN kills the N+1, and two indexes keep inserts cheap.\n\n**Pitfall:** `(season_id, score)` without `id`: ties at the same score need an Incremental Sort, and the keyset condition on id is only a filter.\n\n**Alternative:** `(season_id, score DESC, id DESC)` is equivalent for this order.",
+				"`(season_id, score, id)` turns the season filter plus keyset condition into one index range read backwards: any page costs about 20 entries. The partial index serves the in progress query, the JOIN removes the N+1 lookups, and only two indexes keep inserts cheap.\n\n**Pitfall:** `(season_id, score)` without `id`: ties at the same score need an Incremental Sort, and the keyset condition on id is only a filter.\n\n**Alternative:** `(season_id, score DESC, id DESC)` is equivalent for this order.",
 			boss: true,
 		},
 	],
 	practice: [
 		{
 			id: "ch40-pr01",
-			title: "Many writers",
+			title: "Count distinct xmin values",
 			prompt:
 				"In **two separate statements**, set player 1's region to `'na'` and player 2's region to `'asia'`. Then return the number of **distinct `xmin` values** among all players (compare them as text).",
 			difficulty: 2,
@@ -351,11 +336,11 @@ const chapter: Chapter = {
 				"count(DISTINCT xmin::text) after the two UPDATEs.",
 			],
 			explanation:
-				"3: the loading transaction for 23 players, plus one new writer per UPDATE. xmin is how each reader decides which versions it may see.",
+				"3: the loading transaction for 23 players, plus one new writer per UPDATE. xmin is how each transaction decides which versions it may see.",
 		},
 		{
 			id: "ch40-pr02",
-			title: "Weightless deletion",
+			title: "Table size after a DELETE",
 			prompt:
 				"Return one row: the size in bytes of `run_archive` (`pg_relation_size`) **before** and **after** deleting the abandoned runs.",
 			difficulty: 2,
@@ -373,13 +358,13 @@ const chapter: Chapter = {
 				"CREATE TEMP TABLE size_before AS SELECT pg_relation_size('run_archive') AS bytes; ...",
 			],
 			explanation:
-				"Both are 14 630 912: DELETE leaves dead tuples in place. Only VACUUM FULL gives the bytes back.",
+				"Both are 14 630 912: DELETE leaves dead tuples in place. Only VACUUM FULL returns the bytes.",
 		},
 		{
 			id: "ch40-pr03",
-			title: "Page three, the old way",
+			title: "Pagination with OFFSET",
 			prompt:
-				"Return the **id** and **score** of the season 1 runs on **page 3** of the leaderboard: 10 runs per page, score highest first, ties by id highest first. Use OFFSET.",
+				"Return the **id** and **score** of the season 1 runs on **page 3**: 10 runs per page, score highest first, ties by id highest first. Use OFFSET.",
 			difficulty: 1,
 			kind: "query",
 			concepts: ["pagination-performance"],
@@ -388,17 +373,17 @@ const chapter: Chapter = {
 			check: { type: "result", orderMatters: true },
 			hints: [
 				"Page 3 skips two pages.",
-				"OFFSET (3 - 1) * 10.",
+				"`OFFSET (3 - 1) * 10`.",
 				"ORDER BY score DESC, id DESC LIMIT 10 OFFSET 20",
 			],
 			explanation:
-				"Correct, and fine for page 3. For page 2 000, the Engine would read and discard 20 000 rows first: that is when keyset pays off.",
+				"Correct, and fine for page 3. For page 2 000, Postgres would read and discard 20 000 rows first: that is where keyset pagination pays off.",
 		},
 		{
 			id: "ch40-pr04",
-			title: "Page after, the new way",
+			title: "Keyset pagination with a filter",
 			prompt:
-				"The last season 1 run on screen is id **10000** with score **4000**. Return the **id** and **score** of the next 10 season 1 runs (score highest first, ties by id highest first) with **keyset** pagination.",
+				"The last season 1 row on the current page is id **10000** with score **4000**. Return the **id** and **score** of the next 10 season 1 runs (score highest first, ties by id highest first) with **keyset** pagination.",
 			difficulty: 2,
 			kind: "query",
 			concepts: ["pagination-performance"],
@@ -415,9 +400,9 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch40-pr05",
-			title: "Three players, one question",
+			title: "Batch lookup with = ANY",
 			prompt:
-				"The app holds the player ids 4, 8 and 15 and used to send one query each. Return **player_id** and the number of archived **runs** for those three players, in one query, using `= ANY` with an array.",
+				"An application holds the player ids 4, 8 and 15 and used to send one query per id. Return **player_id** and the number of archived **runs** for those three players, in one query, using `= ANY` with an array.",
 			difficulty: 2,
 			kind: "query",
 			concepts: ["n-plus-one"],
@@ -434,9 +419,9 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch40-pr06",
-			title: "The idle key",
+			title: "Find unused indexes",
 			prompt:
-				"Three indexes exist on `run_archive`. Run the dashboard workload below, flush the counters, then return the **name** of every index of `run_archive` (primary key excluded) that was **never scanned**.\n\n```sql\nSELECT count(*) FROM run_archive WHERE player_id = 20;\nSELECT count(*) FROM run_archive WHERE region = 'eu';\nSELECT id FROM run_archive WHERE seed = 3007215346;\n```",
+				"Three indexes exist on `run_archive`. Run the workload below, flush the counters, then return the **name** of every index of `run_archive` (primary key excluded) that was **never scanned**.\n\n```sql\nSELECT count(*) FROM run_archive WHERE player_id = 20;\nSELECT count(*) FROM run_archive WHERE region = 'eu';\nSELECT id FROM run_archive WHERE seed = 3007215346;\n```",
 			difficulty: 3,
 			kind: "query",
 			concepts: ["write-performance", "query-stats"],
@@ -451,13 +436,13 @@ const chapter: Chapter = {
 				"After pg_stat_force_next_flush(): WHERE relname = 'run_archive' AND idx_scan = 0, primary key excluded.",
 			],
 			explanation:
-				"`run_archive_region_idx` was never used: `region = 'eu'` is too common for it. It still slows down every insert. On a real server, watch idx_scan over weeks before dropping.",
+				"`run_archive_region_idx` was never used: `region = 'eu'` matches too many rows for it. It still slows down every insert. On a real server, watch idx_scan over weeks before dropping.",
 		},
 		{
 			id: "ch40-pr07",
-			title: "A season nobody planned",
+			title: "Add a DEFAULT partition",
 			prompt:
-				"`runs_by_season` has partitions for seasons 1 to 3 only, so the starter's insert of a season 9 run fails. Add a **DEFAULT** partition named **runs_other**, then run the insert.",
+				"`runs_by_season` has partitions for seasons 1 to 3 only, so the starter's insert of a season 9 row fails. Add a **DEFAULT** partition named **runs_other**, then run the insert.",
 			difficulty: 2,
 			kind: "ddl",
 			concepts: ["partitioning"],
@@ -474,11 +459,11 @@ const chapter: Chapter = {
 				"CREATE TABLE runs_other PARTITION OF runs_by_season DEFAULT; then the INSERT.",
 			],
 			explanation:
-				"The row lands in `runs_other`. Handy as a safety net, but adding a real partition for season 9 later requires moving those rows out of the default first.",
+				"The row lands in `runs_other`. Useful as a safety net, but adding a real partition for season 9 later requires moving those rows out of the default first.",
 		},
 		{
 			id: "ch40-pr08",
-			title: "Who reads the players table",
+			title: "Read seq_scan from pg_stat_user_tables",
 			prompt:
 				"Run `SELECT count(*) FROM players;` **three times**, flush the counters, then return the **seq_scan** count of `players` from `pg_stat_user_tables`.",
 			difficulty: 1,
@@ -497,7 +482,7 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch40-pr09",
-			title: "Slowest is not heaviest",
+			title: "Rank queries by total time",
 			prompt:
 				"The starter mimics a `pg_stat_statements` report. Return the **query** and its **total_ms** (calls x mean_ms) for the single query that costs the server the most time in total.",
 			difficulty: 2,
@@ -514,7 +499,7 @@ const chapter: Chapter = {
 				"SELECT query, calls * mean_ms AS total_ms ... ORDER BY total_ms DESC LIMIT 1",
 			],
 			explanation:
-				"The 2 ms leaderboard page costs 100 000 ms in total, ten times the scary 900 ms report. Optimize by total time first: that is the column `pg_stat_statements` users sort on.",
+				"The 2 ms `leaderboard page` query costs 100 000 ms in total, ten times the 900 ms `season report`. Optimize by total time first: that is the column `pg_stat_statements` users sort on.",
 		},
 	],
 };

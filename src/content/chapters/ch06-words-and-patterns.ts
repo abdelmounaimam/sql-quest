@@ -7,7 +7,7 @@ const chapter: Chapter = {
 	tier: "apprentice",
 	track: "query",
 	title: "Words and Patterns",
-	subtitle: "Slice, glue and scrub text, then let regular expressions do the heavy lifting",
+	subtitle: "String functions, concatenation, split_part, regular expressions and text cleaning",
 	emoji: "🔤",
 	datasetId: "starport",
 	concepts: ["string-functions", "regex-matching", "data-cleaning"],
@@ -15,18 +15,18 @@ const chapter: Chapter = {
 	lesson: [
 		{
 			kind: "explain",
-			title: "The text toolbox",
-			body: "The accountants hate messy labels. Postgres ships a full kit:\n\n- `upper(s)`, `lower(s)`, `initcap(s)`: change case;\n- `length(s)`: number of characters;\n- `trim(s)`: remove spaces at both ends;\n- `left(s, n)`, `right(s, n)`: the first or last n characters.\n\nPositions in SQL text **start at 1**, not 0.",
+			title: "String functions",
+			body: "Postgres has many functions for text:\n\n- `upper(s)`, `lower(s)`, `initcap(s)`: change case;\n- `length(s)`: number of characters;\n- `trim(s)`: remove spaces at both ends;\n- `left(s, n)`, `right(s, n)`: the first or last n characters.\n\nPositions in SQL text **start at 1**, not 0.",
 		},
 		{
 			kind: "example",
-			title: "Shouting planets",
+			title: "Case and length",
 			body: "`length` counts **characters**. Look at Éclat: 5 characters, but `octet_length` says 6 bytes, because É takes two bytes in UTF-8.",
 			sql: "SELECT name, upper(name), length(name),\n       octet_length(name), left(name, 3)\nFROM planets;",
 		},
 		{
 			kind: "explain",
-			title: "Gluing text together",
+			title: "Concatenate text",
 			body: "`||` concatenates: `'Ada' || ' ' || 'Quasar'`.\n\nBut one NULL piece makes the **whole result NULL**: `'a' || NULL` is NULL.\n\n`concat(a, b, ...)` treats NULL as empty text, and `concat_ws(sep, a, b, ...)` puts a separator between the pieces and **skips** NULLs entirely:\n\n```sql\nconcat_ws(' / ', 'Starling', NULL, 'Bay 7')\n-- Starling / Bay 7\n```",
 		},
 		{
@@ -40,13 +40,13 @@ const chapter: Chapter = {
 		},
 		{
 			kind: "explain",
-			title: "Cutting text apart",
+			title: "Split and extract text",
 			body: "```sql\nsplit_part('a;b;c', ';', 2)        -- b\nsubstring('Starport' from 2 for 3)  -- tar\nposition('port' in 'Starport')      -- 5\nreplace('water-ice', '-', ' ')      -- water ice\n```\n\n`split_part` numbers its pieces from 1 (0 is an error). `position` returns 0 when the text is not found.",
 		},
 		{
 			kind: "example",
-			title: "Manifest parts",
-			body: "Dock workers type `commodity;quantity unit`. `split_part` cuts on the `;`. Notice line 8 (empty text gives empty parts), line 12 (NULL stays NULL) and the stray spaces everywhere.",
+			title: "split_part on raw text",
+			body: "Each `raw` value in `manifest_lines` has the form `commodity;quantity unit`. `split_part` cuts on the `;`. Notice line 8 (empty text gives empty parts), line 12 (NULL stays NULL) and the extra spaces in many lines.",
 			sql: "SELECT id, raw,\n       split_part(raw, ';', 1) AS item,\n       split_part(raw, ';', 2) AS amount\nFROM manifest_lines;",
 		},
 		{
@@ -56,13 +56,13 @@ const chapter: Chapter = {
 		},
 		{
 			kind: "example",
-			title: "Squeezing spaces",
+			title: "Collapse runs of spaces",
 			body: "Every run of spaces becomes one space. Compare line 13 (`Plasma  Cells`, two spaces) before and after. Without the `'g'` flag, only the **first** run would be replaced.",
 			sql: "SELECT id, raw,\n       regexp_replace(raw, '\\s+', ' ', 'g') AS squeezed\nFROM manifest_lines;",
 		},
 		{
 			kind: "try",
-			title: "Your turn: shout the callsigns",
+			title: "Callsigns in upper case",
 			prompt:
 				"Return the **name** and the **callsign in upper case** of every pilot who **has** a callsign.",
 			starterSql: "SELECT name, callsign\nFROM pilots\nWHERE callsign IS NOT NULL;",
@@ -77,8 +77,7 @@ const chapter: Chapter = {
 	exercises: [
 		{
 			id: "ch06-ex01",
-			title: "Long names",
-			story: "The sign painter charges by the letter and wants the longest ship names first.",
+			title: "Ship names by length",
 			prompt:
 				"Return the **name** of every ship and its **length in characters**, longest first. Ties are broken by **name A to Z**.",
 			difficulty: 1,
@@ -96,9 +95,7 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch06-ex02",
-			title: "Radio labels",
-			story:
-				"The radio board shows `Ada Quasar (Nova)` for each pilot. Three lines of the board are blank, and the pilots without a callsign are furious.",
+			title: "Concatenate with a NULL part",
 			prompt:
 				"Fix the query: return the **name** of every pilot and a **label**: the name followed by the callsign in parentheses (`Ada Quasar (Nova)`), or **just the name** when the pilot has no callsign.",
 			difficulty: 2,
@@ -109,7 +106,7 @@ const chapter: Chapter = {
 				"SELECT name, name || COALESCE(' (' || callsign || ')', '') AS label FROM pilots;",
 			check: { type: "result" },
 			hints: [
-				"Run the starter: who gets a NULL label, and why?",
+				"Run the starter: which rows get a NULL label, and why?",
 				"`||` with a NULL gives NULL. The part `' (' || callsign || ')'` is NULL exactly when the callsign is. Give that part a fallback.",
 				"name || COALESCE(' (' || callsign || ')', '')",
 			],
@@ -118,8 +115,7 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch06-ex03",
-			title: "Three-letter codes",
-			story: "The cargo scanners only read three capital letters per commodity.",
+			title: "First 3 letters in upper case",
 			prompt:
 				"Return the **name** of every commodity and its **code**: the first **3 characters** of the name, in **upper case** (`Water Ice` gives `WAT`).",
 			difficulty: 1,
@@ -133,12 +129,11 @@ const chapter: Chapter = {
 				"upper(left(name, 3))",
 			],
 			explanation:
-				"Functions nest: `left` cuts three characters and `upper` shouts them.\n\n**Pitfall:** `substring(name from 0 for 3)` counts from a position 0 that does not exist and returns only **2** characters (`Wa`): SQL text starts at position 1. **Alternative:** `substr(upper(name), 1, 3)`.",
+				"Functions nest: `left` keeps three characters and `upper` converts them to upper case.\n\n**Pitfall:** `substring(name from 0 for 3)` counts from a position 0 that does not exist and returns only **2** characters (`Wa`): SQL text starts at position 1. **Alternative:** `substr(upper(name), 1, 3)`.",
 		},
 		{
 			id: "ch06-ex04",
-			title: "What is in the hold?",
-			story: "Before cleaning anything, the clerk wants to see the raw commodity part of each manifest line.",
+			title: "Text before the first semicolon",
 			prompt:
 				"Return the **id** of every manifest line and the **text before the first `;`** of its raw value, untouched (spaces included). Skip the lines whose raw value is **NULL**; keep the empty one.",
 			difficulty: 2,
@@ -157,8 +152,7 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch06-ex05",
-			title: "Numbered pilots",
-			story: "Synths often carry a serial number in their name. The Census Bureau wants them all.",
+			title: "Names containing a digit",
 			prompt: "Return the **name** of every pilot whose name **contains a digit**.",
 			difficulty: 2,
 			kind: "query",
@@ -175,9 +169,7 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch06-ex06",
-			title: "Quiet callsigns",
-			story:
-				"The comms officer wants callsigns made **only** of lower-case letters (they are easier to whisper). The current query lets in Nova, Halo, and even `shadow_99`.",
+			title: "Anchor a regex",
 			prompt:
 				"Fix the query: return every **callsign** made **only** of lower-case letters `a` to `z`, from its first to its last character.",
 			difficulty: 3,
@@ -196,8 +188,7 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch06-ex07",
-			title: "Fish out the number",
-			story: "The quartermaster wants the quantity of every manifest line as a real number, whatever junk surrounds it.",
+			title: "Extract the first number",
 			prompt:
 				"Return the **id** of every manifest line and the **first number** found in its raw value, as an **integer**. Lines without any number (or without raw text) get NULL.",
 			difficulty: 3,
@@ -207,7 +198,7 @@ const chapter: Chapter = {
 			solutionSql: "SELECT id, substring(raw from '[0-9]+')::int AS qty FROM manifest_lines;",
 			check: { type: "result" },
 			hints: [
-				"Run the starter: `' 300 t '` is not an integer, and one bad row kills the whole query (22P02).",
+				"Run the starter: `' 300 t '` is not an integer, and one invalid row makes the whole query fail (22P02).",
 				"`substring(text from 'regex')` returns the first match, or NULL. `[0-9]+` is a run of digits.",
 				"substring(raw from '[0-9]+')::int",
 			],
@@ -216,9 +207,7 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch06-ex08",
-			title: "One spelling per commodity",
-			story:
-				"`  WATER ICE `, `water-ice` and `water ice` are the same thing. The accountants need one spelling.",
+			title: "Normalize commodity names",
 			prompt:
 				"For every manifest line whose raw value is **neither NULL nor empty**, return the **id** and the **clean commodity**: the part before the first `;`, with every `-` replaced by a space, runs of spaces collapsed into **one** space, spaces **trimmed** at both ends, and everything in **lower case** (`water ice`, `plasma cells`).",
 			difficulty: 3,
@@ -238,10 +227,9 @@ const chapter: Chapter = {
 		{
 			id: "ch06-ex09",
 			title: "Boss: The Manifest Cleanup",
-			story:
-				"Audit day. The Counting House wants a clean table out of the dock workers' scribbles, and customs wants to know which crates are fragile.",
+			story: "Combines string cleaning, regex extraction with a cast, and a case insensitive regex test in one SELECT list.",
 			prompt:
-				"For every manifest line whose raw value is **neither NULL nor empty**, return four columns:\n\n1. **id**;\n2. **commodity**, cleaned exactly as in the previous mission;\n3. **qty**: the first number of the raw value as an **integer**, NULL when there is none;\n4. **fragile**: a **boolean**, true when the raw value mentions `fragile` in **any case**.",
+				"For every manifest line whose raw value is **neither NULL nor empty**, return four columns:\n\n1. **id**;\n2. **commodity**, cleaned exactly as in the previous exercise;\n3. **qty**: the first number of the raw value as an **integer**, NULL when there is none;\n4. **fragile**: a **boolean**, true when the raw value mentions `fragile` in **any case**.",
 			difficulty: 5,
 			kind: "query",
 			concepts: ["data-cleaning", "regex-matching", "string-functions", "type-casting"],
@@ -250,7 +238,7 @@ const chapter: Chapter = {
 			check: { type: "result" },
 			hints: [
 				"Reuse your cleaning expression, then add the two new columns one at a time.",
-				"The quantity is the regex extraction from *Fish out the number*. A condition such as `raw ~* 'x'` can be a column: it returns true or false.",
+				"The quantity is the regex extraction from the *Extract the first number* exercise. A condition such as `raw ~* 'x'` can be a column: it returns true or false.",
 				"substring(raw from '[0-9]+')::int ... raw ~* 'fragile' AS fragile",
 			],
 			explanation:
@@ -261,7 +249,7 @@ const chapter: Chapter = {
 	practice: [
 		{
 			id: "ch06-pr01",
-			title: "Capital categories",
+			title: "Capitalize categories",
 			prompt:
 				"Return the **name** of every commodity and its **category with a capital first letter** (`essentials` gives `Essentials`). An unknown category stays NULL.",
 			difficulty: 1,
@@ -279,7 +267,7 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch06-pr02",
-			title: "Name and model",
+			title: "Join name and model with a separator",
 			prompt:
 				"Return, for every ship, **one column**: its name and its model separated by ` / ` (`Starling / Courier Mk II`). A ship with **no model** shows **just its name**.",
 			difficulty: 2,
@@ -297,7 +285,7 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch06-pr03",
-			title: "Where is the space?",
+			title: "Position of the first space",
 			prompt:
 				"Return the **name** of every planet whose name **contains a space**, and the **position** of that first space (counting from 1).",
 			difficulty: 2,
@@ -316,7 +304,7 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch06-pr04",
-			title: "Quiet first letters",
+			title: "Callsigns starting lower case",
 			prompt: "Return every **callsign** that **starts with** a lower-case letter `a` to `z`.",
 			difficulty: 2,
 			kind: "query",
@@ -329,11 +317,11 @@ const chapter: Chapter = {
 				"WHERE callsign ~ '^[a-z]'",
 			],
 			explanation:
-				"`^[a-z]` = a lower-case letter in first position: viper, fizz, ace, shadow_99, pipsqueak, zigzag, tiko.\n\n**Pitfall:** without `^`, any callsign with a lower-case letter anywhere matches, so Nova and Halo sneak in. **Alternative:** `callsign LIKE` cannot express a letter range, but `left(callsign, 1) BETWEEN 'a' AND 'z'` works in the C collation.",
+				"`^[a-z]` = a lower-case letter in first position: viper, fizz, ace, shadow_99, pipsqueak, zigzag, tiko.\n\n**Pitfall:** without `^`, any callsign with a lower-case letter anywhere matches, so Nova and Halo are returned too. **Alternative:** `callsign LIKE` cannot express a letter range, but `left(callsign, 1) BETWEEN 'a' AND 'z'` works in the C collation.",
 		},
 		{
 			id: "ch06-pr05",
-			title: "Plasma anywhere",
+			title: "Case insensitive regex",
 			prompt:
 				"Return the **id** and **raw** value of every manifest line that mentions **plasma**, in **any case**.",
 			difficulty: 1,
@@ -342,7 +330,7 @@ const chapter: Chapter = {
 			solutionSql: "SELECT id, raw FROM manifest_lines WHERE raw ~* 'plasma';",
 			check: { type: "result" },
 			hints: [
-				"`~` is case sensitive. Its sibling is not.",
+				"`~` is case sensitive. Another operator is not.",
 				"Add a star: `~*`.",
 				"WHERE raw ~* 'plasma'",
 			],
@@ -351,8 +339,7 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch06-pr06",
-			title: "Unreadable quantities",
-			story: "Before casting anything, find the lines that would break the cast.",
+			title: "Lines without a readable quantity",
 			prompt:
 				"Return the **id** of every manifest line whose quantity **cannot be read**: the raw value is NULL, or it has no `;` followed (after optional spaces) by a digit.",
 			difficulty: 3,
@@ -366,11 +353,11 @@ const chapter: Chapter = {
 				"WHERE raw IS NULL OR raw !~ ';\\s*[0-9]'",
 			],
 			explanation:
-				"Finding the bad rows first is the cleaning reflex: lines 7 (`n/a`), 8 (empty) and 12 (NULL).\n\n**Pitfall:** without `raw IS NULL`, line 12 disappears, because `NULL !~ ...` is NULL, not true.",
+				"Finding the invalid rows first is a good habit before cleaning: lines 7 (`n/a`), 8 (empty) and 12 (NULL).\n\n**Pitfall:** without `raw IS NULL`, line 12 disappears, because `NULL !~ ...` is NULL, not true.",
 		},
 		{
 			id: "ch06-pr07",
-			title: "Empty means unknown",
+			title: "Trim, then empty to NULL",
 			prompt:
 				"Return the **id** of every manifest line and its raw value **trimmed**, where a value that is **empty after trimming** becomes **NULL**.",
 			difficulty: 2,
@@ -388,8 +375,7 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch06-pr08",
-			title: "Ship slugs",
-			story: "The new docking app wants web-friendly ship names.",
+			title: "Slugs with regexp_replace",
 			prompt:
 				"Return the **name** of every ship and its **slug**: the name in **lower case** with **every** space replaced by `-` (`Ace of Wings` gives `ace-of-wings`). Use `regexp_replace`.",
 			difficulty: 2,

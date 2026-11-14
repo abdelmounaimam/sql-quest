@@ -7,7 +7,7 @@ const chapter: Chapter = {
 	tier: "apprentice",
 	track: "types",
 	title: "Precise Measures",
-	subtitle: "Exact money, treacherous floats, padded text and ids that never collide",
+	subtitle: "Integer and numeric types, floats, money, text types, boolean and uuid",
 	emoji: "⚗️",
 	datasetId: "inn",
 	concepts: [
@@ -22,24 +22,24 @@ const chapter: Chapter = {
 	lesson: [
 		{
 			kind: "explain",
-			title: "The bookkeeper's scales",
-			body: "The Wandering Star Inn's bookkeeper weighs every coin. Pick the right scale:\n\n| type | holds |\n|---|---|\n| `smallint` | up to 32 767 |\n| `int` | up to 2 147 483 647 |\n| `bigint` | up to 9.2 quintillion |\n| `numeric(p, s)` | exact decimals: p digits, s after the point |\n\nGo past the limit and Postgres refuses with **22003** (out of range). Nothing is silently wrapped around.",
+			title: "Integer and numeric types",
+			body: "Choose the type by the range and precision you need:\n\n| type | holds |\n|---|---|\n| `smallint` | up to 32 767 |\n| `int` | up to 2 147 483 647 |\n| `bigint` | up to 9.2 quintillion |\n| `numeric(p, s)` | exact decimals: p digits, s after the point |\n\nA value past the limit raises error **22003** (out of range). Postgres never wraps it around silently.",
 		},
 		{
 			kind: "example",
 			title: "Casts round, scales clamp",
-			body: "`bigint` has room to spare. Casting a decimal to `int` **rounds** (65.50 becomes 66), and `numeric(5,2)` rounds to 2 decimals on the way in.",
+			body: "`bigint` has room to spare. Casting a decimal to `int` **rounds** (65.50 becomes 66), and `numeric(5,2)` rounds to 2 decimals on input.",
 			sql: "SELECT 2147483647::bigint + 1 AS big,\n       65.50::int AS rounded,\n       1.005::numeric(5,2) AS two_decimals;",
 		},
 		{
 			kind: "explain",
 			title: "Floats are approximate",
-			body: "`real` and `double precision` store **binary** fractions. Most decimals, like 0.1, have no exact binary form, so tiny errors creep in and add up.\n\nRules of the vault:\n- never test floats with `=`; compare with a tolerance: `abs(a - b) < 0.000001`\n- never store money in a float\n\nThe inn's old `payments.amount_float` column is a cautionary tale.",
+			body: "`real` and `double precision` store **binary** fractions. Most decimals, like 0.1, have no exact binary form, so small errors appear and add up.\n\nTwo rules:\n- never test floats with `=`; compare with a tolerance: `abs(a - b) < 0.000001`\n- never store money in a float\n\nThe `payments.amount_float` column shows what goes wrong.",
 		},
 		{
 			kind: "example",
-			title: "The tip that would not add up",
-			body: "Payments 17 and 18 are tips of 0.10 and 0.20. The exact column says 0.30. The legacy float column says something else, and `= 0.3` is **false**.",
+			title: "Float sums drift",
+			body: "Payments 17 and 18 are 0.10 and 0.20. The exact `amount` column sums to 0.30. The `amount_float` column sums to something else, and `= 0.3` is **false**.",
 			sql: "SELECT sum(amount) AS exact,\n       sum(amount_float)::text AS drifting,\n       sum(amount_float) = 0.3 AS equals_point_three\nFROM payments\nWHERE id IN (17, 18);",
 		},
 		{
@@ -53,32 +53,32 @@ const chapter: Chapter = {
 			],
 			answerIndex: 2,
 			explanation:
-				"`numeric(8,2)` is exact to the cent. `real` drifts, `money` depends on a locale setting and rounds products to 2 decimals behind your back (`1::money * 3.333` is `$3.33`), and `text` cannot be summed or checked.",
+				"`numeric(8,2)` is exact to the cent. `real` drifts, `money` depends on a locale setting and rounds products to 2 decimals without telling you (`1::money * 3.333` is `$3.33`), and `text` cannot be summed or checked.",
 		},
 		{
 			kind: "explain",
-			title: "Money, the right way",
-			body: "Store money as `numeric` **plus a currency column**, and never add two currencies together.\n\nRound **once**, on the final total:\n```sql\nround(sum(amount) * 0.077, 2)   -- good\nsum(round(amount * 0.077, 2))   -- drifts\n```\nRounding every line first adds up the rounding errors, and the cents stop matching the bank's.",
+			title: "Storing and rounding money",
+			body: "Store money as `numeric` **plus a currency column**, and never add two currencies together.\n\nRound **once**, on the final total:\n```sql\nround(sum(amount) * 0.077, 2)   -- good\nsum(round(amount * 0.077, 2))   -- drifts\n```\nRounding every line first adds up the rounding errors, and the total no longer matches the exact value.",
 		},
 		{
 			kind: "explain",
 			title: "text, varchar(n), char(n)",
-			body: "Prefer **text**. `varchar(n)` adds a length limit (22001 on insert when too long). `char(n)` **pads with spaces**: the currency `GP` is stored as `'GP '`.\n\nPadding is sneaky: `currency = 'GP'` ignores it, `length(currency)` hides it, but `LIKE 'GP'` and `octet_length` see it.",
+			body: "Prefer **text**. `varchar(n)` adds a length limit (error 22001 on insert when the value is too long). `char(n)` **pads with spaces**: the currency `GP` is stored as `'GP '`.\n\nThe padding is easy to miss: `currency = 'GP'` ignores it, `length(currency)` hides it, but `LIKE 'GP'` and `octet_length` see it.",
 		},
 		{
 			kind: "explain",
 			title: "Booleans and UUIDs",
-			body: "A `boolean` holds true, false **or NULL**. Write `WHERE vip`, and `WHERE vip IS NOT TRUE` for *not VIP, unknown included*.\n\nA `uuid` is a 128-bit id: `gen_random_uuid()` makes a random version 4, `uuidv7()` (PG18) a **time ordered** version 7, kinder to indexes. Store them as `uuid`, never as text: the type accepts upper case, missing dashes and braces as the same value.",
+			body: "A `boolean` holds true, false **or NULL**. Write `WHERE vip`, and `WHERE vip IS NOT TRUE` for *not VIP, unknown included*.\n\nA `uuid` is a 128-bit id: `gen_random_uuid()` makes a random version 4, `uuidv7()` (PG18) a **time ordered** version 7, which is better for indexes. Store them as `uuid`, never as text: the type accepts upper case, missing dashes and braces as the same value.",
 		},
 		{
 			kind: "example",
-			title: "Where did the version go?",
-			body: "Booking refs were forged from md5 hashes, so they carry no valid version: `uuid_extract_version` returns NULL. A fresh `uuidv7()` says 7 (its value changes on every run).",
+			title: "Read a UUID version",
+			body: "The values in `bookings.ref` were built from md5 hashes, so they carry no valid version: `uuid_extract_version` returns NULL. A fresh `uuidv7()` returns 7 (its value changes on every run).",
 			sql: "SELECT id, ref, uuid_extract_version(ref) AS ref_version,\n       uuid_extract_version(uuidv7()) AS fresh_version\nFROM bookings\nWHERE id <= 3;",
 		},
 		{
 			kind: "try",
-			title: "Your turn: a week in the Lumière Quarter",
+			title: "Weekly price of rooms in realm 1",
 			prompt:
 				"Return the **name** and the exact price of **7 nights** (`nightly_rate * 7`) of every room of realm **1**.",
 			starterSql:
@@ -86,7 +86,7 @@ const chapter: Chapter = {
 			solutionSql: "SELECT name, nightly_rate * 7 AS week FROM rooms WHERE realm_id = 1;",
 			check: { type: "result" },
 			hints: [
-				"Run the starter: the Garret costs 462? Its rate is 65.50.",
+				"Run the starter: the Garret shows 462, but its rate is 65.50.",
 				"The `::int` cast rounds before multiplying. Keep the numeric value.",
 			],
 		},
@@ -94,9 +94,7 @@ const chapter: Chapter = {
 	exercises: [
 		{
 			id: "ch29-ex01",
-			title: "Counting in copper",
-			story:
-				"The new till only understands whole copper pieces: 100 copper make one coin.",
+			title: "Room rates in cents",
 			prompt:
 				"Return the **name** of every room and its **nightly_rate in cents** (rate times 100) as an **integer**.",
 			difficulty: 1,
@@ -110,13 +108,11 @@ const chapter: Chapter = {
 				"(nightly_rate * 100)::int",
 			],
 			explanation:
-				"Multiplying the exact numeric first keeps every cent: 65.50 becomes 6550. The cast happens on a whole number, so nothing is lost.\n\n**Pitfall:** `nightly_rate::int * 100` rounds first, so the Garret costs 6600 and The Last Room 10000.\n\n**Alternative:** `CAST(nightly_rate * 100 AS integer)`.",
+				"Multiplying the exact numeric first keeps every cent: 65.50 becomes 6550. The cast then applies to a whole number, so nothing is lost.\n\n**Pitfall:** `nightly_rate::int * 100` rounds first, so the Garret becomes 6600 and The Last Room 10000.\n\n**Alternative:** `CAST(nightly_rate * 100 AS integer)`.",
 		},
 		{
 			id: "ch29-ex02",
-			title: "A billion motes per bed",
-			story:
-				"The alchemist claims every bed hides one billion dust motes. Her census query crashes on the big rooms.",
+			title: "Avoid integer overflow",
 			prompt:
 				"Return the **name** of every room and its number of **motes**: `beds` times **1000000000**. The query must not overflow.",
 			difficulty: 2,
@@ -135,9 +131,7 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch29-ex03",
-			title: "The drifting thirds",
-			story:
-				"Ngaio's booking 13 was split into three equal shares of 100 gold pieces. The legacy float column remembers it differently.",
+			title: "Floats that differ from the exact amount",
 			prompt:
 				"Return the **id**, **amount** and **amount_float** of every payment whose `amount_float` is **not exactly equal** to its `amount`.",
 			difficulty: 2,
@@ -152,13 +146,11 @@ const chapter: Chapter = {
 				"WHERE amount_float <> amount::float8",
 			],
 			explanation:
-				"100.0 / 3 has no finite binary form, so the float stores 33.333333333333336, which is neither 33.33 nor 33.34.\n\n**Pitfall:** `round(amount_float::numeric, 2) <> amount` rounds the evidence away and only catches payment 16.\n\n**Alternative:** `amount_float::numeric <> amount` finds the same three payments.",
+				"100.0 / 3 has no finite binary form, so the float stores 33.333333333333336, which is neither 33.33 nor 33.34.\n\n**Pitfall:** `round(amount_float::numeric, 2) <> amount` rounds the difference away and only catches payment 16.\n\n**Alternative:** `amount_float::numeric <> amount` finds the same three payments.",
 		},
 		{
 			id: "ch29-ex04",
-			title: "Close enough for a float",
-			story:
-				"The reconciler flags any legacy float that does not *equal* the exact amount. It cries wolf on the thirds.",
+			title: "Compare floats with a tolerance",
 			prompt:
 				"For every payment of **booking 13**, return the **id** and a boolean **matches**: true when `amount_float` is **within half a cent** of `amount` (absolute difference strictly below 0.005).",
 			difficulty: 3,
@@ -170,18 +162,16 @@ const chapter: Chapter = {
 				"SELECT id, abs(amount_float - amount::float8) < 0.005 AS matches\nFROM payments\nWHERE booking_id = 13;",
 			check: { type: "result" },
 			hints: [
-				"Run the starter: payments 14 and 15 are 33.33 to the cent, yet flagged false.",
+				"Run the starter: payments 14 and 15 are 33.33 to the cent, yet return false.",
 				"Floats need a tolerance test: the absolute difference below a threshold.",
-				"abs(amount_float - amount::float8) < 0.005",
+				"`abs(amount_float - amount::float8) < 0.005`",
 			],
 			explanation:
-				"A tolerance turns *bit for bit identical* into *close enough*, the only meaningful question for floats. Payment 16 (33.34 recorded as 33.3333...) is still caught.\n\n**Pitfall:** `amount_float = amount` fails on almost every non trivial decimal.\n\n**Alternative:** `round(amount_float::numeric, 2) = amount` compares at the cent.",
+				"A tolerance replaces *bit for bit identical* with *close enough*, the only meaningful question for floats. Payment 16 (33.34 recorded as 33.3333...) is still caught.\n\n**Pitfall:** `amount_float = amount` fails on almost every non trivial decimal.\n\n**Alternative:** `round(amount_float::numeric, 2) = amount` compares at the cent.",
 		},
 		{
 			id: "ch29-ex05",
-			title: "The Crossroads tithe",
-			story:
-				"The Crossroads magistrate takes a 7.7% tithe on every booking's takings, rounded to the copper.",
+			title: "Round a percentage once",
 			prompt:
 				"For every booking that has payments, return the **booking_id**, the **currency**, the exact **total** paid and the **tithe**: 7.7% of the total, **rounded once** to 2 decimals.",
 			difficulty: 3,
@@ -192,17 +182,15 @@ const chapter: Chapter = {
 			check: { type: "result" },
 			hints: [
 				"Group the payments per booking (and its currency), then compute on the sum.",
-				"Round the final tithe, not each payment's share: per line rounding drifts.",
+				"Round the final tithe, not each payment's share: rounding per line drifts.",
 				"round(sum(amount) * 0.077, 2) with GROUP BY booking_id, currency",
 			],
 			explanation:
-				"Summing exact numerics then rounding once gives 7.72 on booking 13. Booking 12 shows 1050.00: it was charged three times, an honest total of a dishonest ledger.\n\n**Pitfall:** `sum(round(amount * 0.077, 2))` gives 7.74 on booking 13: five tiny roundings add up to two copper too many.\n\n**Alternative:** `round(0.077 * sum(amount), 2)`.",
+				"Summing exact numerics then rounding once gives 7.72 on booking 13. Booking 12 shows 1050.00 because it has three payments recorded.\n\n**Pitfall:** `sum(round(amount * 0.077, 2))` gives 7.74 on booking 13: five small roundings add up to two cents too many.\n\n**Alternative:** `round(0.077 * sum(amount), 2)`.",
 		},
 		{
 			id: "ch29-ex06",
-			title: "The padded gold",
-			story:
-				"The bookkeeper wants every payment made in gold pieces. Her search finds no gold at all.",
+			title: "Match a padded char(n) value",
 			prompt:
 				"Return the **id** and **amount** of every payment whose **currency** is `GP`.",
 			difficulty: 2,
@@ -221,9 +209,7 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch29-ex07",
-			title: "Ordinary travellers",
-			story:
-				"The inn throws a party for everyone who is **not** a VIP. Nobody ever assessed some guests, and they want cake too.",
+			title: "Guests who are not VIP",
 			prompt:
 				"Return the **name** of every guest who is **not a VIP**, including guests whose `vip` flag is **unknown**.",
 			difficulty: 2,
@@ -237,13 +223,11 @@ const chapter: Chapter = {
 				"WHERE vip IS NOT TRUE",
 			],
 			explanation:
-				"`IS NOT TRUE` answers true for false **and** for NULL, so Beatriz, Odo, the second Isolde and Zoë come to the party.\n\n**Pitfall:** `WHERE NOT vip` evaluates `NOT NULL` to unknown and silently drops 4 guests.\n\n**Alternative:** `WHERE vip = false OR vip IS NULL`, or `WHERE NOT coalesce(vip, false)`.",
+				"`IS NOT TRUE` returns true for false **and** for NULL, so Beatriz, Odo, the second Isolde and Zoë are included.\n\n**Pitfall:** `WHERE NOT vip` evaluates `NOT NULL` to unknown and silently drops 4 guests.\n\n**Alternative:** `WHERE vip = false OR vip IS NULL`, or `WHERE NOT coalesce(vip, false)`.",
 		},
 		{
 			id: "ch29-ex08",
-			title: "The shouting clerk",
-			story:
-				"A guest reads her key token aloud in capitals: `90B09014-2CC2-DB0D-6908-65C1BDF46884`. The clerk's search finds nothing.",
+			title: "Look up a uuid written in upper case",
 			prompt:
 				"Return the **id** and **status** of the booking whose **ref** is `90B09014-2CC2-DB0D-6908-65C1BDF46884`.",
 			difficulty: 2,
@@ -266,7 +250,7 @@ const chapter: Chapter = {
 			id: "ch29-ex09",
 			title: "Boss: The Ledger of Exact Coin",
 			story:
-				"The bookkeeper retires the float column for good. She wants a clean ledger: exact amounts, honest currency codes, and ids that sort by time.",
+				"Combines numeric money, a text currency without padding, a NOT NULL boolean and a uuidv7 key in one new table.",
 			prompt:
 				"1. Create a table **ledger** with:\n   - `id` uuid, primary key, defaulting to `uuidv7()`\n   - `booking_id` int, not null\n   - `amount` numeric(10,2), not null\n   - `currency` **text**, not null\n   - `settled` boolean, not null, default **false**\n2. Copy every payment into it (let `id` use its default): its booking_id, its exact amount, its currency **without padding**, and `settled` = **true for card payments**. Other payments keep the default.",
 			difficulty: 5,
@@ -285,16 +269,16 @@ const chapter: Chapter = {
 				"INSERT INTO ledger (booking_id, amount, currency, settled) SELECT booking_id, amount, rtrim(currency), method = 'card' FROM payments;",
 			],
 			explanation:
-				"Each type now says what it means: exact `numeric` cents, `text` codes without padding, a two-state `boolean` guarded by NOT NULL, and a time ordered `uuidv7` key that keeps the primary key index tidy.\n\n**Pitfall:** `settled` without NOT NULL invites a third, unintended state; copying `currency` with `concat` or into `char(3)` keeps `'GP '`.\n\n**Alternative:** `settled boolean NOT NULL DEFAULT false` plus one INSERT using `method = 'card'` as the value.",
+				"Each type now says what it means: exact `numeric` cents, `text` codes without padding, a two-state `boolean` guarded by NOT NULL, and a time ordered `uuidv7` key that keeps the primary key index compact.\n\n**Pitfall:** `settled` without NOT NULL allows a third, unintended state; copying `currency` with `concat` or into `char(3)` keeps `'GP '`.\n\n**Alternative:** `settled boolean NOT NULL DEFAULT false` plus one INSERT using `method = 'card'` as the value.",
 			boss: true,
 		},
 	],
 	practice: [
 		{
 			id: "ch29-pr01",
-			title: "Too big for the box",
+			title: "Overflow a numeric(5,2)",
 			prompt:
-				"Prove that `numeric(5,2)` cannot hold **1000.00**: write a query that casts `1000.00` to `numeric(5,2)`. It must fail with an out of range error.",
+				"Show that `numeric(5,2)` cannot hold **1000.00**: write a query that casts `1000.00` to `numeric(5,2)`. It must fail with an out of range error.",
 			difficulty: 1,
 			kind: "query",
 			concepts: ["numeric-types"],
@@ -306,11 +290,11 @@ const chapter: Chapter = {
 				"SELECT 1000.00::numeric(5,2);",
 			],
 			explanation:
-				"`numeric(5,2)` tops out at 999.99. Postgres raises 22003 instead of truncating: exact types never lie quietly.",
+				"`numeric(5,2)` tops out at 999.99. Postgres raises 22003 instead of truncating: exact types never lose digits silently.",
 		},
 		{
 			id: "ch29-pr02",
-			title: "One decimal is enough",
+			title: "Cast rates to one decimal",
 			prompt:
 				"Return the **name** of every room and its **nightly_rate** cast to `numeric(5,1)`.",
 			difficulty: 1,
@@ -328,7 +312,7 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch29-pr03",
-			title: "Two kinds of point three",
+			title: "Float and numeric equality",
 			prompt:
 				"Return one row with two booleans: `0.1::float8 + 0.2::float8 = 0.3` and `0.1 + 0.2 = 0.3` (in that order).",
 			difficulty: 1,
@@ -347,7 +331,7 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch29-pr04",
-			title: "Visible drift",
+			title: "Float drift above a threshold",
 			prompt:
 				"Return the **id** of every payment whose `amount_float` differs from `amount` by **more than 0.001**.",
 			difficulty: 2,
@@ -357,15 +341,15 @@ const chapter: Chapter = {
 			check: { type: "result" },
 			hints: [
 				"A tolerance test, reversed.",
-				"abs(a - b) gives the distance.",
+				"`abs(a - b)` gives the distance.",
 				"WHERE abs(amount_float - amount::float8) > 0.001",
 			],
 			explanation:
-				"Only the three thirds of booking 13 drift by more than a thousandth. The tips 0.1 and 0.2 are off by far less.",
+				"Only the three payments of booking 13 drift by more than a thousandth. The values 0.1 and 0.2 are off by far less.",
 		},
 		{
 			id: "ch29-pr05",
-			title: "One purse per currency",
+			title: "Total per currency",
 			prompt:
 				"Return each **currency** as text without padding (`rtrim(currency)`) and the exact **total** of payments in that currency.",
 			difficulty: 2,
@@ -383,7 +367,7 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch29-pr06",
-			title: "A sign too long",
+			title: "Exceed a varchar(n) limit",
 			setupSql: "CREATE TABLE signs (label varchar(10));",
 			prompt:
 				"The table `signs (label varchar(10))` exists. Insert the label **The Wandering Star** into it: the insert must be **refused** by the length limit.",
@@ -398,11 +382,11 @@ const chapter: Chapter = {
 				"INSERT INTO signs (label) VALUES ('The Wandering Star');",
 			],
 			explanation:
-				"22001 *value too long*. Surprise: an explicit cast `'The Wandering Star'::varchar(10)` silently truncates instead. Prefer `text` plus a CHECK on length when a limit really matters.",
+				"22001 *value too long*. Note that an explicit cast `'The Wandering Star'::varchar(10)` silently truncates instead. Prefer `text` plus a CHECK on length when a limit really matters.",
 		},
 		{
 			id: "ch29-pr07",
-			title: "Letters and bytes",
+			title: "Characters versus bytes",
 			prompt:
 				"Return the **name**, `char_length(name)` and `octet_length(name)` of every guest whose name takes **more bytes than characters**.",
 			difficulty: 2,
@@ -421,7 +405,7 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch29-pr08",
-			title: "Three kinds of guest",
+			title: "Count guests per vip value",
 			prompt: "Return each value of **vip** (true, false and unknown) with its number of guests.",
 			difficulty: 1,
 			kind: "query",
@@ -438,7 +422,7 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch29-pr09",
-			title: "Version check",
+			title: "UUID versions",
 			prompt:
 				"Return one row: `uuid_extract_version(uuidv7())` and `uuid_extract_version(gen_random_uuid())`, in that order.",
 			difficulty: 1,
@@ -457,7 +441,7 @@ const chapter: Chapter = {
 		},
 		{
 			id: "ch29-pr10",
-			title: "Tokens starting with c",
+			title: "UUIDs starting with c",
 			prompt:
 				"Return the **id** and **ref** of every booking whose ref, written as text, **starts with c**.",
 			difficulty: 2,

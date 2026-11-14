@@ -12,7 +12,7 @@ const chapter: Chapter = {
 	tier: "apprentice",
 	track: "mutation",
 	title: "Reforging and Banishing",
-	subtitle: "UPDATE and DELETE, with joins, and without forgetting the WHERE",
+	subtitle: "UPDATE, UPDATE ... FROM, DELETE, DELETE ... USING and TRUNCATE",
 	emoji: "🔥",
 	datasetId: "starport",
 	concepts: ["update-basic", "update-from", "delete-basic", "delete-using", "truncate"],
@@ -20,19 +20,19 @@ const chapter: Chapter = {
 	lesson: [
 		{
 			kind: "explain",
-			title: "Reforging rows",
-			body: "`UPDATE` changes rows that already exist:\n```sql\nUPDATE ships\nSET hull_integrity = 80\nWHERE id = 6;\n```\nThe WHERE picks the rows; **no WHERE means every row**. The dock chief's golden rule: write the `SELECT ... WHERE` first, check it returns exactly the rows you mean, then turn it into the UPDATE.",
+			title: "UPDATE: change existing rows",
+			body: "`UPDATE` changes rows that already exist:\n```sql\nUPDATE ships\nSET hull_integrity = 80\nWHERE id = 6;\n```\nThe WHERE clause selects the rows; **no WHERE means every row**. A safe habit: write the `SELECT ... WHERE` first, check that it returns exactly the rows you mean, then turn it into the UPDATE.",
 		},
 		{
 			kind: "example",
-			title: "A patch for the Fizzbang",
-			body: "RETURNING works on UPDATE too: it shows the rows as they are **after** the change.",
+			title: "UPDATE with RETURNING",
+			body: "RETURNING also works on UPDATE: it shows the rows as they are **after** the change.",
 			sql: "UPDATE ships\nSET hull_integrity = 80\nWHERE id = 6\nRETURNING name, hull_integrity;",
 		},
 		{
 			kind: "quiz",
 			question:
-				"Customs wants to reset Jax's wallet and reputation: `UPDATE pilots SET credits = 0 AND reputation = 0 WHERE id = 9;` What happens?",
+				"To reset the credits and reputation of pilot 9, you run `UPDATE pilots SET credits = 0 AND reputation = 0 WHERE id = 9;` What happens?",
 			choices: [
 				"Both columns are set to 0",
 				"Only credits is set to 0",
@@ -41,43 +41,43 @@ const chapter: Chapter = {
 			],
 			answerIndex: 2,
 			explanation:
-				"After `SET credits =` everything up to the next comma is **one expression**: `0 AND (reputation = 0)`, which is nonsense for a number. Separate assignments with commas: `SET credits = 0, reputation = 0`.",
+				"After `SET credits =` everything up to the next comma is **one expression**: `0 AND (reputation = 0)`, which is not a valid value for a number column. Separate assignments with commas: `SET credits = 0, reputation = 0`.",
 		},
 		{
 			kind: "explain",
 			title: "SET reads the old row",
-			body: "Expressions on the right side see the row **before** the update:\n```sql\nSET credits = credits + 100\nSET min_rep = max_rep, max_rep = min_rep  -- a real swap\n```\nArithmetic with NULL stays NULL: a frozen account plus 100 is still frozen.",
+			body: "Expressions on the right side see the row **before** the update:\n```sql\nSET credits = credits + 100\nSET min_rep = max_rep, max_rep = min_rep  -- a real swap\n```\nArithmetic with NULL returns NULL: NULL plus 100 is still NULL.",
 		},
 		{
 			kind: "explain",
 			title: "UPDATE ... FROM",
-			body: "When the rows or the new values come from another table, join it with **FROM** and put the join condition in WHERE:\n```sql\nUPDATE pilots p\nSET credits = p.credits + 10\nFROM factions f\nWHERE f.id = p.faction_id\n  AND f.name = 'Void Monks';\n```\nDo **not** repeat the target table in FROM. If several source rows match one target row, Postgres updates it once with an arbitrary one of them: aggregate first.",
+			body: "When the rows to change or the new values depend on another table, add that table with **FROM** and put the join condition in WHERE:\n```sql\nUPDATE pilots p\nSET credits = p.credits + 10\nFROM factions f\nWHERE f.id = p.faction_id\n  AND f.name = 'Void Monks';\n```\nDo **not** repeat the target table in FROM. If several source rows match one target row, PostgreSQL updates it once using an arbitrary one of them: aggregate first.",
 		},
 		{
 			kind: "example",
-			title: "Shame on the Night Fang",
-			body: "The pilot of the Night Fang loses 50 reputation. The ship is found by name through the join.",
+			title: "UPDATE ... FROM with a join on ships",
+			body: "The pilot of the ship named Night Fang loses 50 reputation. The ship is found by name through the join.",
 			sql: "UPDATE pilots p\nSET reputation = p.reputation - 50\nFROM ships s\nWHERE s.pilot_id = p.id\n  AND s.name = 'Night Fang'\nRETURNING p.name, p.reputation;",
 		},
 		{
 			kind: "explain",
-			title: "Banishing rows",
-			body: "```sql\nDELETE FROM seizures WHERE id = 4;\n```\nSame rule: **no WHERE deletes everything**. To decide with a join, use **USING**:\n```sql\nDELETE FROM trades t\nUSING ships s\nWHERE s.id = t.ship_id AND s.name = 'Tusker';\n```\nForeign keys protect the registers: deleting a pilot that ships still point at fails with **23503**.",
+			title: "DELETE: remove rows",
+			body: "```sql\nDELETE FROM seizures WHERE id = 4;\n```\nSame rule: **no WHERE deletes every row**. To select the rows through a join, use **USING**:\n```sql\nDELETE FROM trades t\nUSING ships s\nWHERE s.id = t.ship_id AND s.name = 'Tusker';\n```\nForeign keys protect referenced rows: deleting a pilot that rows in `ships` still reference fails with **23503**.",
 		},
 		{
 			kind: "explain",
 			title: "TRUNCATE",
-			body: "`TRUNCATE trades;` empties the whole table at once, far faster than DELETE on big tables. `RESTART IDENTITY` also resets its id sequence.\n\nIf another table references it, TRUNCATE refuses (**0A000**). `CASCADE` would empty those tables too, which is rarely what you want.",
+			body: "`TRUNCATE trades;` removes all rows of the table at once, much faster than DELETE on large tables. `RESTART IDENTITY` also resets its id sequence.\n\nIf another table references it with a foreign key, TRUNCATE fails (**0A000**). `CASCADE` would empty those tables too, which is rarely what you want.",
 		},
 		{
 			kind: "try",
-			title: "Your turn: a promotion",
-			prompt: "Promote **Wren Calloway** (pilot **22**) to the rank **ensign**. Nobody else changes.",
+			title: "Try it: update one row",
+			prompt: "Set the rank of **Wren Calloway** (pilot **22**) to **ensign**. No other row changes.",
 			starterSql: "UPDATE pilots\nSET rank = 'ensign';",
 			solutionSql: "UPDATE pilots SET rank = 'ensign' WHERE id = 22;",
 			check: { type: "state", verifySql: "SELECT id, rank FROM pilots ORDER BY id;" },
 			hints: [
-				"Run the starter, then look at every pilot's rank. Oops.",
+				"Run the starter, then look at every pilot's rank: all of them changed.",
 				"Add WHERE id = 22.",
 			],
 		},
@@ -85,9 +85,7 @@ const chapter: Chapter = {
 	exercises: [
 		{
 			id: "ch20-ex01",
-			title: "Pocket money for cadets",
-			story:
-				"The academy sends every cadet 100 credits for the new season. Frozen accounts stay frozen: Customs' orders.",
+			title: "Add credits to cadets",
 			prompt:
 				"Add **100** credits to every pilot whose rank is **cadet**. A cadet whose credits are unknown (NULL) keeps NULL.",
 			difficulty: 1,
@@ -101,13 +99,11 @@ const chapter: Chapter = {
 				"UPDATE pilots SET credits = credits + 100 WHERE rank = 'cadet';",
 			],
 			explanation:
-				"`credits + 100` reads each cadet's own balance; Lumen's NULL stays NULL because NULL + 100 is NULL, exactly what Customs wants.\n\n**Pitfall:** `COALESCE(credits, 0) + 100` unfreezes Lumen's account with 100 credits.",
+				"`credits + 100` reads each cadet's own value. Lumen's NULL stays NULL because NULL + 100 is NULL, which is what the prompt asks.\n\n**Pitfall:** `COALESCE(credits, 0) + 100` would give Lumen 100 credits.",
 		},
 		{
 			id: "ch20-ex02",
-			title: "The whole fleet, repaired?",
-			story:
-				"The Shipwright Guild only paid for the wrecks. The apprentice's UPDATE repaired every ship in the Starport, and the bill is astronomical.",
+			title: "Fix: UPDATE without WHERE",
 			prompt:
 				"Fix the UPDATE: set `hull_integrity` to **100** only for ships whose hull integrity is **below 30**.",
 			difficulty: 1,
@@ -118,17 +114,15 @@ const chapter: Chapter = {
 			check: { type: "state", verifySql: SHIP_HULLS },
 			hints: [
 				"How many rows did the starter change? How many should it?",
-				"An UPDATE without WHERE touches every row.",
+				"An UPDATE without WHERE changes every row.",
 				"Add WHERE hull_integrity < 30.",
 			],
 			explanation:
-				"Only Fizzbang, Jackpot and 100% Legit are repaired. Uninspected hulls (NULL) are not *below 30*, so they stay untouched.\n\n**Pitfall:** the missing WHERE is the most expensive typo in SQL. In real life, run the SELECT first or work inside a transaction you can roll back (next chapter).",
+				"Only Fizzbang, Jackpot and 100% Legit change. Ships with a NULL hull integrity are not *below 30*, so they are not changed.\n\n**Pitfall:** a missing WHERE is one of the most costly mistakes in SQL. In practice, run the SELECT first or work inside a transaction you can roll back (transactions are covered in *The Pact*).",
 		},
 		{
 			id: "ch20-ex03",
-			title: "The Navy pays its own",
-			story:
-				"The Azure Navy wires a 500 credit bonus to each of its pilots. The payroll only knows the faction by its name.",
+			title: "Update pilots of a faction by name",
 			prompt:
 				"Add **500** credits to every pilot of the faction named **Azure Navy**. Use `UPDATE ... FROM factions` to find them by name.",
 			difficulty: 2,
@@ -138,18 +132,16 @@ const chapter: Chapter = {
 				"UPDATE pilots p\nSET credits = p.credits + 500\nFROM factions f\nWHERE f.id = p.faction_id\n  AND f.name = 'Azure Navy';",
 			check: { type: "state", verifySql: PILOT_CREDITS },
 			hints: [
-				"Which column of pilots points at factions?",
+				"Which column of pilots references factions?",
 				"UPDATE pilots p SET ... FROM factions f WHERE f.id = p.faction_id AND ...",
 				"... WHERE f.id = p.faction_id AND f.name = 'Azure Navy';",
 			],
 			explanation:
-				"FROM brings `factions` into the UPDATE; the WHERE joins it to each pilot and keeps the Navy. Five pilots get their bonus.\n\n**Pitfall:** forgetting the join condition `f.id = p.faction_id`: every pilot then matches the Navy row and gets paid.\n\n**Alternative:** `WHERE faction_id IN (SELECT id FROM factions WHERE name = 'Azure Navy')`.",
+				"FROM adds `factions` to the UPDATE; the WHERE joins it to each pilot and keeps the Azure Navy row. Five pilots are updated.\n\n**Pitfall:** without the join condition `f.id = p.faction_id`, every pilot matches the Azure Navy row and is updated.\n\n**Alternative:** `WHERE faction_id IN (SELECT id FROM factions WHERE name = 'Azure Navy')`.",
 		},
 		{
 			id: "ch20-ex04",
-			title: "Market reprice",
-			story:
-				"The Exchange decides that a commodity's reference price should be what it really sells for at the Starport.",
+			title: "Set prices from an aggregated subquery",
 			prompt:
 				"Set the `base_price` of each commodity to the **average unit_price of its sell trades** (trades with an unknown price are ignored). Commodities with no sell trade at a known price keep their current base_price.",
 			difficulty: 3,
@@ -163,16 +155,15 @@ const chapter: Chapter = {
 			},
 			hints: [
 				"First write a SELECT giving one row per commodity_id with its average sell price.",
-				"Joining `trades` directly gives several rows per commodity, and Postgres would pick one at random. Put the grouped SELECT in FROM as a derived table.",
+				"Joining `trades` directly gives several rows per commodity, and PostgreSQL would use an arbitrary one. Put the grouped SELECT in FROM as a derived table.",
 				"UPDATE commodities c SET base_price = s.avg_price FROM (SELECT commodity_id, avg(unit_price) AS avg_price FROM trades WHERE side = 'sell' GROUP BY commodity_id) s WHERE s.commodity_id = c.id;",
 			],
 			explanation:
-				"The derived table has exactly one row per commodity, so each target row gets one well-defined value. `avg` skips the lost price of trade 37, and `numeric(10,2)` rounds 13.75 and friends to cents on storage.\n\n**Pitfall:** `FROM trades t WHERE t.commodity_id = c.id AND t.side = 'sell'` runs without error but sets Water Ice to *one* of its sell prices, whichever comes first.",
+				"The derived table has exactly one row per commodity, so each target row gets one well defined value. `avg` skips the NULL price of trade 37, and `numeric(10,2)` rounds values such as 13.75 to cents when storing them.\n\n**Pitfall:** `FROM trades t WHERE t.commodity_id = c.id AND t.side = 'sell'` runs without error but sets Water Ice to *one* of its sell prices, whichever is found first.",
 		},
 		{
 			id: "ch20-ex05",
-			title: "Close the pending cases",
-			story: "The new customs chief drops every case that never got a fine.",
+			title: "Delete rows with a NULL column",
 			prompt: "Delete every seizure whose **fine** is unknown (NULL).",
 			difficulty: 1,
 			kind: "mutation",
@@ -180,18 +171,16 @@ const chapter: Chapter = {
 			solutionSql: "DELETE FROM seizures WHERE fine IS NULL;",
 			check: { type: "state", verifySql: "SELECT id FROM seizures ORDER BY id;" },
 			hints: [
-				"Which seizures have no fine yet? SELECT them first.",
+				"Which seizures have no fine? SELECT them first.",
 				"NULL is tested with IS NULL, never with = NULL.",
 				"DELETE FROM seizures WHERE fine IS NULL;",
 			],
 			explanation:
-				"Cases 3 and 5 disappear; the six fined cases stay.\n\n**Pitfall:** `WHERE fine = NULL` is never true, so it deletes nothing and gives no error. The opposite slip, forgetting the WHERE, deletes every case.",
+				"Seizures 3 and 5 are deleted; the six with a fine remain.\n\n**Pitfall:** `WHERE fine = NULL` is never true, so it deletes nothing and gives no error. The opposite mistake, forgetting the WHERE, deletes every row.",
 		},
 		{
 			id: "ch20-ex06",
-			title: "Erase Jax's books",
-			story:
-				"Jax O'Hara's trading licence was revoked. Every deal made by a ship he flies must vanish from the journal.",
+			title: "Delete trades with DELETE ... USING",
 			prompt:
 				"Delete every trade made by a ship whose pilot is named **Jax O'Hara**. Use `DELETE ... USING` to find the ships and the pilot by name.",
 			difficulty: 2,
@@ -201,20 +190,18 @@ const chapter: Chapter = {
 				"DELETE FROM trades t\nUSING ships s, pilots p\nWHERE s.id = t.ship_id\n  AND p.id = s.pilot_id\n  AND p.name = 'Jax O''Hara';",
 			check: { type: "state", verifySql: "SELECT id FROM trades ORDER BY id;" },
 			hints: [
-				"Trades know the ship, ships know the pilot: two joins.",
+				"`trades` references the ship, `ships` references the pilot: two joins.",
 				"DELETE FROM trades t USING ships s, pilots p WHERE ... the two join conditions ... AND the name.",
 				"... AND p.name = 'Jax O''Hara' (double the apostrophe).",
 			],
 			explanation:
-				"USING lists the extra tables, WHERE joins them and filters. Jax flies two ships, Jackpot and 100% Legit: trades 9, 33 and 37 go.\n\n**Pitfall:** forgetting one join condition turns the USING into a cross join and deletes far more than Jax's trades.\n\n**Alternative:** `WHERE ship_id IN (SELECT s.id FROM ships s JOIN pilots p ON p.id = s.pilot_id WHERE p.name = 'Jax O''Hara')`.",
+				"USING lists the extra tables, WHERE joins and filters them. This pilot has two ships, Jackpot and 100% Legit: trades 9, 33 and 37 are deleted.\n\n**Pitfall:** forgetting one join condition turns the USING into a cross join and deletes many more trades.\n\n**Alternative:** `WHERE ship_id IN (SELECT s.id FROM ships s JOIN pilots p ON p.id = s.pilot_id WHERE p.name = 'Jax O''Hara')`.",
 		},
 		{
 			id: "ch20-ex07",
-			title: "You cannot banish a mentor",
-			story:
-				"Bram Kettle wants to leave the Starport for good and asks you to delete his record. The registers have other plans.",
+			title: "DELETE blocked by a foreign key",
 			prompt:
-				"Write the DELETE that removes pilot **Bram Kettle** (id **2**). It must **fail**: Bram still flies ships and mentors two pilots. Run it and read the error code.",
+				"Write the DELETE that removes pilot **Bram Kettle** (id **2**). It must **fail**: rows in `ships` and `pilots` (as mentor) still reference this pilot. Run it and read the error code.",
 			difficulty: 2,
 			kind: "mutation",
 			concepts: ["delete-basic"],
@@ -222,19 +209,17 @@ const chapter: Chapter = {
 			check: { type: "error", sqlstate: "23503" },
 			hints: [
 				"A plain DELETE with a WHERE on the id or the name.",
-				"Other rows point at Bram through foreign keys: ships.pilot_id and pilots.mentor_id.",
+				"Other rows reference this pilot through foreign keys: ships.pilot_id and pilots.mentor_id.",
 				"DELETE FROM pilots WHERE id = 2;",
 			],
 			explanation:
-				"23503 is a **foreign key violation**: deleting Bram would leave Rusty Bucket, Second Wind and two apprentices pointing at nobody. The DETAIL line names the blocking table.\n\n**Pitfall:** \"fixing\" it by dropping the constraint. The right move is to reassign or delete the children first, or design the key with an ON DELETE action (World 7).",
+				"23503 is a **foreign key violation**: deleting this pilot would leave the ships Rusty Bucket and Second Wind and two mentored pilots referencing a missing row. The DETAIL line names the referencing table.\n\n**Pitfall:** \"fixing\" it by dropping the constraint. The correct approach is to reassign or delete the referencing rows first, or to define the key with an ON DELETE action (covered in *Binding Laws*).",
 		},
 		{
 			id: "ch20-ex08",
-			title: "A clean journal",
-			story:
-				"End of the fiscal cycle: the accountants archived the trade journal and want an empty one, numbered from 1 again.",
+			title: "TRUNCATE and reset the sequence",
 			prompt:
-				"Empty the `trades` table **and** reset its id numbering, so the next trade recorded gets id **1**.",
+				"Empty the `trades` table **and** reset its id numbering, so the next trade inserted gets id **1**.",
 			difficulty: 2,
 			kind: "mutation",
 			concepts: ["truncate"],
@@ -250,15 +235,15 @@ const chapter: Chapter = {
 				"TRUNCATE trades RESTART IDENTITY;",
 			],
 			explanation:
-				"TRUNCATE drops all rows at once and `RESTART IDENTITY` puts the sequence back at its start. Nothing references `trades`, so no CASCADE is needed.\n\n**Pitfall:** `DELETE FROM trades;` or a plain `TRUNCATE trades;` empties the table but the next trade would still get id 41.",
+				"TRUNCATE removes all rows at once and `RESTART IDENTITY` resets the sequence to its start value. No table references `trades`, so no CASCADE is needed.\n\n**Pitfall:** `DELETE FROM trades;` or a plain `TRUNCATE trades;` empties the table but the next trade would still get id 41.",
 		},
 		{
 			id: "ch20-ex09",
 			title: "Boss: The Smugglers' Reckoning",
 			story:
-				"The Harbor Master has had enough of smugglers. Three orders arrive at once, and you hold the hammer.",
+				"Combines UPDATE ... FROM over an aggregated derived table, DELETE ... USING and an UPDATE with two NULL tests.",
 			prompt:
-				"Carry out these three orders, in this order:\n\n1. Every pilot whose ships were seized **at least twice in total** loses **200** reputation (once, however many seizures).\n2. Delete the seizures of the commodity named **Glow Shrooms** made **before 2077-01-01**.\n3. Every ship whose hull integrity is **unknown** and that **has a pilot** gets hull integrity **50**.",
+				"Run these three changes, in this order:\n\n1. Every pilot whose ships were seized **at least twice in total** loses **200** reputation (once, however many seizures).\n2. Delete the seizures of the commodity named **Glow Shrooms** made **before 2077-01-01**.\n3. Every ship whose hull integrity is **unknown** and that **has a pilot** gets hull integrity **50**.",
 			difficulty: 5,
 			kind: "mutation",
 			concepts: ["update-from", "delete-using", "update-basic"],
@@ -270,19 +255,19 @@ const chapter: Chapter = {
 					"SELECT 'pilot' AS kind, id, reputation::numeric AS value FROM pilots\nUNION ALL SELECT 'seizure', id, NULL FROM seizures\nUNION ALL SELECT 'ship', id, hull_integrity FROM ships\nORDER BY 1, 2;",
 			},
 			hints: [
-				"Three statements. For order 1, first write a SELECT of the pilot ids with at least 2 seizures across their ships.",
-				"Order 1 needs GROUP BY pilot_id HAVING count(*) >= 2 in a derived table, joined with UPDATE ... FROM. Order 2 is DELETE ... USING commodities. Order 3 needs two NULL tests.",
-				"Order 3: UPDATE ships SET hull_integrity = 50 WHERE hull_integrity IS NULL AND pilot_id IS NOT NULL;",
+				"Three statements. For change 1, first write a SELECT of the pilot ids with at least 2 seizures across their ships.",
+				"Change 1 needs GROUP BY pilot_id HAVING count(*) >= 2 in a derived table, joined with UPDATE ... FROM. Change 2 is DELETE ... USING commodities. Change 3 needs two NULL tests.",
+				"Change 3: UPDATE ships SET hull_integrity = 50 WHERE hull_integrity IS NULL AND pilot_id IS NOT NULL;",
 			],
 			explanation:
-				"Cyra (3 seizures on the Black Lotus) and Jax (2 on the Jackpot) lose 200; seizures 1, 3 and 7 go; the Night Fang and the Silent Vow get a hull of 50 while the pilotless Ghost Ship stays uninspected.\n\n**Pitfall:** joining `seizures` straight into the UPDATE without grouping punishes every pilot with even **one** seizure (an UPDATE changes each row once, it never subtracts twice), so Nox, Sable and Fizzik would be wrongly fined.",
+				"Cyra (3 seizures on Black Lotus) and Jax (2 on Jackpot) lose 200; seizures 1, 3 and 7 are deleted; Night Fang and Silent Vow get a hull integrity of 50, while Ghost Ship (no pilot) keeps NULL.\n\n**Pitfall:** joining `seizures` directly into the UPDATE without grouping penalizes every pilot with even **one** seizure (an UPDATE changes each row once, it never subtracts twice), so Nox, Sable and Fizzik would be updated by mistake.",
 			boss: true,
 		},
 	],
 	practice: [
 		{
 			id: "ch20-pr01",
-			title: "Bigger couriers",
+			title: "Double a column for one model",
 			prompt: "Double the `cargo_capacity` of every ship whose model is **Courier Mk II**.",
 			difficulty: 1,
 			kind: "mutation",
@@ -296,15 +281,13 @@ const chapter: Chapter = {
 				"UPDATE ships SET cargo_capacity = cargo_capacity * 2 WHERE model = 'Courier Mk II';",
 			],
 			explanation:
-				"Four couriers go from 40 to 80.\n\n**Pitfall:** `SET cargo_capacity = 80` happens to work today, but breaks the day a courier has another capacity.",
+				"Four ships go from 40 to 80.\n\n**Pitfall:** `SET cargo_capacity = 80` happens to work with the current data, but is wrong as soon as one of these ships has another capacity.",
 		},
 		{
 			id: "ch20-pr02",
-			title: "Upside-down outlaws",
-			story:
-				"A sleepy clerk typed the outlaw tier backwards: min_rep is -1 and max_rep is -1000.",
+			title: "Swap two columns in one UPDATE",
 			prompt:
-				"Swap `min_rep` and `max_rep` of the tier **outlaw** in **one** UPDATE, so it reads -1000 to -1 again.",
+				"The tier **outlaw** in `reputation_tiers` has its bounds reversed (min_rep is -1, max_rep is -1000). Swap `min_rep` and `max_rep` of that tier in **one** UPDATE, so it reads -1000 to -1 again.",
 			difficulty: 2,
 			kind: "mutation",
 			concepts: ["update-basic"],
@@ -316,16 +299,16 @@ const chapter: Chapter = {
 				verifySql: "SELECT tier, min_rep, max_rep FROM reputation_tiers ORDER BY tier;",
 			},
 			hints: [
-				"In a programming language you would need a temporary variable. Not here.",
+				"In a programming language you would need a temporary variable. In SQL you do not.",
 				"Every expression in SET sees the row as it was before the UPDATE.",
 				"SET min_rep = max_rep, max_rep = min_rep",
 			],
 			explanation:
-				"All right-hand sides are evaluated on the **old** row, then assigned together, so the two values swap cleanly.\n\n**Pitfall:** expecting the assignments to run one after another (which would give the same value twice).",
+				"All right hand sides are evaluated on the **old** row, then assigned together, so the two values swap correctly.\n\n**Pitfall:** expecting the assignments to run one after another (which would give the same value twice).",
 		},
 		{
 			id: "ch20-pr03",
-			title: "Veterans' honour",
+			title: "Update pilots by faction founding year",
 			prompt:
 				"Every pilot of a faction **founded before 2050** gains **50** reputation. Use `UPDATE ... FROM factions`.",
 			difficulty: 2,
@@ -335,18 +318,16 @@ const chapter: Chapter = {
 				"UPDATE pilots p\nSET reputation = p.reputation + 50\nFROM factions f\nWHERE f.id = p.faction_id\n  AND f.founded_year < 2050;",
 			check: { type: "state", verifySql: "SELECT id, reputation FROM pilots ORDER BY id;" },
 			hints: [
-				"The founding year lives in factions.",
+				"The founding year is in factions.",
 				"FROM factions f WHERE f.id = p.faction_id AND ...",
 				"... AND f.founded_year < 2050;",
 			],
 			explanation:
-				"Solar Concord, Void Monks and Azure Navy qualify; freelancers have no faction so the join never matches them.\n\n**Pitfall:** `<= 2050` would include a faction founded in 2050 (none today, but the rule says *before*).",
+				"Solar Concord, Void Monks and Azure Navy qualify. Pilots with a NULL faction_id never match the join.\n\n**Pitfall:** `<= 2050` would include a faction founded in 2050 (none in the current data, but the rule says *before*).",
 		},
 		{
 			id: "ch20-pr04",
-			title: "The admirals' refit",
-			story:
-				"Only admirals' ships were supposed to get a free refit. After the apprentice's UPDATE, every ship in the Starport gleams.",
+			title: "Fix: target table repeated in FROM",
 			prompt:
 				"Fix the UPDATE: set `hull_integrity` to **100** only for ships flown by a pilot of rank **admiral**.",
 			difficulty: 3,
@@ -363,11 +344,11 @@ const chapter: Chapter = {
 				"UPDATE ships s SET hull_integrity = 100 FROM pilots p WHERE p.id = s.pilot_id AND p.rank = 'admiral';",
 			],
 			explanation:
-				"The target table is already in scope; FROM only lists the **other** tables. Now only the Starling and Halo's Edge are refitted.\n\n**Pitfall:** repeating the target in FROM creates an unrelated copy, a self cross join, so the WHERE never constrains the rows being updated.",
+				"The target table is already in scope; FROM only lists the **other** tables. Now only Starling and Halo's Edge are updated.\n\n**Pitfall:** repeating the target in FROM creates an unrelated copy, a self cross join, so the WHERE never restricts the rows being updated.",
 		},
 		{
 			id: "ch20-pr05",
-			title: "Close the pirate lanes",
+			title: "Delete rows by a column value",
 			prompt: "Delete every route whose hazard is **pirates**.",
 			difficulty: 1,
 			kind: "mutation",
@@ -375,18 +356,16 @@ const chapter: Chapter = {
 			solutionSql: "DELETE FROM routes WHERE hazard = 'pirates';",
 			check: { type: "state", verifySql: ROUTES_STATE },
 			hints: [
-				"SELECT the pirate lanes first.",
+				"SELECT the matching routes first.",
 				"DELETE FROM routes WHERE ...",
 				"DELETE FROM routes WHERE hazard = 'pirates';",
 			],
 			explanation:
-				"Two lanes close: Mirage → Rust Gulch and Rust Gulch → Cinderfall.\n\n**Pitfall:** a DELETE without WHERE would close every lane of the Starport.",
+				"Two routes are deleted: Mirage → Rust Gulch and Rust Gulch → Cinderfall.\n\n**Pitfall:** a DELETE without WHERE would delete every route.",
 		},
 		{
 			id: "ch20-pr06",
-			title: "Uncharted dangers",
-			story:
-				"The Harbor Master wants to remove every lane with no hazard recorded, to survey them again. The clerk's DELETE runs fine... and deletes nothing.",
+			title: "Fix: DELETE with = NULL",
 			prompt: "Fix the DELETE: remove every route whose **hazard** is unknown (NULL).",
 			difficulty: 2,
 			kind: "mutation",
@@ -400,11 +379,11 @@ const chapter: Chapter = {
 				"WHERE hazard IS NULL",
 			],
 			explanation:
-				"`IS NULL` matches the nine lanes without a recorded hazard.\n\n**Pitfall:** `= NULL` deletes nothing and raises no error: the silent cousin of the missing WHERE.",
+				"`IS NULL` matches the nine routes with a NULL hazard.\n\n**Pitfall:** `= NULL` deletes nothing and raises no error, which makes it as hard to notice as a missing WHERE.",
 		},
 		{
 			id: "ch20-pr07",
-			title: "Viper paperwork",
+			title: "Delete manifest lines by ship model",
 			prompt:
 				"Delete every manifest line logged by a ship whose model is **Viper X**. Use `DELETE ... USING ships`.",
 			difficulty: 2,
@@ -414,16 +393,16 @@ const chapter: Chapter = {
 				"DELETE FROM manifest_lines m\nUSING ships s\nWHERE s.id = m.ship_id\n  AND s.model = 'Viper X';",
 			check: { type: "state", verifySql: "SELECT id FROM manifest_lines ORDER BY id;" },
 			hints: [
-				"manifest_lines.ship_id points at ships.",
+				"manifest_lines.ship_id references ships.",
 				"DELETE FROM manifest_lines m USING ships s WHERE s.id = m.ship_id AND ...",
 				"... AND s.model = 'Viper X';",
 			],
 			explanation:
-				"Lines 3, 6 and 12 belong to the Black Lotus, the Ace of Wings and the Night Fang.\n\n**Pitfall:** without `s.id = m.ship_id`, any Viper X in the registers makes **every** line match.",
+				"Lines 3, 6 and 12 belong to Black Lotus, Ace of Wings and Night Fang.\n\n**Pitfall:** without `s.id = m.ship_id`, the existence of any Viper X ship makes **every** line match.",
 		},
 		{
 			id: "ch20-pr08",
-			title: "Ships cannot be truncated",
+			title: "TRUNCATE blocked by foreign keys",
 			prompt:
 				"Try to empty the `ships` table with TRUNCATE (no options). It must **fail**: write it and read the error code.",
 			difficulty: 2,
@@ -433,11 +412,11 @@ const chapter: Chapter = {
 			check: { type: "error", sqlstate: "0A000" },
 			hints: [
 				"Just the TRUNCATE statement.",
-				"Trades, seizures and manifest lines reference ships through foreign keys.",
+				"trades, seizures and manifest_lines reference ships through foreign keys.",
 				"TRUNCATE ships;",
 			],
 			explanation:
-				"0A000 (*feature not supported*): TRUNCATE cannot check row by row, so it refuses to empty a table other tables reference.\n\n**Pitfall:** adding CASCADE \"to make it work\" also empties trades, seizures and manifest lines.",
+				"0A000 (*feature not supported*): TRUNCATE does not check rows one by one, so it refuses to empty a table that other tables reference.\n\n**Pitfall:** adding CASCADE \"to make it work\" also empties trades, seizures and manifest_lines.",
 		},
 	],
 };
